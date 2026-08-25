@@ -1,0 +1,7 @@
+# damage-checker local ignores
+data/
+checkpoints/
+__pycache__/
+*.pyc
+.venv/
+venv/
