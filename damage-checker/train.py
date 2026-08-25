@@ -166,7 +166,7 @@ def main():
                 "num_classes": NUM_CLASSES,
                 "in_channels": 3,
             }, ckpt_path)
-            print(f"       ↳ Saved best checkpoint (val_acc={val_acc:.2%})")
+            print(f"       -> Saved best checkpoint (val_acc={val_acc:.2%})")
 
     print(f"\n[train] Done. Best val accuracy: {best_val_acc:.2%}")
     print(f"[train] Checkpoint: {ckpt_dir / 'best_model.pth'}")
