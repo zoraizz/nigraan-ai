@@ -19,6 +19,7 @@ NOTE — Bi-temporal upgrade path:
 """
 
 import io
+import os
 from pathlib import Path
 from typing import Optional
 
@@ -43,7 +44,7 @@ app = FastAPI(
 # ---------------------------------------------------------------------------
 # Model loading
 # ---------------------------------------------------------------------------
-CHECKPOINT_PATH = Path("checkpoints/best_model.pth")
+CHECKPOINT_PATH = Path(os.environ.get("CHECKPOINT_PATH", "checkpoints/best_model.pth"))
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 _model: Optional[DamageClassifier] = None

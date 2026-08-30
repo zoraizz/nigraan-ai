@@ -38,6 +38,8 @@ def parse_args() -> argparse.Namespace:
                         help="Directory to save model checkpoints")
     parser.add_argument("--dummy_samples", type=int, default=60,
                         help="Number of dummy samples to generate if no data")
+    parser.add_argument("--checkpoint_name", type=str, default="best_model.pth",
+                        help="Checkpoint filename (default: best_model.pth)")
     return parser.parse_args()
 
 
@@ -156,7 +158,7 @@ def main():
         # Save best checkpoint
         if val_acc >= best_val_acc:
             best_val_acc = val_acc
-            ckpt_path = ckpt_dir / "best_model.pth"
+            ckpt_path = ckpt_dir / args.checkpoint_name
             torch.save({
                 "epoch": epoch,
                 "model_state_dict": model.state_dict(),
@@ -169,7 +171,7 @@ def main():
             print(f"       -> Saved best checkpoint (val_acc={val_acc:.2%})")
 
     print(f"\n[train] Done. Best val accuracy: {best_val_acc:.2%}")
-    print(f"[train] Checkpoint: {ckpt_dir / 'best_model.pth'}")
+    print(f"[train] Checkpoint: {ckpt_dir / args.checkpoint_name}")
 
 
 if __name__ == "__main__":
