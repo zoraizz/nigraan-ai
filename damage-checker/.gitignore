@@ -1,4 +1,4 @@
-# damage-checker local ignores
+﻿# damage-checker local ignores
 data/
 checkpoints/
 xbd_raw/
@@ -7,4 +7,5 @@ __pycache__/
 .venv/
 venv/
 .env
+predictions_log.csv
 
