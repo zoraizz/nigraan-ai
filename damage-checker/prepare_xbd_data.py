@@ -218,7 +218,7 @@ def find_xbd_post_images(xbd_root: Path) -> list[dict]:
 def prepare_subset(
     xbd_root: str,
     output_dir: str,
-    max_samples: int = 150,
+    max_samples: int = 450,
     flood_only: bool = True,
     seed: int = 42,
 ) -> dict:
@@ -429,7 +429,7 @@ def main():
     )
     parser.add_argument(
         "--max_samples", type=int, default=150,
-        help="Maximum number of tiles to include (default: 150)"
+        help="Maximum number of tiles to include (default: 450)"
     )
     parser.add_argument(
         "--all_disasters", action="store_true",
@@ -470,3 +470,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

@@ -1,4 +1,4 @@
-"""
+﻿"""
 Training script for the damage-checker classifier.
 
 Usage:
@@ -6,6 +6,11 @@ Usage:
 
 If --data_dir is empty or doesn't exist, synthetic dummy data will be
 generated automatically so the pipeline can be verified end-to-end.
+
+Augmentation:
+    Training uses RandomHorizontalFlip, RandomVerticalFlip, RandomRotation,
+    and ColorJitter to reduce overfitting on small datasets. Validation
+    uses the clean DEFAULT_TRANSFORM (no augmentation).
 """
 
 import argparse
@@ -18,7 +23,14 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader, random_split
 
-from data_loader import DamageDataset, generate_dummy_data, NUM_CLASSES, IDX_TO_LABEL
+from data_loader import (
+    DamageDataset,
+    DEFAULT_TRANSFORM,
+    TRAIN_TRANSFORM,
+    generate_dummy_data,
+    NUM_CLASSES,
+    IDX_TO_LABEL,
+)
 from model import DamageClassifier
 
 
@@ -32,6 +44,8 @@ def parse_args() -> argparse.Namespace:
                         help="Batch size")
     parser.add_argument("--lr", type=float, default=1e-3,
                         help="Learning rate")
+    parser.add_argument("--weight_decay", type=float, default=1e-4,
+                        help="Weight decay for AdamW optimizer (default: 1e-4)")
     parser.add_argument("--val_split", type=float, default=0.2,
                         help="Fraction of data for validation")
     parser.add_argument("--checkpoint_dir", type=str, default="./checkpoints",
@@ -102,6 +116,8 @@ def main():
     args = parse_args()
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[train] Device: {device}")
+    if device.type == "cuda":
+        print(f"[train] GPU: {torch.cuda.get_device_name(0)}")
 
     # ------------------------------------------------------------------
     # Data: generate dummy data if needed
@@ -112,26 +128,36 @@ def main():
         print(f"[train] No data found at {data_dir}, generating dummy data...")
         generate_dummy_data(str(data_dir), n=args.dummy_samples)
 
-    dataset = DamageDataset(str(data_dir))
-    print(f"[train] Dataset size: {len(dataset)} samples, {NUM_CLASSES} classes")
+    # Train/val split with DIFFERENT transforms:
+    #   - Train: augmented (RandomHorizontalFlip, ColorJitter, etc.)
+    #   - Val:   clean (no augmentation, matches inference)
+    # We create two datasets pointing at the same data but with different transforms,
+    # then use the same random_split indices for both so they share the split.
+    full_aug = DamageDataset(str(data_dir), train=True)
+    full_clean = DamageDataset(str(data_dir), train=False)
 
-    # Train / val split
-    val_size = int(len(dataset) * args.val_split)
-    train_size = len(dataset) - val_size
-    train_ds, val_ds = random_split(
-        dataset, [train_size, val_size],
-        generator=torch.Generator().manual_seed(42),
-    )
-    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True)
-    val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False)
-    print(f"[train] Split: {train_size} train / {val_size} val")
+    val_size = int(len(full_aug) * args.val_split)
+    train_size = len(full_aug) - val_size
+    gen = torch.Generator().manual_seed(42)
+
+    train_ds, _ = random_split(full_aug, [train_size, val_size], generator=gen)
+    _, val_ds = random_split(full_clean, [train_size, val_size], generator=gen)
+
+    train_loader = DataLoader(train_ds, batch_size=args.batch_size, shuffle=True,
+                              num_workers=0, pin_memory=(device.type == "cuda"))
+    val_loader = DataLoader(val_ds, batch_size=args.batch_size, shuffle=False,
+                            num_workers=0, pin_memory=(device.type == "cuda"))
+    print(f"[train] Dataset size: {len(full_aug)} samples, {NUM_CLASSES} classes")
+    print(f"[train] Split: {train_size} train (augmented) / {val_size} val (clean)")
 
     # ------------------------------------------------------------------
     # Model, loss, optimizer
     # ------------------------------------------------------------------
     model = DamageClassifier(in_channels=3).to(device)
     criterion = nn.CrossEntropyLoss()
-    optimizer = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
+                                  weight_decay=args.weight_decay)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)
 
     # ------------------------------------------------------------------
     # Training loop
@@ -139,10 +165,11 @@ def main():
     ckpt_dir = Path(args.checkpoint_dir)
     ckpt_dir.mkdir(parents=True, exist_ok=True)
     best_val_acc = 0.0
+    total_start = time.time()
 
     print(f"\n{'Epoch':>5}  {'Train Loss':>10}  {'Train Acc':>9}  "
-          f"{'Val Loss':>10}  {'Val Acc':>9}  {'Time':>6}")
-    print("-" * 60)
+          f"{'Val Loss':>10}  {'Val Acc':>9}  {'Time':>6}  {'LR':>10}")
+    print("-" * 72)
 
     for epoch in range(1, args.epochs + 1):
         t0 = time.time()
@@ -151,9 +178,11 @@ def main():
         )
         val_loss, val_acc = evaluate(model, val_loader, criterion, device)
         elapsed = time.time() - t0
+        current_lr = optimizer.param_groups[0]["lr"]
+        scheduler.step()
 
         print(f"{epoch:5d}  {train_loss:10.4f}  {train_acc:9.2%}  "
-              f"{val_loss:10.4f}  {val_acc:9.2%}  {elapsed:5.1f}s")
+              f"{val_loss:10.4f}  {val_acc:9.2%}  {elapsed:5.1f}s  {current_lr:10.6f}")
 
         # Save best checkpoint
         if val_acc >= best_val_acc:
@@ -170,7 +199,9 @@ def main():
             }, ckpt_path)
             print(f"       -> Saved best checkpoint (val_acc={val_acc:.2%})")
 
+    total_time = time.time() - total_start
     print(f"\n[train] Done. Best val accuracy: {best_val_acc:.2%}")
+    print(f"[train] Total training time: {total_time:.1f}s")
     print(f"[train] Checkpoint: {ckpt_dir / args.checkpoint_name}")
 
 

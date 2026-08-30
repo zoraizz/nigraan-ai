@@ -1,4 +1,4 @@
-"""
+﻿"""
 FastAPI serving endpoint for the damage-checker classifier.
 
 Exposes POST /classify-damage matching API_CONTRACT.md:
@@ -8,6 +8,10 @@ Exposes POST /classify-damage matching API_CONTRACT.md:
 
 Run:
     uvicorn main:app --host 0.0.0.0 --port 8001
+
+Environment variables (loaded from .env if present):
+    CHECKPOINT_PATH  — path to trained model checkpoint
+                       (default: checkpoints/best_model.pth)
 
 NOTE — Bi-temporal upgrade path:
     A future version could add a second "pre_image" form field and call
@@ -23,6 +27,10 @@ import os
 from pathlib import Path
 from typing import Optional
 
+# Load .env before any other imports that might use env vars
+from dotenv import load_dotenv
+load_dotenv()
+
 import torch
 from fastapi import FastAPI, File, Query, UploadFile
 from fastapi.responses import JSONResponse
@@ -36,9 +44,9 @@ from model import DamageClassifier
 # App setup
 # ---------------------------------------------------------------------------
 app = FastAPI(
-    title="Nigraan AI — Damage Checker",
+    title="Nigraan AI - Damage Checker",
     description="Post-disaster satellite image damage classification",
-    version="0.1.0",
+    version="0.2.0",
 )
 
 # ---------------------------------------------------------------------------
@@ -50,7 +58,7 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 _model: Optional[DamageClassifier] = None
 _model_loaded: bool = False
 
-# Preprocessing (must match training transforms)
+# Preprocessing (must match training DEFAULT_TRANSFORM — no augmentation at inference)
 _preprocess = transforms.Compose([
     transforms.Resize((224, 224)),
     transforms.ToTensor(),
@@ -94,6 +102,7 @@ async def health():
         "status": "ok",
         "model_loaded": _model_loaded,
         "device": str(DEVICE),
+        "checkpoint": str(CHECKPOINT_PATH),
     }
 
 

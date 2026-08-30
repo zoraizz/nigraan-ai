@@ -1,4 +1,4 @@
-"""
+﻿"""
 Data loading for damage-checker.
 
 Current mode: single post-disaster image classification.
@@ -26,9 +26,21 @@ LABEL_TO_IDX = {label: idx for idx, label in enumerate(DAMAGE_LABELS)}
 IDX_TO_LABEL = {idx: label for label, idx in LABEL_TO_IDX.items()}
 NUM_CLASSES = len(DAMAGE_LABELS)
 
-# Default image transforms (ImageNet normalisation for pretrained ResNet)
+# Inference transforms — no augmentation (used for val/test/serving)
 DEFAULT_TRANSFORM = transforms.Compose([
     transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225]),
+])
+
+# Training transforms — with augmentation to reduce overfitting on small data
+TRAIN_TRANSFORM = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.RandomHorizontalFlip(p=0.5),
+    transforms.RandomVerticalFlip(p=0.2),
+    transforms.RandomRotation(degrees=15),
+    transforms.ColorJitter(brightness=0.3, contrast=0.3, saturation=0.2),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406],
                          std=[0.229, 0.224, 0.225]),
@@ -48,16 +60,25 @@ class DamageDataset(Dataset):
                 0002.png
                 ...
             labels.csv          # columns: id,label
+
+    Args:
+        data_dir:   Path to dataset directory.
+        transform:  Explicit transform override. If None, uses DEFAULT_TRANSFORM.
+        train:      If True and transform is None, uses TRAIN_TRANSFORM instead.
     """
 
     def __init__(
         self,
         data_dir: str,
         transform: Optional[transforms.Compose] = None,
+        train: bool = False,
     ):
         self.data_dir = Path(data_dir)
         self.image_dir = self.data_dir / "images"
-        self.transform = transform or DEFAULT_TRANSFORM
+        if transform is not None:
+            self.transform = transform
+        else:
+            self.transform = TRAIN_TRANSFORM if train else DEFAULT_TRANSFORM
 
         # Parse labels.csv
         self.samples: list[Tuple[str, int]] = []
@@ -118,11 +139,11 @@ class BiTemporalDamageDataset(Dataset):
 def generate_dummy_data(data_dir: str, n: int = 60) -> str:
     """Create *n* synthetic post-disaster images + labels.csv for testing.
 
-    Images are 256×256 random noise with a colour tint per damage class so
+    Images are 256x256 random noise with a colour tint per damage class so
     the model has *something* learnable even on fake data:
-        none      → greenish tint
-        partial   → yellowish tint
-        destroyed → reddish tint
+        none      -> greenish tint
+        partial   -> yellowish tint
+        destroyed -> reddish tint
 
     Returns the path to the generated data directory.
     """
