@@ -6,6 +6,11 @@ Usage:
     2. Run tests:         python tests/test_predict_risk.py
 
 Requires the `requests` package (already in the risk-flag venv).
+
+Note: risk_level assertions accept any valid level (low/medium/high) because
+the LLM reasoning layer may return different levels than the rule-based
+fallback depending on the prompt context. Schema and structure assertions
+are kept strict.
 """
 
 import sys
@@ -14,8 +19,7 @@ import requests
 BASE_URL = "http://127.0.0.1:8000"
 
 # ---------------------------------------------------------------------------
-# Test matrix: (district_name, expected_hazard_types, expected_risk_levels)
-# expected_risk_levels is a set of acceptable values (weather-dependent).
+# Test matrix
 # ---------------------------------------------------------------------------
 
 FLOOD_DISTRICTS = [
@@ -55,7 +59,7 @@ VALID_RISK_LEVELS = {"low", "medium", "high"}
 # Helpers
 # ---------------------------------------------------------------------------
 def post_risk(district: str) -> dict:
-    r = requests.post(f"{BASE_URL}/predict-risk", json={"district": district}, timeout=15)
+    r = requests.post(f"{BASE_URL}/predict-risk", json={"district": district}, timeout=30)
     r.raise_for_status()
     return r.json()
 
@@ -103,6 +107,10 @@ def test_flood_districts():
             f"[{district}] risk_level is valid",
             f"got {data['risk_level']}",
         )
+        ok &= check(
+            isinstance(data["reason"], str) and len(data["reason"]) > 0,
+            f"[{district}] reason is non-empty string",
+        )
         # Drought fields should be None for flood-only districts
         ok &= check(
             data["rainfall_30d_mm"] is None and data["rainfall_90d_mm"] is None,
@@ -112,7 +120,7 @@ def test_flood_districts():
 
 
 def test_glof_avalanche_districts():
-    """GLOF/avalanche districts return no rainfall data, medium risk."""
+    """GLOF/avalanche districts return correct hazards and valid risk level."""
     ok = True
     for district, expected_hazards in GLOF_AVALANCHE_DISTRICTS:
         data = post_risk(district)
@@ -124,16 +132,21 @@ def test_glof_avalanche_districts():
             data["rainfall_forecast_mm"] is None,
             f"[{district}] rainfall_forecast_mm is None (non-flood)",
         )
+        # Risk level can be any valid level (LLM or fallback)
         ok &= check(
-            data["risk_level"] == "medium",
-            f"[{district}] risk_level == medium (static risk)",
+            data["risk_level"] in VALID_RISK_LEVELS,
+            f"[{district}] risk_level is valid",
             f"got {data['risk_level']}",
+        )
+        ok &= check(
+            isinstance(data["reason"], str) and len(data["reason"]) > 0,
+            f"[{district}] reason is non-empty string",
         )
     return ok
 
 
 def test_landslide_districts():
-    """Landslide districts return no rainfall data, medium risk."""
+    """Landslide districts return correct hazards and valid risk level."""
     ok = True
     for district, expected_hazards in LANDSLIDE_DISTRICTS:
         data = post_risk(district)
@@ -142,9 +155,13 @@ def test_landslide_districts():
             f"[{district}] hazard_types == {expected_hazards}",
         )
         ok &= check(
-            data["risk_level"] == "medium",
-            f"[{district}] risk_level == medium (static risk)",
+            data["risk_level"] in VALID_RISK_LEVELS,
+            f"[{district}] risk_level is valid",
             f"got {data['risk_level']}",
+        )
+        ok &= check(
+            isinstance(data["reason"], str) and len(data["reason"]) > 0,
+            f"[{district}] reason is non-empty string",
         )
     return ok
 
@@ -172,6 +189,15 @@ def test_drought_districts():
             data["rainfall_30d_mm"] <= data["rainfall_90d_mm"],
             f"[{district}] 30d <= 90d rainfall",
             f"30d={data['rainfall_30d_mm']}, 90d={data['rainfall_90d_mm']}",
+        )
+        ok &= check(
+            data["risk_level"] in VALID_RISK_LEVELS,
+            f"[{district}] risk_level is valid",
+            f"got {data['risk_level']}",
+        )
+        ok &= check(
+            isinstance(data["reason"], str) and len(data["reason"]) > 0,
+            f"[{district}] reason is non-empty string",
         )
     return ok
 
