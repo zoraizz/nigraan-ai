@@ -23,7 +23,7 @@ logger = logging.getLogger("risk_reasoning")
 # ---------------------------------------------------------------------------
 # Config
 # ---------------------------------------------------------------------------
-GEMINI_MODEL = "gemini-2.0-flash"
+GEMINI_MODEL = "gemini-3.6-flash"
 _GEMINI_TIMEOUT_SECS = 15
 
 
@@ -136,7 +136,7 @@ def _get_client() -> genai.Client | None:
 
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
-        logger.info("GEMINI_API_KEY not set — LLM reasoning disabled")
+        logger.info("GEMINI_API_KEY not set â€” LLM reasoning disabled")
         return None
 
     try:
@@ -193,13 +193,13 @@ def assess_risk_with_gemini(
         )
         return None
 
-    # ── Parse response ─────────────────────────────────────────────────
+    # â”€â”€ Parse response â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     try:
         assessment = RiskAssessment.model_validate_json(response.text)
     except Exception as exc:
         elapsed = time.monotonic() - t0
         logger.warning(
-            "Gemini returned unparseable output for %s (%.2fs): %s — raw: %s",
+            "Gemini returned unparseable output for %s (%.2fs): %s â€” raw: %s",
             district, elapsed, exc, response.text[:200],
         )
         return None
@@ -207,12 +207,12 @@ def assess_risk_with_gemini(
     # Normalise risk level
     if assessment.risk_level not in ("low", "medium", "high"):
         logger.warning(
-            "Gemini returned invalid risk_level '%s' for %s — defaulting to medium",
+            "Gemini returned invalid risk_level '%s' for %s â€” defaulting to medium",
             assessment.risk_level, district,
         )
         assessment.risk_level = "medium"
 
-    # ── Token usage ────────────────────────────────────────────────────
+    # â”€â”€ Token usage â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     usage = response.usage_metadata
     prompt_tokens = getattr(usage, "prompt_token_count", None)
     completion_tokens = getattr(usage, "candidates_token_count", None)
