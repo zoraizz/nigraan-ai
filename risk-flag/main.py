@@ -1,8 +1,27 @@
 from __future__ import annotations
 
+import logging
+from pathlib import Path
+
+from dotenv import load_dotenv
 from fastapi import FastAPI
 from pydantic import BaseModel
 import requests
+
+# Load .env from the risk-flag directory (before other imports that read env vars)
+load_dotenv(Path(__file__).parent / ".env")
+
+from risk_reasoning import assess_risk_with_gemini  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Logging
+# ---------------------------------------------------------------------------
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)-8s [%(name)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger("risk_flag")
 
 app = FastAPI()
 
@@ -102,7 +121,7 @@ DISTRICTS: dict[str, dict] = {
 
 # ---------------------------------------------------------------------------
 # Static NDMA-sourced hazard context
-# Reference data for LLM risk reasoning (consumed in a later task).
+# Reference data for LLM risk reasoning.
 # Sources: NDMA Disaster Early Warning reports, NDMA GLOF/Avalanche
 #          Guidelines 2026, NDMA SITREP archives.
 # ---------------------------------------------------------------------------
@@ -212,23 +231,23 @@ def get_rainfall_historical(lat: float, lon: float, past_days: int) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Risk scoring — placeholder (LLM swap is a separate task)
+# Risk scoring — rule-based fallback (used when Gemini is unavailable)
 # ---------------------------------------------------------------------------
-def score_risk(
+def score_risk_fallback(
     district: str,
     hazard_types: list[str],
     rainfall_3d: float | None,
     rainfall_30d: float | None,
     rainfall_90d: float | None,
 ) -> tuple[str, str]:
-    """Placeholder risk logic — swap for LLM call once that's wired up.
+    """Rule-based risk scoring — used as fallback when LLM is unavailable.
 
-    For now: flood districts use 3-day rainfall thresholds;
-    drought districts report rainfall deficit context.
+    Flood districts use 3-day rainfall thresholds; static-risk districts
+    (GLOF/avalanche/landslide) default to medium; drought districts report
+    rainfall deficit context.
     """
     parts: list[str] = []
 
-    # Flood scoring
     if "flood" in hazard_types and rainfall_3d is not None:
         if rainfall_3d > 100:
             parts.append(
@@ -246,7 +265,6 @@ def score_risk(
                 f"— low flood risk."
             )
 
-    # GLOF / avalanche / landslide — static context only for now
     for ht in ("glof", "avalanche", "landslide"):
         if ht in hazard_types:
             ctx = HAZARD_CONTEXT.get(ht, {})
@@ -255,7 +273,6 @@ def score_risk(
                 f"({ctx.get('source', 'NDMA reference')})."
             )
 
-    # Drought context
     if "drought" in hazard_types:
         deficit_info = ""
         if rainfall_30d is not None:
@@ -269,13 +286,12 @@ def score_risk(
 
     reason = " ".join(parts) if parts else f"{district}: no specific hazard data."
 
-    # Simple risk level derivation
     if "flood" in hazard_types and rainfall_3d is not None and rainfall_3d > 100:
         level = "high"
     elif "flood" in hazard_types and rainfall_3d is not None and rainfall_3d > 40:
         level = "medium"
     elif any(ht in hazard_types for ht in ("glof", "avalanche", "landslide")):
-        level = "medium"  # static-risk districts default to medium
+        level = "medium"
     else:
         level = "low"
 
@@ -302,6 +318,7 @@ def predict_risk(req: RiskRequest):
     info = DISTRICTS[req.district]
     lat, lon = info["coords"]
     hazard_types = info["hazard_types"]
+    province = info["province"]
 
     # Rainfall: 3-day forecast for flood districts
     rainfall_3d: float | None = None
@@ -315,9 +332,30 @@ def predict_risk(req: RiskRequest):
         rainfall_30d = get_rainfall_historical(lat, lon, past_days=30)
         rainfall_90d = get_rainfall_historical(lat, lon, past_days=90)
 
-    risk_level, reason = score_risk(
-        req.district, hazard_types, rainfall_3d, rainfall_30d, rainfall_90d,
+    # ── Risk reasoning: try Gemini first, fall back to rules ───────────
+    result = assess_risk_with_gemini(
+        district=req.district,
+        hazard_types=hazard_types,
+        hazard_context=HAZARD_CONTEXT,
+        province=province,
+        rainfall_3d=rainfall_3d,
+        rainfall_30d=rainfall_30d,
+        rainfall_90d=rainfall_90d,
     )
+
+    if result is not None:
+        risk_level = result.risk_level
+        reason = result.rationale
+        logger.info(
+            "Risk for %s: %s (source=%s, tokens=%s/%s)",
+            req.district, risk_level, result.source,
+            result.prompt_tokens, result.completion_tokens,
+        )
+    else:
+        risk_level, reason = score_risk_fallback(
+            req.district, hazard_types, rainfall_3d, rainfall_30d, rainfall_90d,
+        )
+        logger.info("Risk for %s: %s (source=fallback)", req.district, risk_level)
 
     return RiskResponse(
         district=req.district,

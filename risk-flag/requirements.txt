@@ -1,0 +1,7 @@
+# risk-flag dependencies
+fastapi>=0.100
+uvicorn>=0.20
+pydantic>=2.0
+requests>=2.28
+python-dotenv>=1.0
+google-genai>=1.0
