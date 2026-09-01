@@ -1,0 +1,6 @@
+fastapi>=0.100.0
+uvicorn>=0.23.0
+pydantic>=2.0.0
+python-dotenv>=1.0.0
+# tests/test_rank_priority.py uses requests when run against a live server
+requests>=2.31.0
