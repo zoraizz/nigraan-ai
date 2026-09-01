@@ -14,6 +14,7 @@ Augmentation:
 """
 
 import argparse
+import csv
 import os
 import sys
 import time
@@ -26,6 +27,7 @@ from torch.utils.data import DataLoader, random_split
 from data_loader import (
     DamageDataset,
     DEFAULT_TRANSFORM,
+    LABEL_TO_IDX,
     TRAIN_TRANSFORM,
     generate_dummy_data,
     NUM_CLASSES,
@@ -151,10 +153,29 @@ def main():
     print(f"[train] Split: {train_size} train (augmented) / {val_size} val (clean)")
 
     # ------------------------------------------------------------------
+    # Compute class weights from labels.csv for imbalanced datasets
+    # ------------------------------------------------------------------
+    class_counts = [0] * NUM_CLASSES
+    with open(labels_csv, newline="") as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            idx = LABEL_TO_IDX[row["label"]]  # noqa: need LABEL_TO_IDX
+            class_counts[idx] += 1
+
+    total_samples = sum(class_counts)
+    # Inverse-frequency weighting: weight_i = total / (num_classes * count_i)
+    class_weights = torch.tensor(
+        [total_samples / (NUM_CLASSES * max(c, 1)) for c in class_counts],
+        dtype=torch.float32,
+    ).to(device)
+    print(f"[train] Class counts: {dict(zip(IDX_TO_LABEL.values(), class_counts))}")
+    print(f"[train] Class weights: {dict(zip(IDX_TO_LABEL.values(), [round(w.item(), 4) for w in class_weights]))}")
+
+    # ------------------------------------------------------------------
     # Model, loss, optimizer
     # ------------------------------------------------------------------
     model = DamageClassifier(in_channels=3).to(device)
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(weight=class_weights)
     optimizer = torch.optim.AdamW(model.parameters(), lr=args.lr,
                                   weight_decay=args.weight_decay)
     scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=args.epochs)

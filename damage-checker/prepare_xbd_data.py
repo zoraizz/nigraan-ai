@@ -216,32 +216,40 @@ def find_xbd_post_images(xbd_root: Path) -> list[dict]:
 
 
 def prepare_subset(
-    xbd_root: str,
+    xbd_roots: list,
     output_dir: str,
     max_samples: int = 450,
     flood_only: bool = True,
+    balanced: bool = True,
     seed: int = 42,
 ) -> dict:
     """Filter, remap, and export an xBD subset to DamageDataset format.
 
     Args:
-        xbd_root:    Path to extracted xBD data.
+        xbd_roots:   List of paths to extracted xBD data directories.
         output_dir:  Output directory (will contain images/ + labels.csv).
         max_samples: Maximum number of image tiles to include.
         flood_only:  If True, only include flood-related disasters.
+        balanced:    If True, balance classes (cap at rarest). If False,
+                     use as much data as available up to max_samples.
         seed:        Random seed for reproducible sampling.
 
     Returns:
         Dict with statistics about the prepared subset.
     """
-    xbd_path = Path(xbd_root)
+    # Scan ALL provided xBD roots for post-disaster tiles
+    all_pairs = []
+    for root_str in xbd_roots:
+        xbd_path = Path(root_str)
+        print(f"[prepare_xbd] Scanning {xbd_path} for post-disaster tiles...")
+        pairs = find_xbd_post_images(xbd_path)
+        print(f"[prepare_xbd]   -> Found {len(pairs)} post-disaster image+label pairs")
+        all_pairs.extend(pairs)
+    print(f"[prepare_xbd] Total across all sources: {len(all_pairs)} pairs")
+
     out_path = Path(output_dir)
     out_images = out_path / "images"
     out_images.mkdir(parents=True, exist_ok=True)
-
-    print(f"[prepare_xbd] Scanning {xbd_path} for post-disaster tiles...")
-    all_pairs = find_xbd_post_images(xbd_path)
-    print(f"[prepare_xbd] Found {len(all_pairs)} post-disaster image+label pairs")
 
     if not all_pairs:
         print("[prepare_xbd] ERROR: No xBD data found. Check --xbd_root path.")
@@ -273,7 +281,7 @@ def prepare_subset(
 
     print(f"[prepare_xbd] Tiles with labeled buildings: {len(labeled_tiles)}")
 
-    # Stratified sampling: try to balance classes
+    # Sampling strategy depends on `balanced` flag
     random.seed(seed)
     by_class = {"none": [], "partial": [], "destroyed": []}
     for tile in labeled_tiles:
@@ -283,21 +291,26 @@ def prepare_subset(
     for cls, tiles in by_class.items():
         print(f"  {cls}: {len(tiles)}")
 
-    # Sample up to max_samples, balanced across classes
-    per_class = max_samples // 3
     sampled = []
-    for cls in ["none", "partial", "destroyed"]:
-        pool = by_class[cls]
-        random.shuffle(pool)
-        n = min(per_class, len(pool))
-        sampled.extend(pool[:n])
-
-    # If we have room, fill remaining from any class
-    remaining = max_samples - len(sampled)
-    if remaining > 0:
-        unsampled = [t for t in labeled_tiles if t not in sampled]
-        random.shuffle(unsampled)
-        sampled.extend(unsampled[:remaining])
+    if balanced:
+        # Strict per-class balancing: cap at rarest class
+        rarest = min(len(v) for v in by_class.values())
+        per_class = min(max_samples // 3, rarest) if rarest > 0 else 0
+        for cls in ["none", "partial", "destroyed"]:
+            pool = by_class[cls]
+            random.shuffle(pool)
+            sampled.extend(pool[:per_class])
+        # Fill remaining from any class
+        remaining = max_samples - len(sampled)
+        if remaining > 0:
+            unsampled = [t for t in labeled_tiles if t not in sampled]
+            random.shuffle(unsampled)
+            sampled.extend(unsampled[:remaining])
+    else:
+        # Unbalanced: take all available, shuffle, cap at max_samples
+        all_shuffled = list(labeled_tiles)
+        random.shuffle(all_shuffled)
+        sampled = all_shuffled[:max_samples]
 
     random.shuffle(sampled)
     print(f"[prepare_xbd] Final subset: {len(sampled)} tiles")
@@ -420,16 +433,21 @@ def main():
         description="Prepare xBD data for Nigraan AI damage checker"
     )
     parser.add_argument(
-        "--xbd_root", type=str, default="./xbd_raw",
-        help="Path to extracted xBD dataset root"
+        "--xbd_root", type=str, nargs="+", default=["./xbd_raw"],
+        help="One or more paths to extracted xBD dataset roots "
+             "(e.g. --xbd_root ./xbd_raw ./xbd_raw_tier3/tier3)"
     )
     parser.add_argument(
         "--output_dir", type=str, default="./data/xbd",
         help="Output directory for prepared subset"
     )
     parser.add_argument(
-        "--max_samples", type=int, default=150,
+        "--max_samples", type=int, default=450,
         help="Maximum number of tiles to include (default: 450)"
+    )
+    parser.add_argument(
+        "--no_balance", action="store_true",
+        help="Skip per-class balancing; use all available data up to max_samples"
     )
     parser.add_argument(
         "--all_disasters", action="store_true",
@@ -449,17 +467,19 @@ def main():
         print(DOWNLOAD_INSTRUCTIONS)
         return
 
-    xbd_root = Path(args.xbd_root)
-    if not xbd_root.exists():
-        print(f"[prepare_xbd] ERROR: xBD root not found at {xbd_root}")
-        print("[prepare_xbd] Run with --show_download_instructions for setup steps.")
-        sys.exit(1)
+    for root in args.xbd_root:
+        rp = Path(root)
+        if not rp.exists():
+            print(f"[prepare_xbd] ERROR: xBD root not found at {rp}")
+            print("[prepare_xbd] Run with --show_download_instructions for setup steps.")
+            sys.exit(1)
 
     stats = prepare_subset(
-        xbd_root=args.xbd_root,
+        xbd_roots=args.xbd_root,
         output_dir=args.output_dir,
         max_samples=args.max_samples,
         flood_only=not args.all_disasters,
+        balanced=not args.no_balance,
         seed=args.seed,
     )
 
