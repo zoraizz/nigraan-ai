@@ -46,6 +46,24 @@ CORS preflight spot-check (expect `200` + `access-control-allow-origin: http://l
 curl.exe -s -i -X OPTIONS http://127.0.0.1:8002/rank-priority -H "Origin: http://localhost:5173" -H "Access-Control-Request-Method: POST"
 ```
 
+## 3.5. Pre-warming the cache (recommended pre-demo step)
+
+Risk Flag now caches each district's Gemini response for 15 minutes, so a
+repeat call returns near-instantly with `"cached": true`. Before a live demo,
+pre-warm the districts you plan to show so the audience sees instant results:
+
+```powershell
+# Run ~5 minutes before going live; each call takes ~3 min, then is cached.
+foreach ($d in 'Dadu','Tharparkar','Chitral') {
+  $body = "{`"district`":`"$d`"}"
+  curl.exe -s -X POST http://127.0.0.1:8000/predict-risk -H 'Content-Type: application/json' -d $body | Out-Null
+  Write-Output "warmed: $d"
+}
+```
+
+During the demo, clicking those same districts in the dashboard will return
+in < 1 s and show a green "✓ Returned from server cache" banner.
+
 ## 4. Dashboard end-to-end script (open http://localhost:5173)
 
 Keep the browser DevTools console + Network tab open throughout. **There must

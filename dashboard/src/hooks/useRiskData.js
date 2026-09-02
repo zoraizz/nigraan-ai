@@ -15,6 +15,14 @@ export function useRiskData(district) {
   const [loading, setLoading] = useState(Boolean(district))
   const [error, setError] = useState(null)
   const [tick, setTick] = useState(0)
+  const [elapsed, setElapsed] = useState(0)
+
+  // Elapsed-seconds counter: ticks up every 1 s while loading, resets on settle.
+  useEffect(() => {
+    if (!loading) { setElapsed(0); return undefined }
+    const id = setInterval(() => setElapsed((s) => s + 1), 1000)
+    return () => clearInterval(id)
+  }, [loading])
 
   useEffect(() => {
     if (!district) {
@@ -46,5 +54,5 @@ export function useRiskData(district) {
   }, [district, tick])
 
   const refetch = useCallback(() => setTick((t) => t + 1), [])
-  return { data, loading, error, refetch }
+  return { data, loading, error, refetch, elapsed }
 }

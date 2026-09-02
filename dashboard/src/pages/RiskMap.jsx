@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import PageContainer from '../components/layout/PageContainer.jsx'
 import RiskBadge from '../components/RiskBadge.jsx'
 import HazardIcon from '../components/HazardIcon.jsx'
@@ -11,10 +11,29 @@ const RAINFALL_ROWS = [
   ['rainfall_90d_mm', 'Last 90 days'],
 ]
 
+const LOADING_MESSAGES = [
+  'Analyzing rainfall patterns…',
+  'Cross-referencing NDMA hazard history…',
+  'Consulting Gemini for risk assessment…',
+  'Comparing against historical flood patterns…',
+  'Synthesizing multi-signal risk score…',
+]
+
 // District risk view — live Risk Flag data for the selected district.
 export default function RiskMap() {
   const [district, setDistrict] = useState(DISTRICT_NAMES[0])
-  const { data, loading, error, refetch } = useRiskData(district)
+  const { data, loading, error, refetch, elapsed } = useRiskData(district)
+  const [msgIdx, setMsgIdx] = useState(0)
+
+  // Rotate the status message every 25 s while loading; reset on district change.
+  useEffect(() => {
+    if (!loading) { setMsgIdx(0); return undefined }
+    const id = setInterval(
+      () => setMsgIdx((i) => (i + 1) % LOADING_MESSAGES.length),
+      25_000,
+    )
+    return () => clearInterval(id)
+  }, [loading, district])
 
   return (
     <PageContainer title="District Risk">
@@ -65,9 +84,15 @@ export default function RiskMap() {
           </div>
 
           {loading ? (
-            <p className="py-8 text-center text-sm text-slate-400">
-              Contacting Risk Flag… (Open-Meteo + Gemini can take a few minutes)
-            </p>
+            <div className="py-8 text-center">
+              <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-slate-300 border-t-slate-700" />
+              <p className="text-sm font-medium text-slate-600">
+                {LOADING_MESSAGES[msgIdx]}
+              </p>
+              <p className="mt-1 text-xs text-slate-400">
+                Elapsed: {elapsed}s — Open-Meteo + Gemini can take up to 3 minutes
+              </p>
+            </div>
           ) : error ? (
             <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
               <p className="font-medium">Risk Flag request failed</p>
@@ -86,6 +111,11 @@ export default function RiskMap() {
             </div>
           ) : data ? (
             <div>
+              {data.cached ? (
+                <p className="mb-3 rounded border border-green-200 bg-green-50 px-3 py-1.5 text-xs text-green-700">
+                  ✓ Returned from server cache (pre-warmed — no Gemini call)
+                </p>
+              ) : null}
               {data.hazard_types?.length > 0 ? (
                 <div className="mb-4 flex flex-wrap gap-2">
                   {data.hazard_types.map((hazard) => (
