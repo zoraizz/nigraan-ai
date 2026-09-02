@@ -1,10 +1,41 @@
-// TODO: not implemented yet — scaffold placeholder, safe to call.
-//
-// Intended signature:
-//   useDamageClassification() -> { result, loading, error, classify }
-// `classify(imageFile, area?)` should wrap classifyDamage
-// (../api/damageChecker.js); `result` is its response body.
+import { useCallback, useState } from 'react'
+import { classifyDamage } from '../api/damageChecker.js'
+
+// Damage classification via Damage Checker (POST /classify-damage, multipart).
+//   useDamageClassification() -> { result, loading, error, classify, reset }
+// - classify(imageFile, area?): uploads the file (area is an optional
+//   passthrough district label). Resolves to the response body
+//   ({ damage_level, confidence, area }) or null on failure — the error
+//   state carries the ApiError either way.
+// - reset(): clears result + error (e.g., when a new file is selected)
 export function useDamageClassification() {
-  console.warn('useDamageClassification: TODO stub — not implemented yet')
-  return { result: null, loading: false, error: null, classify: () => {} }
+  const [result, setResult] = useState(null)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState(null)
+
+  const classify = useCallback(async (imageFile, area) => {
+    if (!imageFile) {
+      setError(new Error('No image selected'))
+      return null
+    }
+    setLoading(true)
+    setError(null)
+    try {
+      const body = await classifyDamage(imageFile, area)
+      setResult(body)
+      return body
+    } catch (err) {
+      setError(err)
+      return null
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  const reset = useCallback(() => {
+    setResult(null)
+    setError(null)
+  }, [])
+
+  return { result, loading, error, classify, reset }
 }

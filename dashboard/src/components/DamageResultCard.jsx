@@ -5,12 +5,16 @@ const LEVEL_COLORS = {
 }
 
 // Classification result display. Accepts the /classify-damage response body
-// ({ damage_level, confidence, area }) or null while empty.
-export default function DamageResultCard({ result }) {
+// ({ damage_level, confidence, area }), a loading flag, or neither.
+export default function DamageResultCard({ result, loading = false }) {
   return (
     <div className="rounded border border-slate-200 bg-white p-6">
       <h3 className="mb-3 font-semibold text-slate-800">Classification Result</h3>
-      {result ? (
+      {loading ? (
+        <p className="py-8 text-center text-sm text-slate-400">
+          Running inference on the Damage Checker…
+        </p>
+      ) : result ? (
         <div>
           <p
             className={`text-2xl font-bold ${
@@ -26,7 +30,7 @@ export default function DamageResultCard({ result }) {
         </div>
       ) : (
         <p className="text-sm text-slate-400">
-          No result yet — upload an image and run classification.
+          No result yet — select an image and run classification.
         </p>
       )}
     </div>
