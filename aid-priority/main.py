@@ -39,6 +39,7 @@ from typing import Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -71,6 +72,15 @@ app = FastAPI(
     title="Nigraan AI - Aid Priority",
     description="Rank districts by aid urgency from Risk Flag + Damage Checker outputs",
     version="0.2.0",
+)
+
+# CORS -- allow the dashboard frontend (Vite dev server,
+# http://localhost:5173) to call this API from the browser.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
