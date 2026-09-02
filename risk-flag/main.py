@@ -5,6 +5,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
 
@@ -24,6 +25,15 @@ logging.basicConfig(
 logger = logging.getLogger("risk_flag")
 
 app = FastAPI()
+
+# CORS -- allow the dashboard frontend (Vite dev server,
+# http://localhost:5173) to call this API from the browser.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 # ---------------------------------------------------------------------------
