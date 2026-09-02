@@ -8,6 +8,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import requests
+import threading
+import time
 
 # Load .env from the risk-flag directory (before other imports that read env vars)
 load_dotenv(Path(__file__).parent / ".env")
@@ -23,6 +25,33 @@ logging.basicConfig(
     datefmt="%H:%M:%S",
 )
 logger = logging.getLogger("risk_flag")
+
+
+# ---------------------------------------------------------------------------
+# Response cache -- demo-pace mitigation for the ~3 min Gemini latency.
+# Keyed by district; fresh entries (< 15 min old) are served with cached=True.
+# Unknown-district responses are not cached (deterministic error message).
+# ---------------------------------------------------------------------------
+_CACHE_TTL_SECS = 15 * 60
+_cache: dict[str, tuple["RiskResponse", float]] = {}
+_cache_lock = threading.Lock()
+
+
+def _cache_get(district: str) -> "RiskResponse | None":
+    with _cache_lock:
+        entry = _cache.get(district)
+        if entry is None:
+            return None
+        body, ts = entry
+        if time.time() - ts > _CACHE_TTL_SECS:
+            del _cache[district]
+            return None
+        return body.model_copy(update={"cached": True})
+
+
+def _cache_set(district: str, body: "RiskResponse") -> None:
+    with _cache_lock:
+        _cache[district] = (body, time.time())
 
 app = FastAPI()
 
@@ -199,6 +228,7 @@ class RiskResponse(BaseModel):
     rainfall_90d_mm: float | None
     risk_level: str
     reason: str
+    cached: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -325,6 +355,14 @@ def predict_risk(req: RiskRequest):
                    f"Available: {', '.join(sorted(DISTRICTS.keys()))}",
         )
 
+    # ── Cache check: serve a fresh copy if < TTL old ───────────────
+    cached = _cache_get(req.district)
+    if cached is not None:
+        logger.info(
+            "Risk for %s: %s (source=cache)", req.district, cached.risk_level,
+        )
+        return cached
+
     info = DISTRICTS[req.district]
     lat, lon = info["coords"]
     hazard_types = info["hazard_types"]
@@ -367,7 +405,7 @@ def predict_risk(req: RiskRequest):
         )
         logger.info("Risk for %s: %s (source=fallback)", req.district, risk_level)
 
-    return RiskResponse(
+    body = RiskResponse(
         district=req.district,
         hazard_types=hazard_types,
         rainfall_forecast_mm=round(rainfall_3d, 1) if rainfall_3d is not None else None,
@@ -376,6 +414,8 @@ def predict_risk(req: RiskRequest):
         risk_level=risk_level,
         reason=reason,
     )
+    _cache_set(req.district, body)
+    return body
 
 
 @app.get("/")
