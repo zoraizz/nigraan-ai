@@ -25,14 +25,12 @@ export default function DamageAssessment() {
   const handleClassify = () => classify(file, area === 'unknown' ? undefined : area)
 
   return (
-    <PageContainer title="Damage Assessment">
-      <p className="mb-6 text-sm text-slate-500">
-        Upload a post-disaster satellite image tile to classify its damage
-        severity (none / partial / destroyed) with the xBD-trained model.
-      </p>
-
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="space-y-4">
+    <PageContainer
+      title="Damage Assessment"
+      lead="Upload a post-disaster satellite image tile to classify its damage severity (none / partial / destroyed) with the xBD-trained model."
+    >
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <div className="space-y-5">
           <ImageUploadBox
             previewUrl={previewUrl}
             fileName={file?.name ?? null}
@@ -42,10 +40,10 @@ export default function DamageAssessment() {
             disabled={!file}
           />
 
-          <div className="rounded border border-slate-200 bg-white p-4">
+          <div className="panel p-4">
             <label
               htmlFor="area-select"
-              className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500"
+              className="mb-1.5 block text-xs font-medium text-muted"
             >
               Area / district label (optional passthrough)
             </label>
@@ -53,7 +51,7 @@ export default function DamageAssessment() {
               id="area-select"
               value={area}
               onChange={(event) => setArea(event.target.value)}
-              className="w-full rounded border border-slate-300 px-3 py-2 text-sm text-slate-700"
+              className="field"
             >
               <option value="unknown">unknown</option>
               {DISTRICT_NAMES.map((name) => (
@@ -65,11 +63,11 @@ export default function DamageAssessment() {
           </div>
 
           {error ? (
-            <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-              <p className="font-medium">Classification failed</p>
+            <div className="alert-error p-4 text-sm">
+              <p className="font-semibold">Classification failed</p>
               <p className="mt-1">{error.message}</p>
               <p className="mt-2 text-xs">
-                Is the service running on {`http://127.0.0.1:8001`}? See
+                Is the service running on http://127.0.0.1:8001? See
                 dashboard/INTEGRATION.md.
               </p>
             </div>

@@ -1,56 +1,94 @@
+import { useFlipReorder } from '../hooks/useFlipReorder.js'
+import RiskBadge, { RISK_STRIPE } from './RiskBadge.jsx'
+import HazardIcon from './HazardIcon.jsx'
+
 // Ranked districts table for the Aid Priority page. Rows follow
-// /rank-priority's ranked_districts entries.
+// /rank-priority's ranked_districts entries. Rendered as a CSS-grid "table"
+// (kept semantic with role attributes) so the FLIP hook can animate rows
+// into place when the ranking loads or re-sorts.
+const COLUMNS = [
+  'Rank',
+  'District',
+  'Hazard',
+  'Risk',
+  'Damage score',
+  '% damaged',
+  'Tiles',
+  'Priority',
+  'Coverage',
+]
+
 export default function PriorityTable({ rows = [] }) {
+  // Animate rows when the ranked list loads or re-sorts (district = key).
+  // Must run before the empty-state return.
+  const register = useFlipReorder(rows.map((row) => row.district))
+
   if (rows.length === 0) {
     return (
-      <div className="rounded border border-slate-200 bg-white px-4 py-8 text-center text-sm text-slate-400">
-        No ranking data yet — run the demo scenario above.
+      <div className="panel px-4 py-10 text-center text-sm text-muted">
+        No ranking data yet. Run the demo scenario above.
       </div>
     )
   }
 
   return (
-    <div className="overflow-x-auto rounded border border-slate-200 bg-white">
-      <table className="w-full text-left text-sm">
-        <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-          <tr>
-            <th className="px-4 py-3">Rank</th>
-            <th className="px-4 py-3">District</th>
-            <th className="px-4 py-3">Hazard</th>
-            <th className="px-4 py-3">Risk</th>
-            <th className="px-4 py-3">Damage Score</th>
-            <th className="px-4 py-3">% Damaged</th>
-            <th className="px-4 py-3">Tiles</th>
-            <th className="px-4 py-3">Priority</th>
-            <th className="px-4 py-3">Coverage</th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.district} className="border-t border-slate-100">
-              <td className="px-4 py-3 font-semibold text-slate-800">{row.rank}</td>
-              <td className="px-4 py-3 font-medium text-slate-800">{row.district}</td>
-              <td className="px-4 py-3">{row.hazard_type}</td>
-              <td className="px-4 py-3">{row.risk_level}</td>
-              <td className="px-4 py-3">{row.damage_score.toFixed(3)}</td>
-              <td className="px-4 py-3">{(row.percent_damaged * 100).toFixed(0)}%</td>
-              <td className="px-4 py-3">{row.tile_count}</td>
-              <td className="px-4 py-3 font-semibold text-slate-900">
-                {row.priority_score.toFixed(4)}
-              </td>
-              <td className="px-4 py-3">
-                {row.low_coverage_warning ? (
-                  <span className="rounded bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-800">
-                    ⚠ {row.low_coverage_warning}
-                  </span>
-                ) : (
-                  <span className="text-xs text-slate-400">ok</span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <div
+      className="panel overflow-x-auto"
+      role="table"
+      aria-label="Districts ranked by aid priority"
+    >
+      <div className="ptable ptable-grid ptable-head" role="row">
+        {COLUMNS.map((column) => (
+          <div key={column} role="columnheader" className="px-3 py-2.5">
+            {column}
+          </div>
+        ))}
+      </div>
+      <div role="rowgroup">
+        {rows.map((row) => (
+          <div
+            key={row.district}
+            ref={register(row.district)}
+            role="row"
+            className="ptable-grid ptable-row"
+            style={{
+              '--stripe': RISK_STRIPE[row.risk_level] || RISK_STRIPE.unknown,
+            }}
+          >
+            <div role="cell" className="data px-3 py-3 font-semibold text-text">
+              {String(row.rank).padStart(2, '0')}
+            </div>
+            <div role="cell" className="px-3 py-3 font-semibold text-text">
+              {row.district}
+            </div>
+            <div role="cell" className="px-3 py-3">
+              <HazardIcon hazard={row.hazard_type} />
+            </div>
+            <div role="cell" className="px-3 py-3">
+              <RiskBadge level={row.risk_level} />
+            </div>
+            <div role="cell" className="data px-3 py-3 text-text">
+              {row.damage_score.toFixed(3)}
+            </div>
+            <div role="cell" className="data px-3 py-3 text-text">
+              {(row.percent_damaged * 100).toFixed(0)}%
+            </div>
+            <div role="cell" className="data px-3 py-3 text-muted">
+              {row.tile_count}
+            </div>
+            <div role="cell" className="data px-3 py-3 text-base font-semibold text-text">
+              {row.priority_score.toFixed(4)}
+            </div>
+            <div role="cell" className="px-3 py-3">
+              {row.low_coverage_warning ? (
+                <span className="warn-chip">{row.low_coverage_warning}</span>
+              ) : (
+                <span className="text-xs text-muted">ok</span>
+              )}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

@@ -31,20 +31,16 @@ export default function AidPriority() {
   )
 
   return (
-    <PageContainer title="Aid Priority">
-      <p className="mb-6 text-sm text-slate-500">
-        Districts ranked by aid urgency — 0.4 × risk + 0.6 × damage. The demo
-        scenario mixes aggregated tile breakdowns with single-photo
-        assessments; low-coverage warnings flag ranks that rest on very few
-        tiles.
-      </p>
-
-      <div className="mb-6 flex items-center gap-3">
+    <PageContainer
+      title="Aid Priority"
+      lead="Districts ranked by aid urgency: 0.4 × risk + 0.6 × damage. The demo scenario mixes aggregated tile breakdowns with single-photo assessments; low-coverage warnings flag ranks that rest on very few tiles."
+    >
+      <div className="mb-5 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={() => setSubmitted(true)}
           disabled={submitted}
-          className="rounded bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+          className="btn btn-primary"
         >
           {submitted ? 'Ranking loaded' : 'Run demo ranking'}
         </button>
@@ -53,32 +49,33 @@ export default function AidPriority() {
             type="button"
             onClick={refetch}
             disabled={loading}
-            className="rounded border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50"
+            className="btn"
           >
             Re-fetch
           </button>
         ) : null}
 
-        <details className="ml-auto max-w-md">
-          <summary className="cursor-pointer text-xs text-slate-500 hover:text-slate-700">
+        <details className="ml-auto max-w-md text-xs">
+          <summary className="cursor-pointer text-muted hover:text-text">
             Request payload (demo scenario)
           </summary>
-          <pre className="mt-2 max-h-72 overflow-auto rounded bg-slate-900 p-3 text-xs text-slate-100">
+          <pre className="data well mt-2 max-h-72 overflow-auto p-3 text-xs leading-relaxed text-text">
             {JSON.stringify({ districts: DEMO_PAYLOAD }, null, 2)}
           </pre>
         </details>
       </div>
 
       {loading ? (
-        <p className="py-8 text-center text-sm text-slate-400">
-          Ranking districts…
-        </p>
+        <div className="panel px-4 py-10 text-center">
+          <div className="spinner mx-auto mb-4" />
+          <p className="text-sm text-muted">Ranking districts…</p>
+        </div>
       ) : error ? (
-        <div className="rounded border border-red-200 bg-red-50 p-4 text-sm text-red-700">
-          <p className="font-medium">Aid Priority request failed</p>
+        <div className="alert-error p-4 text-sm">
+          <p className="font-semibold">Aid Priority request failed</p>
           <p className="mt-1">{error.message}</p>
           <p className="mt-2 text-xs">
-            Is the service running on {`http://127.0.0.1:8002`}? See
+            Is the service running on http://127.0.0.1:8002? See
             dashboard/INTEGRATION.md.
           </p>
         </div>
@@ -86,7 +83,7 @@ export default function AidPriority() {
         <PriorityTable rows={ranking} />
       )}
 
-      <div className="mt-6">
+      <div className="mt-5">
         <ScoringExplainer scoring={scoring} />
       </div>
     </PageContainer>

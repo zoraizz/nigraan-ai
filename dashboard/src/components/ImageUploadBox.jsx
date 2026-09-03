@@ -9,16 +9,16 @@ export default function ImageUploadBox({
   disabled = false,
 }) {
   return (
-    <div className="rounded border border-dashed border-slate-300 bg-white p-6 text-center">
+    <div className="panel border-dashed p-6 text-center">
       {previewUrl ? (
         <img
           src={previewUrl}
           alt="Selected tile preview"
-          className="mx-auto mb-4 max-h-64 rounded border border-slate-200 object-contain"
+          className="mx-auto mb-4 max-h-64 rounded-panel border border-line object-contain"
         />
       ) : (
-        <p className="mb-4 text-sm text-slate-400">
-          No image selected yet — choose a post-disaster satellite tile.
+        <p className="mb-4 text-sm text-muted">
+          No image selected yet. Choose a post-disaster satellite tile.
         </p>
       )}
 
@@ -26,20 +26,20 @@ export default function ImageUploadBox({
         type="file"
         accept="image/*"
         onChange={onFileSelect}
-        className="mx-auto block text-sm text-slate-500 file:mr-3 file:rounded file:border-0 file:bg-slate-800 file:px-4 file:py-2 file:text-sm file:text-white hover:file:bg-slate-700"
+        className="mx-auto block w-full max-w-xs text-sm text-muted file:mr-3 file:cursor-pointer file:rounded-chip file:border file:border-line-strong file:bg-transparent file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-text hover:file:bg-surface-hover"
       />
 
       <button
         type="button"
         onClick={onClassify}
         disabled={disabled || loading}
-        className="mt-4 rounded bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 disabled:opacity-50"
+        className="btn btn-primary mt-4"
       >
         {loading ? 'Classifying…' : 'Classify damage'}
       </button>
 
       {fileName ? (
-        <p className="mt-3 text-xs text-slate-400">Selected: {fileName}</p>
+        <p className="data mt-3 truncate text-xs text-muted">{fileName}</p>
       ) : null}
     </div>
   )

@@ -1,2 +1,407 @@
-/* Tailwind v4 entry point — utility classes are scanned automatically. */
+/* Nigraan design tokens — emergency-operations instrument panel.
+   Tailwind v4 CSS-first config: every --color-* / --font-* / --radius-* below
+   also generates utilities (bg-surface, text-muted, font-heading, rounded-panel). */
+
 @import "tailwindcss";
+
+@theme {
+  /* Surfaces */
+  --color-bg: #141922;
+  --color-surface: #1c222c;
+  --color-surface-2: #232b37;
+  --color-surface-hover: #2a3441;
+  --color-line: #2a3340;
+  --color-line-strong: #3a4656;
+
+  /* Text */
+  --color-text: #e7e4dd;
+  --color-muted: #a5a19a;
+
+  /* Risk levels. Base hex per design brief (stripes, fills, dots);
+     -bright variants are luminance-adjusted for WCAG AA text on dark panels. */
+  --color-risk-low: #5c8a5c;
+  --color-risk-medium: #d9a441;
+  --color-risk-high: #b23a2e;
+  --color-risk-unknown: #6b7280;
+  --color-risk-low-bright: #7fbf7f;
+  --color-risk-medium-bright: #e3b75c;
+  --color-risk-high-bright: #e0705f;
+  --color-risk-unknown-bright: #9ca3af;
+
+  /* Hazard types. Same scheme: base = fill, -bright = text. */
+  --color-hazard-flood: #3b82c4;
+  --color-hazard-drought: #c08a2e;
+  --color-hazard-landslide: #b4532a;
+  --color-hazard-avalanche: #6fb8c9;
+  --color-hazard-glof: #2e8f82;
+  --color-hazard-flood-bright: #7ab3e8;
+  --color-hazard-drought-bright: #dfaf5b;
+  --color-hazard-landslide-bright: #d97e57;
+  --color-hazard-avalanche-bright: #8fd0de;
+  --color-hazard-glof-bright: #5bbfb2;
+
+  /* Status + interaction */
+  --color-danger: #b23a2e;
+  --color-danger-bright: #e0705f;
+  --color-ok: #5c8a5c;
+  --color-ok-bright: #7fbf7f;
+  --color-focus: #7fb2e5;
+
+  /* Typography: Archivo for headings, Public Sans for UI, IBM Plex Mono
+     strictly for data readouts (scores, coordinates, timestamps, confidence). */
+  --font-heading: "Archivo", "Public Sans", system-ui, sans-serif;
+  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+
+  /* Shape: flat panels, near-square chips. */
+  --radius-panel: 3px;
+  --radius-chip: 2px;
+}
+
+@layer base {
+  html {
+    color-scheme: dark;
+  }
+
+  body {
+    background-color: var(--color-bg);
+    color: var(--color-text);
+    font-family: var(--font-body);
+    font-size: 15px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* Keyboard focus on buttons, links, rows, and custom controls. */
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  /* Form fields show a ring whenever they hold focus. */
+  input:focus,
+  select:focus,
+  textarea:focus {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 1px;
+  }
+
+  ::selection {
+    background: var(--color-focus);
+    color: var(--color-bg);
+  }
+
+  /* Respect reduced-motion everywhere, including the FLIP reorder. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  /* Flat panel: hairline border, no shadow, near-square corners. */
+  .panel {
+    background-color: var(--color-surface);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-panel);
+  }
+
+  /* Inset well (formula blocks, AI reason text, JSON viewer). */
+  .well {
+    background-color: var(--color-surface-2);
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-chip);
+  }
+
+  /* Left risk stripe — set --stripe inline; gray fallback means "no data". */
+  .stripe-left {
+    border-left: 4px solid var(--stripe, var(--color-risk-unknown));
+  }
+
+  /* Data readouts: scores, percentages, coordinates, timestamps, confidence. */
+  .data {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Buttons — flat, hairline border. Primary inverts (light fill, dark text). */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-chip);
+    background-color: transparent;
+    color: var(--color-text);
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .btn:hover {
+    background-color: var(--color-surface-hover);
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .btn:disabled:hover {
+    background-color: transparent;
+  }
+  .btn-primary {
+    background-color: var(--color-text);
+    border-color: var(--color-text);
+    color: var(--color-bg);
+  }
+  .btn-primary:hover {
+    background-color: #ffffff;
+    border-color: #ffffff;
+  }
+  .btn-primary:disabled:hover {
+    background-color: var(--color-text);
+  }
+
+  /* Spinner (loading states). */
+  .spinner {
+    width: 1.5rem;
+    height: 1.5rem;
+    border: 2px solid var(--color-line-strong);
+    border-top-color: var(--color-text);
+    border-radius: 9999px;
+    animation: spin 0.8s linear infinite;
+  }
+
+  /* Risk badge — flat pill, solid dot, tinted fill from the risk token. */
+  .risk-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.15rem 0.6rem;
+    border: 1px solid transparent;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+    white-space: nowrap;
+  }
+  .risk-dot {
+    width: 0.4rem;
+    height: 0.4rem;
+    border-radius: 9999px;
+    background-color: currentColor;
+  }
+  .risk-low {
+    color: var(--color-risk-low-bright);
+    background-color: color-mix(in srgb, var(--color-risk-low) 16%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-risk-low) 45%, var(--color-surface));
+  }
+  .risk-medium {
+    color: var(--color-risk-medium-bright);
+    background-color: color-mix(in srgb, var(--color-risk-medium) 16%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-risk-medium) 45%, var(--color-surface));
+  }
+  .risk-high {
+    color: var(--color-risk-high-bright);
+    background-color: color-mix(in srgb, var(--color-risk-high) 18%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-risk-high) 45%, var(--color-surface));
+  }
+  .risk-unknown {
+    color: var(--color-risk-unknown-bright);
+    background-color: color-mix(in srgb, var(--color-risk-unknown) 16%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--color-risk-unknown) 40%, var(--color-surface));
+  }
+
+  /* Hazard chip — glyph + label, tinted from the hazard token via --hz vars. */
+  .hazard-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.2rem 0.5rem;
+    border: 1px solid transparent;
+    border-radius: var(--radius-chip);
+    font-size: 0.75rem;
+    font-weight: 500;
+    line-height: 1.1rem;
+    white-space: nowrap;
+    color: var(--hz-bright, var(--color-muted));
+    background-color: color-mix(in srgb, var(--hz, var(--color-muted)) 14%, var(--color-surface));
+    border-color: color-mix(in srgb, var(--hz, var(--color-muted)) 40%, var(--color-surface));
+  }
+  .hz-flood {
+    --hz: var(--color-hazard-flood);
+    --hz-bright: var(--color-hazard-flood-bright);
+  }
+  .hz-drought {
+    --hz: var(--color-hazard-drought);
+    --hz-bright: var(--color-hazard-drought-bright);
+  }
+  .hz-landslide {
+    --hz: var(--color-hazard-landslide);
+    --hz-bright: var(--color-hazard-landslide-bright);
+  }
+  .hz-avalanche {
+    --hz: var(--color-hazard-avalanche);
+    --hz-bright: var(--color-hazard-avalanche-bright);
+  }
+  .hz-glof {
+    --hz: var(--color-hazard-glof);
+    --hz-bright: var(--color-hazard-glof-bright);
+  }
+
+  /* Low-coverage warning chip (amber, same family as risk-medium). */
+  .warn-chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.5rem;
+    border: 1px solid color-mix(in srgb, var(--color-risk-medium) 45%, var(--color-surface));
+    border-radius: var(--radius-chip);
+    font-size: 0.75rem;
+    font-weight: 500;
+    white-space: nowrap;
+    color: var(--color-risk-medium-bright);
+    background-color: color-mix(in srgb, var(--color-risk-medium) 14%, var(--color-surface));
+  }
+
+  /* Sidebar nav — active item marked by a left accent bar, not a fill pill. */
+  .nav-item {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--radius-chip);
+    color: var(--color-muted);
+    font-size: 0.875rem;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .nav-item::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.4rem;
+    bottom: 0.4rem;
+    width: 3px;
+    border-radius: 1px;
+    background-color: transparent;
+  }
+  .nav-item:hover {
+    color: var(--color-text);
+    background-color: var(--color-surface-hover);
+  }
+  .nav-item-active {
+    color: var(--color-text);
+    font-weight: 600;
+  }
+  .nav-item-active::before {
+    background-color: var(--color-text);
+  }
+
+  /* Selectable district rows (Risk Map list) — same accent-bar idiom. */
+  .select-row {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem 0.75rem;
+    width: 100%;
+    padding: 0.55rem 0.875rem 0.55rem 1rem;
+    border-radius: var(--radius-chip);
+    text-align: left;
+  }
+  .select-row::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0.4rem;
+    bottom: 0.4rem;
+    width: 3px;
+    border-radius: 1px;
+    background-color: transparent;
+  }
+  .select-row:hover {
+    background-color: var(--color-surface-hover);
+  }
+  .select-row-active {
+    background-color: var(--color-surface-2);
+  }
+  .select-row-active::before {
+    background-color: var(--color-text);
+  }
+
+  /* Priority table — CSS grid "table" so rows can FLIP-animate on re-sort. */
+  .ptable {
+    min-width: 62rem;
+  }
+  .ptable-grid {
+    display: grid;
+    grid-template-columns:
+      3rem /* rank */
+      minmax(9rem, 1.3fr) /* district */
+      8.5rem /* hazard */
+      6.75rem /* risk */
+      7.5rem /* damage score */
+      6.5rem /* % damaged */
+      5rem /* tiles */
+      7.5rem /* priority */
+      minmax(11rem, 1.2fr); /* coverage */
+    align-items: center;
+  }
+  .ptable-head {
+    color: var(--color-muted);
+    font-size: 0.75rem;
+    font-weight: 500;
+    background-color: var(--color-surface-2);
+  }
+  .ptable-row {
+    position: relative;
+    border-top: 1px solid var(--color-line);
+  }
+  .ptable-row::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background-color: var(--stripe, var(--color-risk-unknown));
+  }
+
+  /* Alerts (error / cached-success banners). */
+  .alert-error {
+    border: 1px solid color-mix(in srgb, var(--color-danger) 50%, var(--color-surface));
+    background-color: color-mix(in srgb, var(--color-danger) 12%, var(--color-surface));
+    color: var(--color-danger-bright);
+    border-radius: var(--radius-panel);
+  }
+  .alert-ok {
+    border: 1px solid color-mix(in srgb, var(--color-ok) 45%, var(--color-surface));
+    background-color: color-mix(in srgb, var(--color-ok) 12%, var(--color-surface));
+    color: var(--color-ok-bright);
+    border-radius: var(--radius-panel);
+  }
+
+  /* Form control on dark surface. */
+  .field {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-chip);
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    font-size: 0.875rem;
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

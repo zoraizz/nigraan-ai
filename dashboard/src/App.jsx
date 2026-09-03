@@ -7,11 +7,11 @@ import RiskMap from './pages/RiskMap.jsx'
 import DamageAssessment from './pages/DamageAssessment.jsx'
 import AidPriority from './pages/AidPriority.jsx'
 
-// Router + layout shell: sidebar nav between the 4 pages.
-// Page content is placeholder for now — see src/pages/.
+// Router + layout shell: persistent sidebar rail + header, routes for the
+// 4 console pages.
 export default function App() {
   return (
-    <div className="flex min-h-screen bg-slate-100">
+    <div className="flex min-h-screen bg-bg">
       <Sidebar />
       <div className="flex min-h-screen flex-1 flex-col">
         <Header />
