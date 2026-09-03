@@ -1,0 +1,6 @@
+# aid-priority local ignores
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
