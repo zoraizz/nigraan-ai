@@ -1,0 +1,11 @@
+# damage-checker local ignores
+data/
+checkpoints/
+xbd_raw/
+xbd_raw_tier3/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+predictions_log.csv
