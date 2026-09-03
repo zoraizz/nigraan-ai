@@ -13,6 +13,13 @@ See `API_CONTRACT.md` for interface definitions.
 
 ## Damage Checker — Current Baseline (v3)
 
+**See it run:** `damage-checker/sample-images/` holds five post-disaster tiles
+with known ground-truth labels — three from the held-out EBD Pakistan test
+split, two from the xBD validation split (tornado, wildfire). Each was run
+through a live `POST /classify-damage` with the v3 checkpoint; the folder's
+README lists ground truth vs. prediction side by side, so the model's real
+input/output behavior can be inspected without any dataset setup.
+
 **Model:** ResNet-18 (ImageNet-pretrained), 3-class head (none / partial / destroyed),
 single post-disaster image input. v3 is fine-tuned from the v2 checkpoint on combined
 data, so all v2 features are retained.
