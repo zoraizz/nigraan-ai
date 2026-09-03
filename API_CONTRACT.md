@@ -2,12 +2,15 @@
 
 ## POST /predict-risk
 Request:
-{ "district": "string", "rainfall_forecast_mm": number }
+{ "district": "string" }
+
+Rainfall is fetched server-side from Open-Meteo (forecast, 30-day, and 90-day
+totals); the caller only identifies the district.
 
 Response:
-{ "district": "string", "hazard_types": ["string"], "rainfall_forecast_mm": number,
-  "rainfall_30d_mm": number, "rainfall_90d_mm": number,
-  "risk_level": "low|medium|high|unknown", "reason": "string" }
+{ "district": "string", "hazard_types": ["string"], "rainfall_forecast_mm": number | null,
+  "rainfall_30d_mm": number | null, "rainfall_90d_mm": number | null,
+  "risk_level": "low|medium|high|unknown", "reason": "string", "cached": boolean }
 
 ## POST /classify-damage
 Request: multipart/form-data, field "image"
