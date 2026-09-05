@@ -72,9 +72,17 @@ soon" from "needs urgent aid now."
 - 1,936 of 3,540 EBD Pakistan tiles contain no buildings and were excluded;
   the model has no negative-sample training for that region.
 
-**Serving:** `CHECKPOINT_PATH=checkpoints/xbd_ebd_v3.pth` (see
-`damage-checker/.env`). The v2 checkpoint remains on disk
-(`checkpoints/xbd_real_model_v2.pth`) as a rollback option.
+**Checkpoint included:** The v3 checkpoint
+(`checkpoints/xbd_ebd_v3.pth`, ~43 MB) is committed directly to the
+repo — no external download, Git LFS, or Drive link needed. A fresh
+`git clone` gives you the model. The service auto-detects GPU vs CPU
+(`torch.cuda.is_available()`) and falls back to CPU inference on
+machines without a GPU.
+
+**Serving:** Set `CHECKPOINT_PATH=checkpoints/xbd_ebd_v3.pth` in
+`damage-checker/.env` (or copy `.env.example` as-is). The superseded
+v2 checkpoint (`xbd_real_model_v2.pth`) remains on disk as a rollback
+option but is not committed to the repo.
 
 **Reproduction:** `prepare_ebd_data.py` converts the raw EBD ZIP to our
 labels.csv format; `train_v3.py` runs the combined fine-tune (seed=42,

@@ -1,4 +1,4 @@
-# Byte-compiled / optimized / DLL files
+﻿# Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
 *$py.class
@@ -225,5 +225,6 @@ __marimo__/
 data/raw/
 data/maxar/
 *.pth
+!damage-checker/checkpoints/xbd_ebd_v3.pth
 *.onnx
 .env
