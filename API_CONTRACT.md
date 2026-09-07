@@ -19,12 +19,21 @@ Response:
 { "damage_level": "none|partial|destroyed", "confidence": number, "area": "string" }
 
 Out-of-distribution guard: if the upload doesn't resemble satellite disaster
-imagery (distance check against the training distribution, see
+imagery (two distance checks against the training distribution — a texture
+check on our model's early-layer embedding and a photo check against a
+stock ImageNet ResNet-18's embedding of the training tiles; see
 damage-checker/ood_reference.json), the response additionally carries
 "is_out_of_domain": true, "classification": "irrelevant", a human-readable
-"message", and an "ood" object with the cosine/Mahalanobis distances that
-triggered the flag. "damage_level"/"confidence" still hold the raw model
-prediction for transparency — treat it as unreliable when flagged.
+"message", and an "ood" object:
+
+{ "cosine": number, "mahalanobis": number,               // texture signal (our model, layer1)
+  "cosine_threshold": number, "mahalanobis_threshold": number,
+  "photo_cosine": number, "photo_mahalanobis": number,  // photo signal (stock ImageNet model)
+  "photo_score": number, "photo_score_threshold": number,
+  "signals": ["texture"|"photo_content"|"low_confidence", ...] }  // which checks fired
+
+"damage_level"/"confidence" still hold the raw model prediction for
+transparency — treat it as unreliable when flagged.
 
 ## POST /rank-priority
 Request: JSON body

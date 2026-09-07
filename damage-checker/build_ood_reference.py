@@ -1,35 +1,48 @@
-"""
-One-time offline script: build the out-of-distribution (OOD) reference for
+"""Offline script: build the out-of-distribution (OOD) reference (v3) for
 /classify-damage.
 
-Runs the v3 model over the TRAINING images (splits_v3.json train splits for
-both sources) and extracts the pooled layer1 embedding (64-d, the
-texture-level feature map right after the first ResNet block) for each tile.
+v3 adds a second, independent signal to the v2 layer1 texture guard:
 
-Why layer1 and not the penultimate (layer4) embedding: the penultimate space
-of this model places non-satellite inputs (noise, text screenshots, photos)
-*inside* the training cloud — single-centroid, k-means, and diagonal
-Mahalanobis distances in layer4 all fail to separate them (verified
-empirically; see the scheme-selection notes below). The layer1 texture space
-separates them cleanly.
+  1. texture signal (v2, unchanged): cosine AND diagonal-Mahalanobis
+     distance of the pooled layer1 (64-d) embedding of OUR fine-tuned
+     model from the training-tile distribution. Catches synthetic inputs
+     (noise, text, gradients, solid colours).
 
-Reference computed here:
-  - centroid: mean layer1 embedding of the training set
-  - mean / std: per-feature statistics (diagonal Mahalanobis)
-  - thresholds: 99th percentile of training distances, cosine AND
-    diagonal-Mahalanobis — an upload is flagged only when BOTH distances
-    exceed their thresholds (some legitimate tiles sit at one extreme; the
-    AND rule keeps the false-positive rate near 0.9%).
+  2. photo signal (new): distance of the image's avgpool embedding in a
+     STOCK ImageNet-pretrained ResNet-18 from the satellite-tile centroid.
+     WHY: production failure 2026-09-08 -- a photo of a person was
+     classified "destroyed" with no flag. Measured distances showed photos
+     of people/objects/embed INSIDE the layer1/2/3/4 clouds of the
+     fine-tuned model (e.g. person-indoors: layer1 cosine 0.0603 vs
+     threshold 0.1557 -- 0.39x, deeper inside than most real tiles), so no
+     threshold on our model's spaces can separate them. ImageNet max-
+     softmax alone also fails (aerial textures map to ImageNet classes
+     with up to 0.99). The stock model's 512-d avgpool space, however,
+     separates the domains: an upload is flagged when
+        photo_score = photo_cosine/t99 + photo_maha/t99  >  score_threshold
+     (t99 = the train-tile p99 of each metric; the sum lets one metric
+     compensate for the other), or when the score is moderately elevated
+     AND the model's own confidence is low (tie-breaker branch).
 
-Sanity checks printed and recorded: validation + sample-images tiles must
-not be flagged; synthetic non-satellite probes (solid colour, noise, text
-screenshot, gradient photo, checkerboard, dark night image) must be flagged.
+Calibration constants (derived on 2026-09-08 from 5,125 train tiles,
+1,239 val tiles, 5 sample tiles, 11 realistic irrelevant images and 6
+synthetic probes):
+    score_threshold 1.9  -- between train score p99 (1.77) and p99.9
+                            (1.95); every irrelevant image scores >= 1.91,
+                            every sample tile <= 1.56. Train FPR ~1.05%.
+    conf branch: score > 1.5 AND confidence < 0.45
+                         -- flags borderline images the model is also
+                            unsure about; adds ~0.3% train FPR.
+
+Sanity checks (builder aborts on failure): sample tiles must never flag;
+all synthetic probes must flag; every image in ood_test/irrelevant (if the
+directory exists) must flag.
 
 Run from damage-checker/ with the venv python:
     python build_ood_reference.py
 
-Output: ood_reference.json (~10 KB, committed to the repo). Re-run after
-any future checkpoint change to refresh the reference.
+Output: ood_reference.json (~35 KB, committed). Re-run after any future
+checkpoint change to refresh the reference.
 """
 
 import json
@@ -41,14 +54,20 @@ import torch.nn.functional as F
 from PIL import Image, ImageDraw
 from torch.utils.data import DataLoader, Dataset
 from torchvision import transforms
+from torchvision.models import ResNet18_Weights, resnet18
 
 from data_loader import DamageDataset
 from model import DamageClassifier
 
 CHECKPOINT_PATH = Path("checkpoints/xbd_ebd_v3.pth")
+IMAGENET_WEIGHTS_PATH = Path("checkpoints/imagenet_resnet18_v1.pth")
 OUT_PATH = Path("ood_reference.json")
 BATCH_SIZE = 64
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+SCORE_THRESHOLD = 1.9       # photo_score flag level (see module docstring)
+CONF_BRANCH_SCORE = 1.5     # confidence tie-breaker: elevated score ...
+CONF_BRANCH_MAX_CONF = 0.45  # ... AND low model confidence
 
 RESIZE = transforms.Resize((224, 224))
 NORM = transforms.Compose([
@@ -116,13 +135,12 @@ def make_probes() -> dict[str, Image.Image]:
 
 
 # ---------------------------------------------------------------------------
-# Data pipeline: unified access to both sources with row-position indices
-# (same convention as train_v3.py's stratified_split)
+# Data pipeline (paths or already-loaded PIL images)
 # ---------------------------------------------------------------------------
 def build_loader(items) -> DataLoader:
     class Unified(Dataset):
         def __init__(self, entries):
-            self.entries = entries  # file paths or already-loaded PIL images
+            self.entries = entries
 
         def __len__(self):
             return len(self.entries)
@@ -142,29 +160,53 @@ def main() -> None:
     print(f"Device: {DEVICE}")
     splits = json.loads(Path("data/splits_v3.json").read_text())
 
+    if not IMAGENET_WEIGHTS_PATH.exists():
+        raise SystemExit(
+            f"ABORT: {IMAGENET_WEIGHTS_PATH} not found -- run "
+            "download_imagenet_weights.py first (the photo signal needs the "
+            "stock ImageNet ResNet-18 weights)")
+
     model = DamageClassifier(in_channels=3).to(DEVICE)
     ckpt = torch.load(CHECKPOINT_PATH, map_location=DEVICE, weights_only=True)
     model.load_state_dict(ckpt["model_state_dict"])
     model.eval()
     print(f"Loaded {CHECKPOINT_PATH}")
 
-    # Capture pooled layer1 output via forward hook
-    captured: list[torch.Tensor] = []
+    imagenet = resnet18(weights=None).to(DEVICE)
+    imagenet.load_state_dict(
+        torch.load(IMAGENET_WEIGHTS_PATH, map_location=DEVICE, weights_only=True))
+    imagenet.eval()
+    print(f"Loaded {IMAGENET_WEIGHTS_PATH}")
 
-    def hook(_module, _inputs, output):
-        captured.append(F.adaptive_avg_pool2d(output, 1).flatten(1).cpu())
+    # Hooks: pooled layer1 of our model + avgpool of the stock model
+    captured_layer1: list[torch.Tensor] = []
+    captured_avgpool: list[torch.Tensor] = []
 
-    model.backbone.layer1.register_forward_hook(hook)
+    def hook_layer1(_module, _inputs, output):
+        captured_layer1.append(F.adaptive_avg_pool2d(output, 1).flatten(1).cpu())
+
+    def hook_avgpool(_module, _inputs, output):
+        captured_avgpool.append(torch.flatten(output, 1).cpu())
+
+    model.backbone.layer1.register_forward_hook(hook_layer1)
+    imagenet.avgpool.register_forward_hook(hook_avgpool)
 
     @torch.no_grad()
-    def embed(paths) -> torch.Tensor:
-        captured.clear()
-        loader = build_loader(paths)
-        for batch in loader:
-            model.backbone(torch.stack([NORM(RESIZE(im)) for im in batch]).to(DEVICE))
-        return torch.cat(captured)
+    def embed(items):
+        """One pass through BOTH models; returns layer1, avgpool, conf."""
+        captured_layer1.clear()
+        captured_avgpool.clear()
+        confs = []
+        for batch in build_loader(items):
+            x = torch.stack([NORM(RESIZE(im)) for im in batch]).to(DEVICE)
+            feats = model.backbone(x)               # fires layer1 hook
+            probs = torch.softmax(model.head(feats), dim=1)
+            confs.extend(probs.max(dim=1).values.cpu().tolist())
+            imagenet(x)                              # fires avgpool hook
+        return (torch.cat(captured_layer1), torch.cat(captured_avgpool),
+                torch.tensor(confs))
 
-    # Training image paths
+    # Training / validation image paths
     ds_xbd = DamageDataset("data/xbd")
     ds_ebd = DamageDataset("data/ebd")
     xbd_paths = [str(ds_xbd.image_dir / f"{img_id}.png")
@@ -178,107 +220,208 @@ def main() -> None:
     print(f"Training images: {len(train_paths)} "
           f"(xbd {len(splits['xbd']['train'])} + ebd {len(splits['ebd']['train'])})")
 
-    train_feats = embed(train_paths)
-    val_feats = embed(val_paths)
+    tr_l1, tr_avg, tr_conf = embed(train_paths)
+    va_l1, va_avg, va_conf = embed(val_paths)
 
     sample_dir = Path("sample-images")
     sample_paths = sorted(str(p) for p in sample_dir.glob("*.png"))
-    sample_feats = embed(sample_paths)
+    sf_l1, sf_avg, sf_conf = embed(sample_paths)
 
     probes = make_probes()
-    probe_feats = embed(list(probes.values()))
+    pf_l1, pf_avg, pf_conf = embed(list(probes.values()))
 
-    # --- distances ---
-    centroid = train_feats.mean(dim=0)
-    mean = train_feats.mean(dim=0)
-    std = train_feats.std(dim=0).clamp_min(1e-6)
+    irr_dir = Path("ood_test/irrelevant")
+    irr_paths = sorted(str(p) for p in irr_dir.glob("*.png"))
+    if irr_paths:
+        if_l1, if_avg, if_conf = embed(irr_paths)
+        print(f"Realistic irrelevant images: {len(irr_paths)} (calibration set)")
+    else:
+        if_l1 = if_avg = if_conf = None
+        print("NOTE: ood_test/irrelevant/ not found -- skipping that sanity set")
 
-    def cos_d(x: torch.Tensor) -> np.ndarray:
-        return (1 - F.normalize(x, dim=1) @ F.normalize(
-            centroid, dim=0)).numpy()
+    # --- layer1 (texture) statistics ---
+    l1_centroid = tr_l1.mean(dim=0)
+    l1_mean = tr_l1.mean(dim=0)
+    l1_std = tr_l1.std(dim=0).clamp_min(1e-6)
 
-    def maha_d(x: torch.Tensor) -> np.ndarray:
+    def cos_d(x, centroid):
+        return (1 - F.normalize(x, dim=1) @ F.normalize(centroid, dim=0)).numpy()
+
+    def maha_d(x, mean, std):
         return (((x - mean) / std) ** 2).sum(dim=1).sqrt().numpy()
 
-    tr_c, tr_m = cos_d(train_feats), maha_d(train_feats)
-    va_c, va_m = cos_d(val_feats), maha_d(val_feats)
-    sf_c, sf_m = cos_d(sample_feats), maha_d(sample_feats)
-    pf_c, pf_m = cos_d(probe_feats), maha_d(probe_feats)
+    tr_l1_c, tr_l1_m = cos_d(tr_l1, l1_centroid), maha_d(tr_l1, l1_mean, l1_std)
+    t_l1_c = float(np.percentile(tr_l1_c, 99))
+    t_l1_m = float(np.percentile(tr_l1_m, 99))
 
-    t_c = float(np.percentile(tr_c, 99))
-    t_m = float(np.percentile(tr_m, 99))
+    # --- stock-space (photo) statistics ---
+    ph_centroid = tr_avg.mean(dim=0)
+    ph_mean = tr_avg.mean(dim=0)
+    ph_std = tr_avg.std(dim=0).clamp_min(1e-6)
+    tr_ph_c = cos_d(tr_avg, ph_centroid)
+    tr_ph_m = maha_d(tr_avg, ph_mean, ph_std)
+    t_ph_c = float(np.percentile(tr_ph_c, 99))
+    t_ph_m = float(np.percentile(tr_ph_m, 99))
 
-    train_fp = int(((tr_c > t_c) & (tr_m > t_m)).sum())
-    val_fp = int(((va_c > t_c) & (va_m > t_m)).sum())
-    samples_fp = int(((sf_c > t_c) & (sf_m > t_m)).sum())
-    probes_flagged = int(((pf_c > t_c) & (pf_m > t_m)).sum())
+    def photo_score(avg_feats):
+        c = cos_d(avg_feats, ph_centroid)
+        m = maha_d(avg_feats, ph_mean, ph_std)
+        return c / t_ph_c + m / t_ph_m
 
-    print(f"\ncosine:       p99={t_c:.4f} max={tr_c.max():.4f}")
-    print(f"mahalanobis:  p99={t_m:.4f} max={tr_m.max():.4f}")
-    print(f"train false positives (AND rule): {train_fp}/{len(tr_c)} "
-          f"({100 * train_fp / len(tr_c):.2f}%)")
-    print(f"val   false positives (AND rule): {val_fp}/{len(va_c)} "
-          f"({100 * val_fp / len(va_c):.2f}%)")
-    print(f"sample tiles flagged: {samples_fp}/{len(sf_c)} (must be 0)")
-    print(f"probes flagged: {probes_flagged}/{len(pf_c)} (must be all)")
-    print("\nprobe distances:")
-    for name, c, m in zip(probes.keys(), pf_c, pf_m):
-        print(f"  {name:16s} cosine={c:.4f} maha={m:.4f}")
-    print("sample tile distances:")
-    for p, c, m in zip(sample_paths, sf_c, sf_m):
-        print(f"  {Path(p).name[:44]:44s} cosine={c:.4f} maha={m:.4f}")
+    tr_score = photo_score(tr_avg)
+    va_score = photo_score(va_avg)
+    sf_score = photo_score(sf_avg)
+    pf_score = photo_score(pf_avg)
+    if_score = photo_score(if_avg) if if_avg is not None else None
 
-    if samples_fp != 0:
-        raise SystemExit("ABORT: sample tiles flagged — reference invalid")
-    if probes_flagged != len(pf_c):
-        raise SystemExit("ABORT: not all probes flagged — reference invalid")
+    # --- full rule: texture OR photo OR confidence tie-breaker ---
+    def full_rule(l1_feats, avg_feats, conf):
+        c = cos_d(l1_feats, l1_centroid)
+        m = maha_d(l1_feats, l1_mean, l1_std)
+        texture = (c > t_l1_c) & (m > t_l1_m)
+        score = photo_score(avg_feats)
+        photo = score > SCORE_THRESHOLD
+        conf_np = conf.numpy() if isinstance(conf, torch.Tensor) else conf
+        branch = (score > CONF_BRANCH_SCORE) & (conf_np < CONF_BRANCH_MAX_CONF)
+        return texture | photo | branch, texture, photo, branch, score, c, m
+
+    (tr_flag, tr_tex, tr_ph, tr_br, tr_score, _, _) = full_rule(tr_l1, tr_avg, tr_conf)
+    (va_flag, _, _, _, va_score, _, _) = full_rule(va_l1, va_avg, va_conf)
+    (sf_flag, _, _, _, sf_score, sf_c, sf_m) = full_rule(sf_l1, sf_avg, sf_conf)
+    (pf_flag, _, _, _, pf_score, pf_c, pf_m) = full_rule(pf_l1, pf_avg, pf_conf)
+    if if_avg is not None:
+        (if_flag, if_tex, if_ph, if_br, if_score, if_c, if_m) = full_rule(
+            if_l1, if_avg, if_conf)
+
+    print(f"\nlayer1 (texture): cosine p99={t_l1_c:.4f} max={tr_l1_c.max():.4f} | "
+          f"maha p99={t_l1_m:.4f} max={tr_l1_m.max():.4f}")
+    print(f"photo space: cosine p99={t_ph_c:.4f} max={tr_ph_c.max():.4f} | "
+          f"maha p99={t_ph_m:.4f} max={tr_ph_m.max():.4f}")
+    print(f"photo score: train p50={np.percentile(tr_score,50):.2f} "
+          f"p99={np.percentile(tr_score,99):.2f} "
+          f"p99.9={np.percentile(tr_score,99.9):.2f} max={tr_score.max():.2f}")
+    print(f"full-rule false positives: train={int(tr_flag.sum())}/{len(tr_flag)} "
+          f"({100 * tr_flag.mean():.2f}%), "
+          f"val={int(va_flag.sum())}/{len(va_flag)} "
+          f"({100 * va_flag.mean():.2f}%)")
+    print(f"sample tiles flagged: {int(sf_flag.sum())}/{len(sf_flag)} (must be 0)")
+    print(f"synthetic probes flagged: {int(pf_flag.sum())}/{len(pf_flag)} "
+          "(must be all)")
+    if if_avg is not None:
+        print(f"irrelevant images flagged: {int(if_flag.sum())}/{len(if_flag)} "
+              "(must be all)")
+
+    print("\nprobe distances (texture | photo):")
+    for i, name in enumerate(probes.keys()):
+        print(f"  {name:16s} l1 cos={pf_c[i]:.4f} l1 maha={pf_m[i]:7.3f} | "
+              f"score={pf_score[i]:.3f}")
+    if if_avg is not None:
+        print("irrelevant distances (texture | photo):")
+        for i, p in enumerate(irr_paths):
+            print(f"  {Path(p).name[:30]:30s} l1 cos={if_c[i]:.4f} "
+                  f"l1 maha={if_m[i]:7.3f} | score={if_score[i]:.3f} "
+                  f"conf={float(if_conf[i]):.3f} "
+                  f"signals={'/'.join(s for s, f in (
+                      ('texture', if_tex[i]), ('photo', if_ph[i]),
+                      ('low_conf', if_br[i])) if f) or 'NONE'}")
+    print("sample tile distances (texture | photo):")
+    for i, p in enumerate(sample_paths):
+        print(f"  {Path(p).name[:44]:44s} l1 cos={sf_c[i]:.4f} "
+              f"l1 maha={sf_m[i]:7.3f} | score={sf_score[i]:.3f}")
+
+    # --- sanity gates ---
+    if sf_flag.sum() != 0:
+        raise SystemExit("ABORT: sample tiles flagged -- reference invalid")
+    if pf_flag.sum() != len(pf_flag):
+        raise SystemExit("ABORT: not all probes flagged -- reference invalid")
+    if if_avg is not None and if_flag.sum() != len(if_flag):
+        raise SystemExit("ABORT: not all irrelevant images flagged -- "
+                         "reference invalid")
 
     reference = {
-        "version": 2,
+        "version": 3,
         "checkpoint": str(CHECKPOINT_PATH),
-        "layer": "layer1",
-        "feature_dim": int(centroid.shape[0]),
-        "rule": ("flag when BOTH cosine distance to the centroid AND "
-                 "diagonal-Mahalanobis distance exceed their 99th-percentile "
-                 "training thresholds"),
-        "thresholds": {
-            "cosine": round(t_c, 6),
-            "mahalanobis": round(t_m, 6),
-            "percentile": 99,
-        },
         "n_train_images": len(train_paths),
         "sources": {
             "xbd_train": len(splits["xbd"]["train"]),
             "ebd_train": len(splits["ebd"]["train"]),
         },
-        "train_distance_stats": {
-            "cosine": {
-                "mean": round(float(tr_c.mean()), 6),
-                "p99": round(t_c, 6),
-                "max": round(float(tr_c.max()), 6),
+        "rule": ("flag when ANY of: (a) layer1 cosine AND mahalanobis above "
+                 "their p99 training thresholds [texture signal], (b) photo "
+                 "score (stock-space cosine/t99 + maha/t99) above "
+                 "score_threshold [photo signal], (c) photo score above "
+                 "confidence_branch.score AND model confidence below "
+                 "confidence_branch.max_confidence [tie-breaker]"),
+        "layer1": {
+            "layer": "layer1",
+            "feature_dim": int(l1_centroid.shape[0]),
+            "thresholds": {
+                "cosine": round(t_l1_c, 6),
+                "mahalanobis": round(t_l1_m, 6),
+                "percentile": 99,
             },
-            "mahalanobis": {
-                "mean": round(float(tr_m.mean()), 6),
-                "p99": round(t_m, 6),
-                "max": round(float(tr_m.max()), 6),
+            "train_distance_stats": {
+                "cosine": {
+                    "mean": round(float(tr_l1_c.mean()), 6),
+                    "p99": round(t_l1_c, 6),
+                    "max": round(float(tr_l1_c.max()), 6),
+                },
+                "mahalanobis": {
+                    "mean": round(float(tr_l1_m.mean()), 6),
+                    "p99": round(t_l1_m, 6),
+                    "max": round(float(tr_l1_m.max()), 6),
+                },
             },
+            "centroid": [round(float(v), 6) for v in l1_centroid.tolist()],
+            "mean": [round(float(v), 6) for v in l1_mean.tolist()],
+            "std": [round(float(v), 6) for v in l1_std.tolist()],
+        },
+        "photo": {
+            "model": "torchvision resnet18 IMAGENET1K_V1 (stock, not fine-tuned)",
+            "feature": "avgpool (512-d)",
+            "score_definition": ("photo_cosine / thresholds.cosine + "
+                                 "photo_mahalanobis / thresholds.mahalanobis"),
+            "thresholds": {
+                "cosine": round(t_ph_c, 6),
+                "mahalanobis": round(t_ph_m, 6),
+                "percentile": 99,
+            },
+            "score_threshold": SCORE_THRESHOLD,
+            "confidence_branch": {
+                "score": CONF_BRANCH_SCORE,
+                "max_confidence": CONF_BRANCH_MAX_CONF,
+            },
+            "train_score_stats": {
+                "p50": round(float(np.percentile(tr_score, 50)), 4),
+                "p99": round(float(np.percentile(tr_score, 99)), 4),
+                "p99.9": round(float(np.percentile(tr_score, 99.9)), 4),
+                "max": round(float(tr_score.max()), 4),
+            },
+            "centroid": [round(float(v), 6) for v in ph_centroid.tolist()],
+            "mean": [round(float(v), 6) for v in ph_mean.tolist()],
+            "std": [round(float(v), 6) for v in ph_std.tolist()],
         },
         "false_positive_rate": {
-            "train": round(train_fp / len(tr_c), 6),
-            "validation": round(val_fp / len(va_c), 6),
+            "train": round(float(tr_flag.mean()), 6),
+            "validation": round(float(va_flag.mean()), 6),
         },
         "sanity": {
-            "sample_tiles_flagged": samples_fp,
-            "probes_flagged": f"{probes_flagged}/{len(pf_c)}",
-            "probe_distances": {
-                name: {"cosine": round(float(c), 6),
-                       "mahalanobis": round(float(m), 6)}
-                for name, c, m in zip(probes.keys(), pf_c, pf_m)
+            "sample_tiles_flagged": int(sf_flag.sum()),
+            "probes_flagged": f"{int(pf_flag.sum())}/{len(pf_flag)}",
+            "irrelevant_images_flagged": (f"{int(if_flag.sum())}/{len(if_flag)}"
+                                          if if_avg is not None else "skipped"),
+            "probe_scores": {
+                name: {"photo_score": round(float(s), 4)}
+                for name, s in zip(probes.keys(), pf_score)
             },
+            **({"irrelevant_scores": {
+                    Path(p).name: {
+                        "photo_score": round(float(s), 4),
+                        "confidence": round(float(c), 4),
+                    }
+                    for p, s, c in zip(irr_paths, if_score, if_conf)}
+                } if if_avg is not None else {}),
         },
-        "centroid": [round(float(v), 6) for v in centroid.tolist()],
-        "mean": [round(float(v), 6) for v in mean.tolist()],
-        "std": [round(float(v), 6) for v in std.tolist()],
     }
     OUT_PATH.write_text(json.dumps(reference, indent=2))
     print(f"\nWrote {OUT_PATH} ({OUT_PATH.stat().st_size / 1024:.1f} KB)")

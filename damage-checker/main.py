@@ -21,14 +21,27 @@ Prediction logging:
     Ground truth is looked up from any labels.csv under data/.
     Logging failures are silently ignored so they never break the endpoint.
 
-Out-of-distribution guard:
-    Uploads that don't resemble satellite disaster imagery are flagged via
-    distance of the layer1 (texture) embedding from the training distribution
-    (ood_reference.json, built by build_ood_reference.py). A response is
-    flagged only when BOTH the cosine and diagonal-Mahalanobis distances
-    exceed their 99th-percentile training thresholds. Flagged responses
-    carry is_out_of_domain=true, classification="irrelevant", and a warning
-    message; the raw model prediction is still returned for transparency.
+Out-of-distribution guard (v3):
+    Uploads that don't resemble satellite disaster imagery are flagged by
+    TWO independent signals (ood_reference.json, built by
+    build_ood_reference.py):
+    1. texture signal -- cosine AND diagonal-Mahalanobis distance of the
+       layer1 (texture) embedding of OUR model from the training
+       distribution. Catches synthetic/artificial inputs (noise, text,
+       gradients, solid colors).
+    2. photo signal -- distance of the image's embedding in a STOCK
+       ImageNet-pretrained ResNet-18 from the satellite-tile centroid.
+       Fine-tuning collapsed our own model's feature space (everyday photos
+       embed INSIDE the satellite cloud at every layer -- verified
+       empirically), but the stock model separates the domains: everyday
+       photos are near ImageNet classes, overhead tiles are not. A response
+       is flagged when the normalized distance sum (cosine/t99 + maha/t99)
+       exceeds score_threshold, OR when the sum is moderately elevated AND
+       the model's own confidence is low (tie-breaker: a low-confidence
+       prediction on a distant image is doubly suspect).
+    Flagged responses carry is_out_of_domain=true, classification=
+    "irrelevant", the signals that fired, and a warning message; the raw
+    model prediction is still returned for transparency.
 
 NOTE -- Bi-temporal upgrade path:
     A future version could add a second "pre_image" form field and call
@@ -98,11 +111,23 @@ _model_loaded: bool = False
 
 # Out-of-distribution reference (ood_reference.json; see build_ood_reference.py)
 OOD_REFERENCE_PATH = Path("ood_reference.json")
+IMAGENET_WEIGHTS_PATH = Path("checkpoints/imagenet_resnet18_v1.pth")
 _ood_reference: Optional[dict] = None
 _ood_centroid: Optional[torch.Tensor] = None
 _ood_mean: Optional[torch.Tensor] = None
 _ood_std: Optional[torch.Tensor] = None
 _last_layer1: Optional[torch.Tensor] = None  # set by forward hook per request
+
+# Photo-detector half of the OOD guard: stock ImageNet ResNet-18 whose
+# avgpool embedding is compared against the satellite-tile centroid
+# (see build_ood_reference.py -- our fine-tuned model cannot separate
+# everyday photos from tiles; the stock model can).
+_imagenet_model: Optional[torch.nn.Module] = None
+_imagenet_loaded: bool = False
+_last_imagenet_feat: Optional[torch.Tensor] = None  # avgpool hook per request
+_photo_centroid: Optional[torch.Tensor] = None
+_photo_mean: Optional[torch.Tensor] = None
+_photo_std: Optional[torch.Tensor] = None
 
 # Preprocessing (must match training DEFAULT_TRANSFORM -- no augmentation at inference)
 _preprocess = transforms.Compose([
@@ -212,54 +237,138 @@ def _load_model() -> None:
               f"Serving with untrained (random) weights.")
 
 
+def _load_imagenet_detector() -> None:
+    """Load the stock ImageNet ResNet-18 used by the photo signal.
+
+    Weights come from checkpoints/imagenet_resnet18_v1.pth (saved by
+    download_imagenet_weights.py; fetched by the Render build command).
+    If the file is missing, the photo signal is disabled and only the
+    texture signal remains -- the endpoint still works.
+    """
+    global _imagenet_model, _imagenet_loaded, _last_imagenet_feat
+    if not IMAGENET_WEIGHTS_PATH.exists():
+        print(f"[main] WARNING: ImageNet weights not found at "
+              f"{IMAGENET_WEIGHTS_PATH} -- photo-detector signal disabled "
+              f"(run download_imagenet_weights.py)")
+        return
+    from torchvision.models import resnet18
+    model = resnet18(weights=None).to(DEVICE)
+    state = torch.load(IMAGENET_WEIGHTS_PATH, map_location=DEVICE,
+                       weights_only=True)
+    model.load_state_dict(state)
+    model.eval()
+
+    def _capture_avgpool(_module, _inputs, output):
+        global _last_imagenet_feat
+        _last_imagenet_feat = torch.flatten(output, 1)
+
+    model.avgpool.register_forward_hook(_capture_avgpool)
+    _imagenet_model = model
+    _imagenet_loaded = True
+    print(f"[main] ImageNet photo-detector loaded from {IMAGENET_WEIGHTS_PATH}")
+
+
 def _load_ood_reference() -> None:
     """Load ood_reference.json (built offline by build_ood_reference.py)."""
     global _ood_reference, _ood_centroid, _ood_mean, _ood_std
+    global _photo_centroid, _photo_mean, _photo_std
     if not OOD_REFERENCE_PATH.exists():
         print(f"[main] OOD reference not found at {OOD_REFERENCE_PATH} -- "
               "out-of-distribution detection disabled")
         return
     _ood_reference = json.loads(OOD_REFERENCE_PATH.read_text())
     _ood_centroid = torch.tensor(
-        _ood_reference["centroid"], dtype=torch.float32).to(DEVICE)
+        _ood_reference["layer1"]["centroid"], dtype=torch.float32).to(DEVICE)
     _ood_mean = torch.tensor(
-        _ood_reference["mean"], dtype=torch.float32).to(DEVICE)
+        _ood_reference["layer1"]["mean"], dtype=torch.float32).to(DEVICE)
     _ood_std = torch.tensor(
-        _ood_reference["std"], dtype=torch.float32).to(DEVICE)
-    t = _ood_reference["thresholds"]
-    print(f"[main] OOD reference loaded: layer={_ood_reference['layer']} "
-          f"flag when cosine>{t['cosine']:.4f} AND "
+        _ood_reference["layer1"]["std"], dtype=torch.float32).to(DEVICE)
+    t = _ood_reference["layer1"]["thresholds"]
+    print(f"[main] OOD reference loaded: layer={_ood_reference['layer1']['layer']} "
+          f"texture flag when cosine>{t['cosine']:.4f} AND "
           f"mahalanobis>{t['mahalanobis']:.4f} "
           f"(from {_ood_reference['n_train_images']} training images)")
+    photo = _ood_reference.get("photo")
+    if photo is not None:
+        _photo_centroid = torch.tensor(
+            photo["centroid"], dtype=torch.float32).to(DEVICE)
+        _photo_mean = torch.tensor(
+            photo["mean"], dtype=torch.float32).to(DEVICE)
+        _photo_std = torch.tensor(
+            photo["std"], dtype=torch.float32).to(DEVICE)
+        pt = photo["thresholds"]
+        cb = photo["confidence_branch"]
+        print(f"[main] Photo signal: score threshold {photo['score_threshold']} "
+              f"(cosine p99={pt['cosine']:.4f}, maha p99={pt['mahalanobis']:.3f}); "
+              f"confidence tie-breaker score>{cb['score']} AND "
+              f"confidence<{cb['max_confidence']}")
 
 
-def _ood_check(layer1_feats: Optional[torch.Tensor]) -> Optional[dict]:
-    """Distance of the layer1 embedding from the training distribution.
+def _ood_check(
+    layer1_feats: Optional[torch.Tensor],
+    imagenet_feats: Optional[torch.Tensor],
+    confidence: Optional[float],
+) -> Optional[dict]:
+    """Combine the texture and photo OOD signals for one upload.
 
-    Returns {cosine, mahalanobis, ...thresholds, is_out_of_domain} when a
-    reference is loaded, else None. An image is flagged only when BOTH
-    distances exceed their thresholds -- some legitimate tiles sit at one
-    extreme, so a single large distance is not enough.
+    Returns the distance breakdown and is_out_of_domain when a reference is
+    loaded, else None. Signals (any one flags the upload):
+      - "texture": layer1 cosine AND mahalanobis above their p99 training
+        thresholds (synthetic/artificial inputs).
+      - "photo_content": stock-space distance sum (cosine/t99 + maha/t99)
+        above score_threshold (everyday photos vs overhead tiles).
+      - "low_confidence": distance sum above the branch score AND model
+        confidence below max_confidence (tie-breaker for borderline
+        inputs -- a distant image the model is unsure about is doubly
+        suspect).
     """
     if _ood_reference is None or layer1_feats is None:
         return None
     f = layer1_feats.to(DEVICE)[0]
     cos = float(1 - torch.nn.functional.cosine_similarity(f, _ood_centroid, dim=0))
     maha = float(((f - _ood_mean) / _ood_std).pow(2).sum().sqrt())
-    t = _ood_reference["thresholds"]
-    return {
+    t = _ood_reference["layer1"]["thresholds"]
+    result = {
         "cosine": round(cos, 4),
         "mahalanobis": round(maha, 4),
         "cosine_threshold": t["cosine"],
         "mahalanobis_threshold": t["mahalanobis"],
-        "is_out_of_domain": (cos > t["cosine"] and maha > t["mahalanobis"]),
     }
+    signals = []
+    if cos > t["cosine"] and maha > t["mahalanobis"]:
+        signals.append("texture")
+
+    photo = _ood_reference.get("photo")
+    if photo is not None and imagenet_feats is not None and _photo_std is not None:
+        g = imagenet_feats.to(DEVICE)[0]
+        pcos = float(1 - torch.nn.functional.cosine_similarity(
+            g, _photo_centroid, dim=0))
+        pmaha = float(((g - _photo_mean) / _photo_std).pow(2).sum().sqrt())
+        pt = photo["thresholds"]
+        score = pcos / pt["cosine"] + pmaha / pt["mahalanobis"]
+        cb = photo["confidence_branch"]
+        result.update({
+            "photo_cosine": round(pcos, 4),
+            "photo_mahalanobis": round(pmaha, 4),
+            "photo_score": round(score, 4),
+            "photo_score_threshold": photo["score_threshold"],
+        })
+        if score > photo["score_threshold"]:
+            signals.append("photo_content")
+        if confidence is not None and score > cb["score"] \
+                and confidence < cb["max_confidence"]:
+            signals.append("low_confidence")
+
+    result["signals"] = signals
+    result["is_out_of_domain"] = len(signals) > 0
+    return result
 
 
 @app.on_event("startup")
 async def startup():
     _build_ground_truth_lookup()
     _load_model()
+    _load_imagenet_detector()
     _load_ood_reference()
 
 
@@ -274,6 +383,7 @@ async def health():
         "device": str(DEVICE),
         "checkpoint": str(CHECKPOINT_PATH),
         "ood_enabled": _ood_reference is not None,
+        "photo_detector_loaded": _imagenet_loaded,
     }
 
 
@@ -312,17 +422,20 @@ async def classify_damage(
     tensor = _preprocess(pil_image).unsqueeze(0).to(DEVICE)  # (1, 3, 224, 224)
 
     # Inference (backbone then head, so the layer1 hook captures the
-    # embedding used by the out-of-distribution check)
+    # embedding used by the texture OOD signal; the stock ImageNet model
+    # forward captures the avgpool embedding used by the photo signal)
     with torch.no_grad():
         features = _model.backbone(tensor)
         logits = _model.head(features)
         probs = torch.softmax(logits, dim=1)
         confidence, pred_idx = probs.max(dim=1)
-
-    ood = _ood_check(_last_layer1)
+        if _imagenet_loaded:
+            _imagenet_model(tensor)  # avgpool hook captures the embedding
 
     damage_level = IDX_TO_LABEL[pred_idx.item()]
     confidence_val = round(confidence.item(), 4)
+
+    ood = _ood_check(_last_layer1, _last_imagenet_feat, confidence_val)
 
     response = {
         "damage_level": damage_level,
@@ -331,12 +444,18 @@ async def classify_damage(
     }
     if ood is not None:
         response["is_out_of_domain"] = ood["is_out_of_domain"]
-        response["ood"] = {
+        ood_fields = {
             "cosine": ood["cosine"],
             "mahalanobis": ood["mahalanobis"],
             "cosine_threshold": ood["cosine_threshold"],
             "mahalanobis_threshold": ood["mahalanobis_threshold"],
+            "signals": ood["signals"],
         }
+        for key in ("photo_cosine", "photo_mahalanobis", "photo_score",
+                    "photo_score_threshold"):
+            if key in ood:
+                ood_fields[key] = ood[key]
+        response["ood"] = ood_fields
         if ood["is_out_of_domain"]:
             # Non-satellite upload: keep the raw prediction for transparency
             # but clearly mark it as unreliable instead of silently returning

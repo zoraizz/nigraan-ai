@@ -112,21 +112,44 @@ machines without a GPU.
 v2 checkpoint (`xbd_real_model_v2.pth`) remains on disk as a rollback
 option but is not committed to the repo.
 
-**Out-of-distribution guard:** `/classify-damage` flags uploads that don't
-resemble satellite disaster imagery instead of confidently misclassifying
-them (a solid-color image would otherwise score "none" at 0.99 confidence).
-The upload's early-layer (texture) embedding is compared against a profile
-of the 5,125 training tiles (`ood_reference.json`, rebuilt offline with
-`build_ood_reference.py`); when both its cosine and Mahalanobis distances
-exceed their 99th-percentile training thresholds, the response carries
-`is_out_of_domain: true`, `classification: "irrelevant"`, and a warning
-message — the raw model prediction is still included for transparency but
-should be treated as unreliable. Verified live: non-satellite probes (solid
-color, random noise, text screenshot, photo) are all flagged, and the five
-`sample-images/` tiles all pass with wide margin. Limitation: this is a
-heuristic distance check, not a trained classifier — by construction ~1% of
-real tiles (night/ocean extremes) also trip it, and boundary-case inputs can
-go either way.
+**Out-of-distribution guard (v3):** `/classify-damage` flags uploads that
+don't resemble satellite disaster imagery instead of confidently
+misclassifying them (a photo of a person scored "destroyed" at 0.67
+confidence under the v2 guard). Two independent signals, both profiled
+against the 5,125 training tiles (`ood_reference.json`, rebuilt offline
+with `build_ood_reference.py`):
+
+1. *Texture* — the early-layer (layer1) embedding of our own model is
+   compared to the training profile; flagged when BOTH its cosine and
+   Mahalanobis distances exceed their 99th-percentile thresholds. Catches
+   synthetic inputs (noise, text, gradients, solid colors).
+2. *Photo* — the image's embedding in a **stock ImageNet ResNet-18** is
+   compared to the satellite-tile centroid in that space. Why: fine-tuning
+   collapsed our own model's feature spaces — everyday photos embed
+   *inside* the satellite cloud at every layer (the missed person photo
+   measured layer1 cosine 0.060 vs the 0.156 threshold, deeper inside than
+   most real tiles), so no threshold on our model can separate them. The
+   stock model does: flagged when the normalized distance sum exceeds 1.9
+   (train tiles p99 1.77 / max 2.14; sample tiles ≤ 1.56; realistic photos
+   ≥ 1.91), or — the confidence tie-breaker — when the sum is moderately
+   elevated (≥ 1.5) AND the model's own confidence is low (< 0.45): a
+   distant image the model is also unsure about is doubly suspect. The
+   ImageNet weights are fetched at build time
+   (`download_imagenet_weights.py`), never committed.
+
+Flagged responses carry `is_out_of_domain: true`, classification
+"irrelevant", the `ood.signals` list (which of `texture` /
+`photo_content` / `low_confidence` fired), and a warning message — the raw
+model prediction is still included for transparency but should be treated
+as unreliable. Calibration (2026-09-08, against 11 realistic irrelevant
+images — photos of people/portraits, cat, car, food, mug, laptop, real
+dashboard screenshots, a scanned document — plus the 6 synthetic probes):
+all 17/17 irrelevant inputs flagged, all 5 `sample-images/` tiles pass
+un-flagged, false-flag rate 1.37% on train / 1.69% on validation. The v2
+texture-only rule flagged 0.86%/0.81% but caught only 2 of the 11
+realistic photos. Limitation: a heuristic distance check, not a trained
+classifier — a few rare real tiles (night/ocean extremes) do trip it, and
+boundary-case inputs can go either way.
 
 **Reproduction:** `prepare_ebd_data.py` converts the raw EBD ZIP to our
 labels.csv format; `train_v3.py` runs the combined fine-tune (seed=42,
