@@ -3,8 +3,9 @@
 // Five real districts from config/districts.js (Risk Flag's coverage list),
 // spanning a mix of hazard types (flood, drought, glof, landslide), each
 // paired with one real sample tile from damage-checker/sample-images/.
-// At run time the dashboard fetches each tile via the dev-server
-// /sample-images route, classifies it live with POST /classify-damage,
+// At run time the dashboard fetches each tile from the bundled static
+// assets (/sample-images, copied from damage-checker/sample-images/ into
+// public/), classifies it live with POST /classify-damage,
 // fetches the district's real risk level with POST /predict-risk, and
 // submits both to POST /rank-priority.
 //

@@ -6,7 +6,7 @@ import { SAMPLE_PAIRING, hazardTypeFor } from '../config/samplePairing.js'
 // Live cross-module assessment assembler for Aid Priority.
 //   useLiveAssessment() -> { phase, progress, payload, error, elapsed, run, reset }
 // - run(): for every district in SAMPLE_PAIRING (in parallel), fetches its
-//   real sample tile (dev-server /sample-images route), classifies it live
+//   real sample tile (bundled /sample-images assets), classifies it live
 //   via POST /classify-damage, and calls POST /predict-risk (Risk Flag,
 //   Gemini-backed, cached server-side for 15 min). On success `payload`
 //   holds the /rank-priority districts array (single-tile damage mode),
@@ -53,13 +53,13 @@ export function useLiveAssessment() {
     ))
 
     const results = await Promise.allSettled(SAMPLE_PAIRING.map(async (entry) => {
-      // 1. Fetch the district's real sample tile from the dev server.
+      // 1. Fetch the district's real sample tile (bundled static asset).
       const tileUrl = `/sample-images/${entry.tile}`
       const tileResponse = await fetch(tileUrl)
       if (!tileResponse.ok) {
         settle(entry.district, { damage: 'error' })
         throw new Error(
-          `sample tile not available at ${tileUrl} (served by the dev server from damage-checker/sample-images/)`,
+          `sample tile not available at ${tileUrl} (bundled from damage-checker/sample-images/)`,
         )
       }
       const blob = await tileResponse.blob()

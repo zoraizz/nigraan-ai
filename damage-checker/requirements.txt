@@ -1,3 +1,8 @@
+# NOTE (Render/Linux deploys): torch + torchvision are installed CPU-only
+# BEFORE this file is processed, via the service build command
+#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+# so the ~2 GB CUDA wheels are never pulled. The pins below are floors only;
+# the pre-installed CPU wheels satisfy them.
 torch>=2.0.0
 torchvision>=0.15.0
 pillow>=10.0.0

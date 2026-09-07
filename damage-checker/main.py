@@ -71,11 +71,18 @@ app = FastAPI(
     version="0.3.0",
 )
 
-# CORS -- allow the dashboard frontend (Vite dev server,
-# http://localhost:5173) to call this API from the browser.
+# CORS -- allow the dashboard frontend to call this API from the browser.
+# Origins come from CORS_ORIGINS (comma-separated) so the deployed dashboard
+# (Render; see README "Live Deployment") can be allow-listed without code
+# changes. Default: the local Vite dev server.
+_allowed_origins = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
+    if origin.strip()
+]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=_allowed_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
