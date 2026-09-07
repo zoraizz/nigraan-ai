@@ -21,6 +21,15 @@ Prediction logging:
     Ground truth is looked up from any labels.csv under data/.
     Logging failures are silently ignored so they never break the endpoint.
 
+Out-of-distribution guard:
+    Uploads that don't resemble satellite disaster imagery are flagged via
+    distance of the layer1 (texture) embedding from the training distribution
+    (ood_reference.json, built by build_ood_reference.py). A response is
+    flagged only when BOTH the cosine and diagonal-Mahalanobis distances
+    exceed their 99th-percentile training thresholds. Flagged responses
+    carry is_out_of_domain=true, classification="irrelevant", and a warning
+    message; the raw model prediction is still returned for transparency.
+
 NOTE -- Bi-temporal upgrade path:
     A future version could add a second "pre_image" form field and call
     the model with in_channels=6 (stacked pre+post).  Changes needed:
@@ -32,6 +41,7 @@ NOTE -- Bi-temporal upgrade path:
 
 import csv
 import io
+import json
 import os
 import threading
 from datetime import datetime, timezone
@@ -78,6 +88,14 @@ DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 _model: Optional[DamageClassifier] = None
 _model_loaded: bool = False
+
+# Out-of-distribution reference (ood_reference.json; see build_ood_reference.py)
+OOD_REFERENCE_PATH = Path("ood_reference.json")
+_ood_reference: Optional[dict] = None
+_ood_centroid: Optional[torch.Tensor] = None
+_ood_mean: Optional[torch.Tensor] = None
+_ood_std: Optional[torch.Tensor] = None
+_last_layer1: Optional[torch.Tensor] = None  # set by forward hook per request
 
 # Preprocessing (must match training DEFAULT_TRANSFORM -- no augmentation at inference)
 _preprocess = transforms.Compose([
@@ -162,6 +180,16 @@ def _load_model() -> None:
 
     _model = DamageClassifier(in_channels=3, num_classes=NUM_CLASSES).to(DEVICE)
 
+    # Capture the pooled layer1 (texture) embedding per forward pass for the
+    # out-of-distribution check. Inference below runs backbone + head
+    # manually, so this hook adds the layer1 capture at zero extra cost.
+    def _capture_layer1(_module, _inputs, output):
+        global _last_layer1
+        _last_layer1 = torch.nn.functional.adaptive_avg_pool2d(
+            output, 1).flatten(1)
+
+    _model.backbone.layer1.register_forward_hook(_capture_layer1)
+
     if CHECKPOINT_PATH.exists():
         checkpoint = torch.load(CHECKPOINT_PATH, map_location=DEVICE, weights_only=True)
         _model.load_state_dict(checkpoint["model_state_dict"])
@@ -177,10 +205,55 @@ def _load_model() -> None:
               f"Serving with untrained (random) weights.")
 
 
+def _load_ood_reference() -> None:
+    """Load ood_reference.json (built offline by build_ood_reference.py)."""
+    global _ood_reference, _ood_centroid, _ood_mean, _ood_std
+    if not OOD_REFERENCE_PATH.exists():
+        print(f"[main] OOD reference not found at {OOD_REFERENCE_PATH} -- "
+              "out-of-distribution detection disabled")
+        return
+    _ood_reference = json.loads(OOD_REFERENCE_PATH.read_text())
+    _ood_centroid = torch.tensor(
+        _ood_reference["centroid"], dtype=torch.float32).to(DEVICE)
+    _ood_mean = torch.tensor(
+        _ood_reference["mean"], dtype=torch.float32).to(DEVICE)
+    _ood_std = torch.tensor(
+        _ood_reference["std"], dtype=torch.float32).to(DEVICE)
+    t = _ood_reference["thresholds"]
+    print(f"[main] OOD reference loaded: layer={_ood_reference['layer']} "
+          f"flag when cosine>{t['cosine']:.4f} AND "
+          f"mahalanobis>{t['mahalanobis']:.4f} "
+          f"(from {_ood_reference['n_train_images']} training images)")
+
+
+def _ood_check(layer1_feats: Optional[torch.Tensor]) -> Optional[dict]:
+    """Distance of the layer1 embedding from the training distribution.
+
+    Returns {cosine, mahalanobis, ...thresholds, is_out_of_domain} when a
+    reference is loaded, else None. An image is flagged only when BOTH
+    distances exceed their thresholds -- some legitimate tiles sit at one
+    extreme, so a single large distance is not enough.
+    """
+    if _ood_reference is None or layer1_feats is None:
+        return None
+    f = layer1_feats.to(DEVICE)[0]
+    cos = float(1 - torch.nn.functional.cosine_similarity(f, _ood_centroid, dim=0))
+    maha = float(((f - _ood_mean) / _ood_std).pow(2).sum().sqrt())
+    t = _ood_reference["thresholds"]
+    return {
+        "cosine": round(cos, 4),
+        "mahalanobis": round(maha, 4),
+        "cosine_threshold": t["cosine"],
+        "mahalanobis_threshold": t["mahalanobis"],
+        "is_out_of_domain": (cos > t["cosine"] and maha > t["mahalanobis"]),
+    }
+
+
 @app.on_event("startup")
 async def startup():
     _build_ground_truth_lookup()
     _load_model()
+    _load_ood_reference()
 
 
 # ---------------------------------------------------------------------------
@@ -193,6 +266,7 @@ async def health():
         "model_loaded": _model_loaded,
         "device": str(DEVICE),
         "checkpoint": str(CHECKPOINT_PATH),
+        "ood_enabled": _ood_reference is not None,
     }
 
 
@@ -230,11 +304,15 @@ async def classify_damage(
 
     tensor = _preprocess(pil_image).unsqueeze(0).to(DEVICE)  # (1, 3, 224, 224)
 
-    # Inference
+    # Inference (backbone then head, so the layer1 hook captures the
+    # embedding used by the out-of-distribution check)
     with torch.no_grad():
-        logits = _model(tensor)
+        features = _model.backbone(tensor)
+        logits = _model.head(features)
         probs = torch.softmax(logits, dim=1)
         confidence, pred_idx = probs.max(dim=1)
+
+    ood = _ood_check(_last_layer1)
 
     damage_level = IDX_TO_LABEL[pred_idx.item()]
     confidence_val = round(confidence.item(), 4)
@@ -244,6 +322,23 @@ async def classify_damage(
         "confidence": confidence_val,
         "area": area,
     }
+    if ood is not None:
+        response["is_out_of_domain"] = ood["is_out_of_domain"]
+        response["ood"] = {
+            "cosine": ood["cosine"],
+            "mahalanobis": ood["mahalanobis"],
+            "cosine_threshold": ood["cosine_threshold"],
+            "mahalanobis_threshold": ood["mahalanobis_threshold"],
+        }
+        if ood["is_out_of_domain"]:
+            # Non-satellite upload: keep the raw prediction for transparency
+            # but clearly mark it as unreliable instead of silently returning
+            # a confident misclassification.
+            response["classification"] = "irrelevant"
+            response["message"] = (
+                "This image doesn't resemble a satellite disaster-imagery "
+                "tile -- the damage result may be unreliable."
+            )
 
     # Log prediction (never raises)
     _log_prediction(image_id, damage_level, confidence_val)

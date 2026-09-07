@@ -84,6 +84,22 @@ machines without a GPU.
 v2 checkpoint (`xbd_real_model_v2.pth`) remains on disk as a rollback
 option but is not committed to the repo.
 
+**Out-of-distribution guard:** `/classify-damage` flags uploads that don't
+resemble satellite disaster imagery instead of confidently misclassifying
+them (a solid-color image would otherwise score "none" at 0.99 confidence).
+The upload's early-layer (texture) embedding is compared against a profile
+of the 5,125 training tiles (`ood_reference.json`, rebuilt offline with
+`build_ood_reference.py`); when both its cosine and Mahalanobis distances
+exceed their 99th-percentile training thresholds, the response carries
+`is_out_of_domain: true`, `classification: "irrelevant"`, and a warning
+message — the raw model prediction is still included for transparency but
+should be treated as unreliable. Verified live: non-satellite probes (solid
+color, random noise, text screenshot, photo) are all flagged, and the five
+`sample-images/` tiles all pass with wide margin. Limitation: this is a
+heuristic distance check, not a trained classifier — by construction ~1% of
+real tiles (night/ocean extremes) also trip it, and boundary-case inputs can
+go either way.
+
 **Reproduction:** `prepare_ebd_data.py` converts the raw EBD ZIP to our
 labels.csv format; `train_v3.py` runs the combined fine-tune (seed=42,
 splits in `data/splits_v3.json`, full metrics in `v3_training_report.md`).

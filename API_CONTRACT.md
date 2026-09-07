@@ -18,6 +18,14 @@ Request: multipart/form-data, field "image"
 Response:
 { "damage_level": "none|partial|destroyed", "confidence": number, "area": "string" }
 
+Out-of-distribution guard: if the upload doesn't resemble satellite disaster
+imagery (distance check against the training distribution, see
+damage-checker/ood_reference.json), the response additionally carries
+"is_out_of_domain": true, "classification": "irrelevant", a human-readable
+"message", and an "ood" object with the cosine/Mahalanobis distances that
+triggered the flag. "damage_level"/"confidence" still hold the raw model
+prediction for transparency — treat it as unreliable when flagged.
+
 ## POST /rank-priority
 Request: JSON body
 {
