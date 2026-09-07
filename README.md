@@ -11,6 +11,34 @@ Disaster damage assessment & aid-priority platform for NDMA/PDMA — Bano Qabil 
 
 See `API_CONTRACT.md` for interface definitions.
 
+## Live Deployment
+
+The full stack is deployed on Render (free tier), auto-built from the `dev`
+branch:
+
+| Service | Type | URL |
+|---------|------|-----|
+| Dashboard | Static site | <https://nigraan-dashboard.onrender.com> |
+| risk-flag | Web service | <https://nigraan-risk-flag.onrender.com> |
+| damage-checker | Web service | <https://nigraan-damage-checker.onrender.com> |
+| aid-priority | Web service | <https://nigraan-aid-priority.onrender.com> |
+
+- **Free-tier cold start:** all services spin down after ~15 min of
+  inactivity, and the first request after that takes **~30–60 s** to wake
+  them. If the first page or API call looks slow, that is the free tier
+  waking up — not a bug. Subsequent requests are fast.
+- Dashboard routes are hash-based (`/#/aid-priority`, …): Render's static
+  hosting serves `index.html` only at `/`, so sub-pages live after the `#`.
+- The backends allow-list the dashboard origin through the `CORS_ORIGINS`
+  env var (comma-separated; default `http://localhost:5173` — see each
+  service's `.env.example`), and the dashboard bakes its API base URLs at
+  build time from `VITE_*_API_URL` env vars.
+- `GEMINI_API_KEY` exists **only** in Render's environment settings for
+  risk-flag — never in the repo or its history.
+- damage-checker installs CPU-only torch wheels in its Render build
+  command, so the ~2 GB CUDA wheels are never pulled onto the 512 MB free
+  instance; the v3 checkpoint runs fine on CPU (~2 s per tile).
+
 ## Damage Checker — Current Baseline (v3)
 
 **See it run:** `damage-checker/sample-images/` holds five post-disaster tiles
