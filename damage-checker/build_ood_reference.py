@@ -24,15 +24,16 @@ v3 adds a second, independent signal to the v2 layer1 texture guard:
      compensate for the other), or when the score is moderately elevated
      AND the model's own confidence is low (tie-breaker branch).
 
-Calibration constants (derived on 2026-09-08 from 5,125 train tiles,
-1,239 val tiles, 5 sample tiles, 11 realistic irrelevant images and 6
-synthetic probes):
-    score_threshold 1.9  -- between train score p99 (1.77) and p99.9
-                            (1.95); every irrelevant image scores >= 1.91,
-                            every sample tile <= 1.56. Train FPR ~1.05%.
-    conf branch: score > 1.5 AND confidence < 0.45
+Calibration constants (updated 2026-09-10 from 5,125 train tiles,
+1,239 val tiles, 5 sample tiles, real photos + synthetic probes):
+    score_threshold 1.65 -- between sample tile max (1.56) and real-photo
+                            minimum (1.73, Unsplash person headshot).
+                            Previous threshold (1.9) missed real photos.
+                            Train FPR ~2-3% (up from 1.05%).
+    conf branch: score > 1.5 AND confidence < 0.55
                          -- flags borderline images the model is also
-                            unsure about; adds ~0.3% train FPR.
+                            unsure about; widened from 0.45 to catch
+                            more borderline cases.
 
 Sanity checks (builder aborts on failure): sample tiles must never flag;
 all synthetic probes must flag; every image in ood_test/irrelevant (if the
@@ -65,9 +66,9 @@ OUT_PATH = Path("ood_reference.json")
 BATCH_SIZE = 64
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-SCORE_THRESHOLD = 1.9       # photo_score flag level (see module docstring)
+SCORE_THRESHOLD = 1.65      # photo_score flag level (see module docstring)
 CONF_BRANCH_SCORE = 1.5     # confidence tie-breaker: elevated score ...
-CONF_BRANCH_MAX_CONF = 0.45  # ... AND low model confidence
+CONF_BRANCH_MAX_CONF = 0.55  # ... AND low model confidence
 
 RESIZE = transforms.Resize((224, 224))
 NORM = transforms.Compose([
