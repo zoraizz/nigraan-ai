@@ -129,10 +129,10 @@ with `build_ood_reference.py`):
    *inside* the satellite cloud at every layer (the missed person photo
    measured layer1 cosine 0.060 vs the 0.156 threshold, deeper inside than
    most real tiles), so no threshold on our model can separate them. The
-   stock model does: flagged when the normalized distance sum exceeds 1.9
-   (train tiles p99 1.77 / max 2.14; sample tiles ≤ 1.56; realistic photos
-   ≥ 1.91), or — the confidence tie-breaker — when the sum is moderately
-   elevated (≥ 1.5) AND the model's own confidence is low (< 0.45): a
+   stock model does: flagged when the normalized distance sum exceeds 1.65
+   (train tiles p95 1.62 / max 2.14; sample tiles ≤ 1.56; realistic photos
+   ≥ 1.73), or — the confidence tie-breaker — when the sum is moderately
+   elevated (≥ 1.5) AND the model's own confidence is low (< 0.55): a
    distant image the model is also unsure about is doubly suspect. The
    ImageNet weights are fetched at build time
    (`download_imagenet_weights.py`), never committed.
@@ -145,11 +145,14 @@ as unreliable. Calibration (2026-09-08, against 11 realistic irrelevant
 images — photos of people/portraits, cat, car, food, mug, laptop, real
 dashboard screenshots, a scanned document — plus the 6 synthetic probes):
 all 17/17 irrelevant inputs flagged, all 5 `sample-images/` tiles pass
-un-flagged, false-flag rate 1.37% on train / 1.69% on validation. The v2
+un-flagged, false-flag rate ~5.5% on train. The v2
 texture-only rule flagged 0.86%/0.81% but caught only 2 of the 11
-realistic photos. Limitation: a heuristic distance check, not a trained
-classifier — a few rare real tiles (night/ocean extremes) do trip it, and
-boundary-case inputs can go either way.
+realistic photos. 
+
+**Limitation**: The out-of-domain guard may occasionally flag unusual-but-valid 
+satellite imagery (e.g., heavy cloud cover, atypical terrain patterns) as 
+irrelevant, since it relies on distance-based heuristics rather than a trained 
+classifier.
 
 **Reproduction:** `prepare_ebd_data.py` converts the raw EBD ZIP to our
 labels.csv format; `train_v3.py` runs the combined fine-tune (seed=42,
