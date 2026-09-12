@@ -16,7 +16,8 @@ const DAMAGE_STRIPE = {
 }
 
 export default function DamageResultCard({ result, loading = false }) {
-  const stripe = result ? DAMAGE_STRIPE[result.damage_level] : null
+  const isOod = result?.is_out_of_domain
+  const stripe = isOod ? 'var(--color-risk-unknown)' : (result ? DAMAGE_STRIPE[result.damage_level] : null)
   const confidencePct = result ? Math.round(result.confidence * 100) : 0
 
   return (
@@ -31,15 +32,30 @@ export default function DamageResultCard({ result, loading = false }) {
         </div>
       ) : result ? (
         <div className="stripe-left pl-4" style={{ '--stripe': stripe }}>
+          {isOod && (
+            <div className="mb-5 border-l-2 border-risk-medium pl-3">
+              <div className="mb-2">
+                <span className="warn-chip">Out of domain</span>
+              </div>
+              <p className="text-sm text-muted">{result.message}</p>
+            </div>
+          )}
+
           <p
             className={`font-heading text-3xl font-extrabold tracking-tight ${
-              LEVEL_TEXT[result.damage_level] || 'text-text'
+              isOod ? 'text-muted opacity-60' : (LEVEL_TEXT[result.damage_level] || 'text-text')
             }`}
           >
             {result.damage_level}
           </p>
+          
+          {isOod && (
+            <p className="mt-1 text-[11px] font-bold uppercase tracking-wider text-muted opacity-60">
+              Raw model prediction (unreliable)
+            </p>
+          )}
 
-          <dl className="mt-5 text-sm">
+          <dl className={`mt-5 text-sm ${isOod ? 'opacity-60' : ''}`}>
             <div className="flex items-baseline justify-between gap-4">
               <dt className="text-muted">Confidence</dt>
               <dd className="data text-text">
