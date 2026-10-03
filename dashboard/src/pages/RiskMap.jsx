@@ -4,6 +4,7 @@ import RiskBadge from '../components/RiskBadge.jsx'
 import HazardIcon from '../components/HazardIcon.jsx'
 import { useRiskData } from '../hooks/useRiskData.js'
 import { DISTRICTS, DISTRICT_NAMES } from '../config/districts.js'
+import { ENDPOINTS } from '../config/endpoints.js'
 
 const RAINFALL_ROWS = [
   ['rainfall_forecast_mm', '3-day forecast'],
@@ -99,7 +100,7 @@ export default function RiskMap() {
               <p className="font-semibold">Risk Flag request failed</p>
               <p className="mt-1">{error.message}</p>
               <p className="mt-2 text-xs">
-                Is the service running on http://127.0.0.1:8000? See
+                Is the service running on {ENDPOINTS.riskApi}? See
                 dashboard/INTEGRATION.md.
               </p>
               <button type="button" onClick={refetch} className="btn mt-3">
@@ -111,6 +112,11 @@ export default function RiskMap() {
               {data.cached ? (
                 <p className="alert-ok mb-4 px-3 py-1.5 text-xs">
                   Returned from server cache (pre-warmed, no Gemini call)
+                </p>
+              ) : null}
+              {data.rainfall_unavailable ? (
+                <p className="alert-error mb-4 px-3 py-1.5 text-xs">
+                  ⚠ Live rainfall data was unavailable — risk assessment is based on static NDMA hazard context only.
                 </p>
               ) : null}
               {data.hazard_types?.length > 0 ? (

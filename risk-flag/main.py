@@ -2,15 +2,17 @@ from __future__ import annotations
 
 import logging
 import os
+import time
+import threading
+import traceback
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 import requests
-import threading
-import time
 
 # Load .env from the risk-flag directory (before other imports that read env vars)
 load_dotenv(Path(__file__).parent / ".env")
@@ -54,12 +56,77 @@ def _cache_set(district: str, body: "RiskResponse") -> None:
     with _cache_lock:
         _cache[district] = (body, time.time())
 
+
+# ---------------------------------------------------------------------------
+# Rainfall cache -- longer TTL (3 hours) keyed by (lat, lon, window).
+# Survives across response-cache misses so stale rainfall data can be reused
+# when Open-Meteo is unavailable.
+# ---------------------------------------------------------------------------
+_RAINFALL_CACHE_TTL_SECS = 3 * 60 * 60  # 3 hours
+_rainfall_cache: dict[tuple[float, float, str], tuple[float, float]] = {}
+_rainfall_cache_lock = threading.Lock()
+
+
+def _rainfall_cache_get(
+    lat: float, lon: float, window: str, *, allow_stale: bool = False,
+) -> float | None:
+    """Return cached rainfall value, or None.
+
+    *allow_stale* returns expired entries as a last-resort fallback.
+    """
+    key = (lat, lon, window)
+    with _rainfall_cache_lock:
+        entry = _rainfall_cache.get(key)
+        if entry is None:
+            return None
+        value, ts = entry
+        age = time.time() - ts
+        if age <= _RAINFALL_CACHE_TTL_SECS:
+            return value
+        if allow_stale:
+            logger.info(
+                "Serving stale rainfall cache for (%s, %s, %s) — age %.0fs",
+                lat, lon, window, age,
+            )
+            return value
+        return None
+
+
+def _rainfall_cache_set(lat: float, lon: float, window: str, value: float) -> None:
+    key = (lat, lon, window)
+    with _rainfall_cache_lock:
+        _rainfall_cache[key] = (value, time.time())
+
+
+# ---------------------------------------------------------------------------
+# FastAPI app + global exception handler
+# ---------------------------------------------------------------------------
 app = FastAPI()
+
+
+@app.exception_handler(Exception)
+async def _global_exception_handler(request: Request, exc: Exception):
+    """Catch-all handler — returns a JSON body so the dashboard can display
+    a real error message instead of a browser-level 'Failed to fetch'."""
+    logger.error(
+        "Unhandled exception on %s %s: %s\n%s",
+        request.method, request.url.path,
+        exc, traceback.format_exc(),
+    )
+    return JSONResponse(
+        status_code=500,
+        content={
+            "detail": f"Internal server error: {exc}",
+        },
+    )
+
 
 # CORS -- allow the dashboard frontend to call this API from the browser.
 # Origins come from CORS_ORIGINS (comma-separated) so the deployed dashboard
 # (Render; see README "Live Deployment") can be allow-listed without code
 # changes. Default: the local Vite dev server.
+# NOTE: CORS middleware is added *after* the exception handler so that
+# FastAPI's middleware stack wraps the handler — 500 responses get CORS headers.
 _allowed_origins = [
     origin.strip()
     for origin in os.environ.get("CORS_ORIGINS", "http://localhost:5173").split(",")
@@ -237,16 +304,112 @@ class RiskResponse(BaseModel):
     risk_level: str
     reason: str
     cached: bool = False
+    rainfall_unavailable: bool = False
 
 
 # ---------------------------------------------------------------------------
-# Open-Meteo helpers
+# Open-Meteo helpers — resilient with retry + cache
 # ---------------------------------------------------------------------------
 _FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
+_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+_REQUEST_TIMEOUT = 10  # seconds
+_MAX_RETRIES = 2
+_BASE_BACKOFF = 1.0  # seconds
+
+_OPENMETEO_HEADERS = {
+    "User-Agent": "NigraanAI-RiskFlag/1.0 (disaster-risk-assessment; github.com/nigraan-ai)",
+}
 
 
-def get_rainfall_forecast(lat: float, lon: float, days: int = 3) -> float:
-    """Cumulative rainfall forecast over *days* (1-16) from Open-Meteo."""
+def _is_retryable(status_code: int) -> bool:
+    """Return True for status codes that warrant a retry (429 or 5xx)."""
+    return status_code == 429 or 500 <= status_code < 600
+
+
+def _openmeteo_request_with_retry(url: str, params: dict) -> dict | None:
+    """Make a GET request to Open-Meteo with retry on 429/5xx.
+
+    Returns the parsed JSON dict on success, or None on failure after
+    exhausting retries.
+    """
+    last_exc: Exception | None = None
+
+    for attempt in range(_MAX_RETRIES + 1):
+        try:
+            response = requests.get(
+                url, params=params, timeout=_REQUEST_TIMEOUT,
+                headers=_OPENMETEO_HEADERS,
+            )
+
+            if response.ok:
+                return response.json()
+
+            # Retryable error — back off and retry
+            if _is_retryable(response.status_code):
+                retry_after = response.headers.get("Retry-After")
+                if retry_after is not None:
+                    try:
+                        wait = float(retry_after)
+                    except (ValueError, TypeError):
+                        wait = _BASE_BACKOFF * (2 ** attempt)
+                else:
+                    wait = _BASE_BACKOFF * (2 ** attempt)
+
+                logger.warning(
+                    "Open-Meteo %s returned %d (attempt %d/%d), "
+                    "retrying in %.1fs",
+                    url, response.status_code, attempt + 1,
+                    _MAX_RETRIES + 1, wait,
+                )
+                if attempt < _MAX_RETRIES:
+                    time.sleep(wait)
+                    continue
+
+                # Final attempt exhausted
+                logger.error(
+                    "Open-Meteo %s returned %d after %d attempts — giving up",
+                    url, response.status_code, _MAX_RETRIES + 1,
+                )
+                return None
+
+            # Non-retryable error (e.g. 400, 404)
+            logger.error(
+                "Open-Meteo %s returned non-retryable %d: %s",
+                url, response.status_code, response.text[:300],
+            )
+            return None
+
+        except requests.RequestException as exc:
+            last_exc = exc
+            logger.warning(
+                "Open-Meteo %s request error (attempt %d/%d): %s",
+                url, attempt + 1, _MAX_RETRIES + 1, exc,
+            )
+            if attempt < _MAX_RETRIES:
+                time.sleep(_BASE_BACKOFF * (2 ** attempt))
+                continue
+
+    logger.error(
+        "Open-Meteo %s failed after %d attempts: %s",
+        url, _MAX_RETRIES + 1, last_exc,
+    )
+    return None
+
+
+def get_rainfall_forecast(lat: float, lon: float, days: int = 3) -> float | None:
+    """Cumulative rainfall forecast over *days* (1-16) from Open-Meteo.
+
+    Returns None if the data cannot be fetched (after retries + stale-cache
+    fallback).
+    """
+    window = f"forecast_{days}d"
+
+    # Check fresh cache first
+    cached = _rainfall_cache_get(lat, lon, window)
+    if cached is not None:
+        logger.info("Rainfall cache hit for (%s, %s, %s)", lat, lon, window)
+        return cached
+
     params = {
         "latitude": lat,
         "longitude": lon,
@@ -254,16 +417,38 @@ def get_rainfall_forecast(lat: float, lon: float, days: int = 3) -> float:
         "forecast_days": days,
         "timezone": "auto",
     }
-    response = requests.get(_FORECAST_URL, params=params, timeout=10)
-    response.raise_for_status()
-    data = response.json()
-    return sum(data["daily"]["precipitation_sum"])
+    data = _openmeteo_request_with_retry(_FORECAST_URL, params)
+
+    if data is not None:
+        try:
+            total = sum(data["daily"]["precipitation_sum"])
+            _rainfall_cache_set(lat, lon, window, total)
+            return total
+        except (KeyError, TypeError) as exc:
+            logger.error("Unexpected Open-Meteo forecast response: %s", exc)
+
+    # Fallback: stale cache
+    stale = _rainfall_cache_get(lat, lon, window, allow_stale=True)
+    if stale is not None:
+        return stale
+
+    return None
 
 
-def get_rainfall_historical(lat: float, lon: float, past_days: int) -> float:
-    """Cumulative observed rainfall over the last *past_days* from Open-Meteo
-    historical weather API."""
-    url = "https://archive-api.open-meteo.com/v1/archive"
+def get_rainfall_historical(lat: float, lon: float, past_days: int) -> float | None:
+    """Cumulative observed rainfall over the last *past_days* from Open-Meteo.
+
+    Returns None if the data cannot be fetched (after retries + stale-cache
+    fallback).
+    """
+    window = f"archive_{past_days}d"
+
+    # Check fresh cache first
+    cached = _rainfall_cache_get(lat, lon, window)
+    if cached is not None:
+        logger.info("Rainfall cache hit for (%s, %s, %s)", lat, lon, window)
+        return cached
+
     params = {
         "latitude": lat,
         "longitude": lon,
@@ -271,11 +456,23 @@ def get_rainfall_historical(lat: float, lon: float, past_days: int) -> float:
         "daily": "precipitation_sum",
         "timezone": "auto",
     }
-    response = requests.get(url, params=params, timeout=10)
-    response.raise_for_status()
-    data = response.json()
-    daily = data.get("daily", {}).get("precipitation_sum", [])
-    return sum(v for v in daily if v is not None)
+    data = _openmeteo_request_with_retry(_ARCHIVE_URL, params)
+
+    if data is not None:
+        try:
+            daily = data.get("daily", {}).get("precipitation_sum", [])
+            total = sum(v for v in daily if v is not None)
+            _rainfall_cache_set(lat, lon, window, total)
+            return total
+        except (KeyError, TypeError) as exc:
+            logger.error("Unexpected Open-Meteo archive response: %s", exc)
+
+    # Fallback: stale cache
+    stale = _rainfall_cache_get(lat, lon, window, allow_stale=True)
+    if stale is not None:
+        return stale
+
+    return None
 
 
 # ---------------------------------------------------------------------------
@@ -376,10 +573,19 @@ def predict_risk(req: RiskRequest):
     hazard_types = info["hazard_types"]
     province = info["province"]
 
+    rainfall_unavailable = False
+
     # Rainfall: 3-day forecast for flood districts
     rainfall_3d: float | None = None
     if "flood" in hazard_types:
         rainfall_3d = get_rainfall_forecast(lat, lon, days=3)
+        if rainfall_3d is None:
+            rainfall_unavailable = True
+            logger.warning(
+                "Rainfall forecast unavailable for %s — "
+                "assessing risk from NDMA context only",
+                req.district,
+            )
 
     # Rainfall: historical deficit for drought districts
     rainfall_30d: float | None = None
@@ -387,6 +593,13 @@ def predict_risk(req: RiskRequest):
     if "drought" in hazard_types:
         rainfall_30d = get_rainfall_historical(lat, lon, past_days=30)
         rainfall_90d = get_rainfall_historical(lat, lon, past_days=90)
+        if rainfall_30d is None or rainfall_90d is None:
+            rainfall_unavailable = True
+            logger.warning(
+                "Historical rainfall unavailable for %s — "
+                "assessing risk from NDMA context only",
+                req.district,
+            )
 
     # ── Risk reasoning: try Gemini first, fall back to rules ───────────
     result = assess_risk_with_gemini(
@@ -413,6 +626,13 @@ def predict_risk(req: RiskRequest):
         )
         logger.info("Risk for %s: %s (source=fallback)", req.district, risk_level)
 
+    # Annotate reason when rainfall was unavailable
+    if rainfall_unavailable:
+        reason = (
+            "[Note: Live rainfall data was unavailable; this assessment is "
+            "based on static NDMA hazard context only.] " + reason
+        )
+
     body = RiskResponse(
         district=req.district,
         hazard_types=hazard_types,
@@ -421,6 +641,7 @@ def predict_risk(req: RiskRequest):
         rainfall_90d_mm=round(rainfall_90d, 1) if rainfall_90d is not None else None,
         risk_level=risk_level,
         reason=reason,
+        rainfall_unavailable=rainfall_unavailable,
     )
     _cache_set(req.district, body)
     return body
