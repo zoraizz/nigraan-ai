@@ -61,7 +61,7 @@ JMA GSM has a ~55 km grid, so the 9 flood districts fall into only 7 distinct gr
 - the calamity-hit notification date, where one was confirmed;
 - the hazard actually observed.
 
-Sources include provincial calamity notifications reported by Dawn, Geo, The News and Express Tribune; OCHA situation reports and the 13 Sep 2022 response snapshot; NDMA SitRep 085; and UNDP's GLOF-II flood report (dated GLOF events by district). Each source records how it was checked: page read directly, search-engine excerpt, or Wikipedia citation. "Unknown" is used wherever a named source couldn't be found.
+Sources include provincial calamity notifications reported by Dawn, Geo, The News, Dunya News and Express Tribune; OCHA situation reports and the revised response plan; NDMA SitRep 085; and UNDP's GLOF-II flood report (dated GLOF events by district). OCHA's 13 Sep 2022 snapshot map is not used as evidence of a declaration, because it labels every Sindh district, including Karachi districts that were not notified. Each source records how it was checked: page read directly, search-engine excerpt, or Wikipedia citation. "Unknown" is used wherever a named source couldn't be found.
 
 ### Leakage check on the static hazard context
 
@@ -77,8 +77,8 @@ Share columns give the proportion of the 30 as-of dates flagged medium or high, 
 
 | District | Impact documented by | Forecast: first high | Forecast: run-up max (3-day mm) | Forecast: share medium/high, 2022 / 2021 | Hindsight: first high | Hindsight: run-up max (3-day mm) | Hindsight: share medium/high, 2022 / 2021 |
 |---|---|---|---|---|---|---|---|
-| Dadu | 2022-08-21 | 07-06 | high (116 on 08-11; 115 on 08-17; 113 on 08-20) | 43% / 7% | 08-17 | high (350 on 08-17) | 27% / 0% |
-| Khairpur | 2022-08-21 | 07-06 | medium (86) | 50% / 7% | 08-17 | high (132 on 08-17) | 23% / 0% |
+| Dadu | 2022-08-12 | 07-06 | high (116 on 08-11) | 43% / 7% | 08-17 (after impact) | medium (58) | 27% / 0% |
+| Khairpur | 2022-08-12 | 07-06 | medium (79) | 50% / 7% | 08-17 (after impact) | low (22) | 23% / 0% |
 | Sukkur | 2022-08-21 | 07-06 | medium (86) | 50% / 7% | never | medium (76) | 23% / 0% |
 | Larkana | 2022-08-21 | 07-06 | high (114 on 08-11; 103 on 08-17; 222 on 08-20) | 50% / 7% | 08-17 | high (159 on 08-17) | 30% / 0% |
 | Jacobabad | 2022-08-21 | 07-06 | medium (98) | 50% / 10% | 08-17 | high (155 on 08-17) | 27% / 0% |
@@ -91,10 +91,11 @@ Summary across the 9 flood districts:
 
 | | Forecast (primary) | Hindsight (upper bound) |
 |---|---|---|
-| High in the 10-day run-up | 2 of 9 (Dadu, Larkana) | 5 of 9 (Dadu, Khairpur, Larkana, Jacobabad, D.I. Khan) |
-| Medium only in the run-up | 7 of 9 | 4 of 9 |
+| High in the 10-day run-up | 2 of 9 (Dadu, Larkana) | 3 of 9 (Larkana, Jacobabad, D.I. Khan) |
+| Medium only in the run-up | 7 of 9 | 5 of 9 |
+| Low throughout the run-up | none | Khairpur |
 | Never high in 2022 | D.G. Khan | Sukkur, D.G. Khan, Rajanpur |
-| First high after the documented impact | D.I. Khan, Rajanpur | Jaffarabad |
+| First high after the documented impact | D.I. Khan, Rajanpur | Dadu, Khairpur, Jaffarabad |
 | Mean share flagged high, 2022 / 2021 | 7.4% / 0.4% | 3.3% / 0% |
 | Mean share flagged medium or high, 2022 / 2021 | 42% / 9% | 24% / 0% |
 | High flags in 2021 (candidate false alarms) | 1 (D.I. Khan, as-of 2021-07-18, 103 mm) | 0 |
@@ -108,15 +109,15 @@ Summary across the 9 flood districts:
 | Skardu | GLOF/avalanche | always medium | GLOFs from 5 Jul; 162 houses damaged in Bashoo |
 | Mansehra | landslide | always medium | flash floods 30 Jul; 8 killed near Balakot (reported 26 Aug) |
 | Battagram | landslide | always medium | flash flooding 30 Jul (single weak report) |
-| Chagai | drought | always low | flood-response food aid by 26 Aug (weak evidence) |
-| Tharparkar | drought | always low | flooded; calamity-hit on OCHA's 13 Sep snapshot |
+| Chagai | drought | always low | flash floods 29 Jul breached the Pakistan-Iran rail line at Dalbandin and Nokkundi |
+| Tharparkar | drought | always low | left out of the 21 Aug Sindh notification; floodwater still rising 15-21 Sep (UNOSAT) |
 
 Chagai and Tharparkar are structural misses: they flooded in 2022, and a drought-labelled district can never be raised above low. The static-medium districts did suffer GLOFs and flash floods, but the scorer can't express anything other than medium for them, so those events count as neither hits nor misses.
 
 ## Reading the results honestly
 
 1. **Clear year contrast, weak event timing.** In the forecast run, flood districts were flagged medium or high on 42% of 2022 dates against 9% in 2021. Even so, in the worst flood year on record, the 100 mm `high` gate fired before the documented impact in only 2 of 9 districts. Most of 2022 sat at `medium`. On these numbers, `medium` means "wetter than usual", not "flood imminent".
-2. **The hindsight run's "warnings" are mostly concurrent.** Its five run-up highs all come from the 17–19 Aug window, which is inside the 16–21 Aug Sindh rain spell. So the result shows the threshold can catch the peak when the rainfall is known, not that it gives warning in advance.
+2. **The hindsight run's "warnings" are mostly concurrent.** Its three run-up highs all come from the 17–19 Aug window, which is inside the 16–21 Aug Sindh rain spell. Dadu and Khairpur, notified on 12 Aug, only reach `high` on 17 Aug. So the result shows the threshold can catch the peak when the rainfall is known, not that it gives warning in advance.
 3. **The outcome depends on the dataset.** The coarse JMA forecast flagged more highs than the 9 km ECMWF analysis (7.4% vs 3.3% of dates). For example, Sukkur is never high in hindsight but has a high in the forecast run (its grid cell is shared with Khairpur). A threshold sitting this close to the top of the gridded rainfall distribution makes per-district results fragile.
 4. **Hill-torrent and riverine flooding is out of reach.** D.G. Khan, Rajanpur and D.I. Khan flood from rain on the Koh-e-Suleman range west of the district headquarters, and Sindh's riverine inundation comes from rain far upstream. A 3-day point total at the district HQ can't see either. D.G. Khan was never high in either run, and D.I. Khan was flagged more often in 2021 than in 2022 in the forecast run.
 5. **False alarms are barely measurable.** Every flood district in scope was affected in 2022, so false alarms can't be counted from 2022 alone. 2021 shows one high flag and a 9% medium-or-high rate in the forecast run. 2021 impacts were not researched, so these are candidate false alarms, not confirmed ones.
@@ -128,7 +129,7 @@ Chagai and Tharparkar are structural misses: they flooded in 2022, and a drought
 - The forecast model is JMA GSM at about 55 km, not production's `best_match`. Run timing is approximate: "previous day N" means the run issued roughly N days earlier, to within the 6-hour run cycle. Day D itself uses the latest short-lead runs during D, so it peeks a few hours ahead.
 - The hindsight run treats a model analysis as observed rainfall. It is not rain-gauge data, and analyses tend to smooth convective extremes.
 - Rainfall is taken at a single district-HQ coordinate. Several districts collapse into one JMA grid cell.
-- Impact reference dates are documented-by upper bounds drawn from a mix of news and humanitarian reports, several read from search-engine excerpts. Gilgit-Baltistan's and KP's named calamity lists were not found, so `calamity_declared` is `unknown` for Hunza, Skardu, Mansehra, Battagram, Chagai and Tharparkar. The Battagram and Chagai impacts rest on weak evidence.
+- Impact reference dates are documented-by upper bounds drawn from a mix of news and humanitarian reports, several read from search-engine excerpts. Gilgit-Baltistan's and KP's named calamity lists were not found, so `calamity_declared` is `unknown` for Hunza, Skardu, Mansehra, Battagram, Chagai and Tharparkar. The Battagram impact rests on weak evidence.
 - The 2021 control has no ground truth of its own.
 - District and hazard selection happened after 2022 (see the short answer above).
 
