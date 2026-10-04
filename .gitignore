@@ -224,6 +224,7 @@ __marimo__/
 *.tiff
 data/raw/
 data/maxar/
+data/replay/raw/
 *.pth
 !damage-checker/checkpoints/xbd_ebd_v3.pth
 *.onnx
