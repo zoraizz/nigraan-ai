@@ -1,0 +1,224 @@
+{
+  "description": "Hand-curated 2022 monsoon-flood impact record for the 16 Risk Flag districts. impact_reference_date is the earliest date by which a source documents impact in the district within or just before the 15 Jun - 10 Sep window; it is an upper bound on onset, not the onset itself. Fields marked unknown could not be confirmed from a named source.",
+  "compiled_at": "2026-10-04",
+  "fields": {
+    "affected": "yes | no | unknown",
+    "evidence": "strong (official notification or multiple independent reports) | moderate (one or two specific reports) | weak (single indirect report)",
+    "impact_reference_date": "ISO date, documented-by upper bound; null if unknown",
+    "calamity_declared": "ISO date of the provincial calamity-hit notification, 'unknown' if not confirmed for this district",
+    "how_verified": "fetched = page/PDF text read directly; search_excerpt = read from a search-engine excerpt of that page; cited_via_wikipedia = taken from a Wikipedia citation, source page not opened"
+  },
+  "districts": [
+    {
+      "district": "Dadu",
+      "affected": "yes",
+      "evidence": "strong",
+      "impact_reference_date": "2022-08-21",
+      "calamity_declared": "2022-08-21",
+      "observed_hazard": "monsoon rain flooding, then prolonged riverine/hill-torrent inundation",
+      "notes": "Named in the Sindh Relief Department notification of Sunday 21 Aug 2022, issued after rains that began Tue 16 Aug. District-specific onset date not pinned down; earlier July impacts in Sindh are reported only at province level. OCHA (4 Oct) expected Dadu to stay partially inundated until year end.",
+      "sources": [
+        {"url": "https://www.geo.tv/latest/435195-sindh-declares-23-districts-calamity-hit", "what": "Sindh notification of 23 calamity-hit districts (21 Aug 2022)", "how_verified": "search_excerpt"},
+        {"url": "https://www.dawn.com/news/1706242", "what": "Dawn, 23 Aug 2022: district list of the Sindh notification", "how_verified": "search_excerpt"},
+        {"url": "https://reliefweb.int/report/pakistan/revised-pakistan-2022-floods-response-plan-01-sep-2022-31-may-2023-04-oct-2022", "what": "OCHA revised response plan: Dadu and Jamshoro inundated until year end", "how_verified": "search_excerpt"}
+      ]
+    },
+    {
+      "district": "Khairpur",
+      "affected": "yes",
+      "evidence": "strong",
+      "impact_reference_date": "2022-08-21",
+      "calamity_declared": "2022-08-21",
+      "observed_hazard": "monsoon rain flooding",
+      "notes": "Geo (22 Aug) reports flood waters 'ravaged Sukkur, Khairpur, Shikarpur, Ghotki, Jacobabad' during the 16-21 Aug spell; named in the 21 Aug notification.",
+      "sources": [
+        {"url": "https://www.geo.tv/latest/435195-sindh-declares-23-districts-calamity-hit", "what": "Sindh notification and impact description", "how_verified": "search_excerpt"},
+        {"url": "https://www.dawn.com/news/1706242", "what": "Dawn district list", "how_verified": "search_excerpt"}
+      ]
+    },
+    {
+      "district": "Sukkur",
+      "affected": "yes",
+      "evidence": "strong",
+      "impact_reference_date": "2022-08-21",
+      "calamity_declared": "2022-08-21",
+      "observed_hazard": "monsoon rain flooding; Indus at Sukkur in medium flood in early September",
+      "notes": "Same source set as Khairpur. NDMA SitRep 085 (6 Sep) lists Indus at Sukkur in medium flood.",
+      "sources": [
+        {"url": "https://www.geo.tv/latest/435195-sindh-declares-23-districts-calamity-hit", "what": "Sindh notification and impact description", "how_verified": "search_excerpt"},
+        {"url": "https://reliefweb.int/attachments/4176dbcc-6e2c-4e49-b134-2653f09b953b/JfVnWUjzXxS1OOLWgUgF.pdf", "what": "NDMA Monsoon 2022 SitRep 085 (6 Sep 2022)", "how_verified": "fetched"}
+      ]
+    },
+    {
+      "district": "Larkana",
+      "affected": "yes",
+      "evidence": "strong",
+      "impact_reference_date": "2022-08-21",
+      "calamity_declared": "2022-08-21",
+      "observed_hazard": "monsoon rain flooding, roof collapses",
+      "notes": "Roof-collapse deaths in Larkana reported with the 21 Aug notification; NDMA SitRep 085 records further deaths in Larkana on 5-6 Sep.",
+      "sources": [
+        {"url": "https://www.thenews.com.pk/print/984418-sindh-declares-23-districts-calamity-hit", "what": "The News, 22 Aug 2022: notification and Larkana roof-collapse deaths", "how_verified": "search_excerpt"},
+        {"url": "https://reliefweb.int/attachments/4176dbcc-6e2c-4e49-b134-2653f09b953b/JfVnWUjzXxS1OOLWgUgF.pdf", "what": "NDMA SitRep 085 deaths in Larkana", "how_verified": "fetched"}
+      ]
+    },
+    {
+      "district": "Jacobabad",
+      "affected": "yes",
+      "evidence": "strong",
+      "impact_reference_date": "2022-08-21",
+      "calamity_declared": "2022-08-21",
+      "observed_hazard": "monsoon rain flooding",
+      "notes": "Same source set as Khairpur.",
+      "sources": [
+        {"url": "https://www.geo.tv/latest/435195-sindh-declares-23-districts-calamity-hit", "what": "Sindh notification and impact description", "how_verified": "search_excerpt"},
+        {"url": "https://www.dawn.com/news/1706242", "what": "Dawn district list", "how_verified": "search_excerpt"}
+      ]
+    },
+    {
+      "district": "Jaffarabad",
+      "affected": "yes",
+      "evidence": "strong",
+      "impact_reference_date": "2022-08-16",
+      "calamity_declared": "2022-08-31",
+      "observed_hazard": "riverine and flash flooding (Bolan river overflow), prolonged inundation of Nasirabad division",
+      "notes": "Dawn (16 Aug) reports the highway near Dera Allah Yar (district HQ, the coordinate Risk Flag uses) submerged after the Bolan river overflowed. calamity_declared is an upper bound: Balochistan declared 32 of 34 districts on Wed 31 Aug; Jaffarabad may already have been among the 31 counted by OCHA on 26 Aug.",
+      "sources": [
+        {"url": "https://www.dawn.com/news/1705165", "what": "Dawn, 16 Aug 2022: highway near Dera Allah Yar submerged", "how_verified": "search_excerpt"},
+        {"url": "https://www.dawn.com/news/1707824", "what": "Dawn, 1 Sep 2022: 32 Balochistan districts declared calamity-hit; Jaffarabad among the hardest hit", "how_verified": "fetched"},
+        {"url": "https://www.arabnews.com/node/2150621/pakistan", "what": "Arab News, 26 Aug 2022: Jaffarabad DC says ~500,000 affected", "how_verified": "search_excerpt"}
+      ]
+    },
+    {
+      "district": "D.I. Khan",
+      "affected": "yes",
+      "evidence": "strong",
+      "impact_reference_date": "2022-08-22",
+      "calamity_declared": "2022-08-22",
+      "observed_hazard": "hill-torrent flash flooding",
+      "notes": "KP declared D.I. Khan and Chitral calamity-hit on Mon 22 Aug. An NGO assessment places the Koh-e-Suleman hill torrents affecting D.I. Khan in mid-August, so true onset is likely a few days earlier.",
+      "sources": [
+        {"url": "https://propakistani.pk/2022/08/23/kp-marks-d-i-khan-and-chitral-as-calamity-hit-regions/", "what": "KP calamity declaration (22 Aug 2022)", "how_verified": "search_excerpt"},
+        {"url": "https://reliefweb.int/report/pakistan/rapid-need-assessment-flood-emergency-balochistan-sind-28th-aug-2022", "what": "Islamic Relief RNA: mid-August Koh-e-Suleman torrents hit D.I. Khan and Tank", "how_verified": "search_excerpt"}
+      ]
+    },
+    {
+      "district": "D.G. Khan",
+      "affected": "yes",
+      "evidence": "strong",
+      "impact_reference_date": "2022-07-25",
+      "calamity_declared": "2022-08-02",
+      "observed_hazard": "hill-torrent flash flooding from the Koh-e-Suleman range",
+      "notes": "Express Tribune (25 Jul) reports torrents flooding the area and dozens of settlements submerged; more than 20 villages submerged by 26-27 Jul. Rain falls mainly on the mountains west of the district HQ coordinate.",
+      "sources": [
+        {"url": "https://tribune.com.pk/story/2367652/flood-ravages-dera-ghazi-khan", "what": "Express Tribune, 25 Jul 2022", "how_verified": "search_excerpt"},
+        {"url": "https://tribune.com.pk/story/2367980/sulaiman-range-torrents-flood-villages", "what": "Express Tribune, 27 Jul 2022: 20+ villages submerged", "how_verified": "search_excerpt"},
+        {"url": "https://tribune.com.pk/story/2369198/deluged-areas-declared-calamity-hit", "what": "Express Tribune, 3 Aug 2022: Punjab CM declares DG Khan and Rajanpur calamity-hit (2 Aug)", "how_verified": "search_excerpt"}
+      ]
+    },
+    {
+      "district": "Rajanpur",
+      "affected": "yes",
+      "evidence": "strong",
+      "impact_reference_date": "2022-07-18",
+      "calamity_declared": "2022-08-02",
+      "observed_hazard": "hill-torrent flash flooding from the Koh-e-Suleman range",
+      "notes": "PDMA Punjab DG on 18 Jul: 21 places flooded by hill torrents in Rajanpur; 2,600+ rescued by 26 Jul.",
+      "sources": [
+        {"url": "https://pni.net.pk/en/pakistan-news/500-people-trapped-in-the-flood-area-shifted-to-safe-places-dg-pdma/", "what": "PNI, 19 Jul 2022, quoting PDMA Punjab on 18 Jul", "how_verified": "search_excerpt"},
+        {"url": "https://dailybalochistantimes.com/over-2600-rescued-as-hill-torrents-disrupt-life-in-rajanpur/", "what": "26 Jul 2022: 2,600+ rescued in Rajanpur", "how_verified": "search_excerpt"},
+        {"url": "https://tribune.com.pk/story/2369198/deluged-areas-declared-calamity-hit", "what": "Calamity declaration (2 Aug)", "how_verified": "search_excerpt"}
+      ]
+    },
+    {
+      "district": "Chitral",
+      "affected": "yes",
+      "evidence": "strong",
+      "impact_reference_date": "2022-06-18",
+      "calamity_declared": "2022-08-22",
+      "observed_hazard": "GLOFs (11 events in Upper/Lower Chitral Jun-Aug) and flash floods",
+      "notes": "First listed GLOF: Eshperu Gol, Terich valley (Upper Chitral) 18 Jun; first in Lower Chitral (where the Risk Flag coordinate sits): Arkari 29 Jun; Reshun 8 Jul. Declared calamity-hit with D.I. Khan on 22 Aug.",
+      "sources": [
+        {"url": "https://www.adaptation-undp.org/sites/default/files/resources/glof-ii-flood_report.pdf", "what": "UNDP GLOF-II Pakistan Flood Situation Report, Annex B: dated GLOF events in KP and GB", "how_verified": "fetched"},
+        {"url": "https://propakistani.pk/2022/08/23/kp-marks-d-i-khan-and-chitral-as-calamity-hit-regions/", "what": "KP calamity declaration (22 Aug 2022)", "how_verified": "search_excerpt"}
+      ]
+    },
+    {
+      "district": "Hunza",
+      "affected": "yes",
+      "evidence": "strong",
+      "impact_reference_date": "2022-06-30",
+      "calamity_declared": "unknown",
+      "observed_hazard": "GLOFs (Shishper/Hassanabad, Shimshal) and flash floods",
+      "notes": "Before the window: Shishper GLOF destroyed the Hassanabad KKH bridge on 7 May 2022. In window: Hassanabad events with damage on 30 Jun, 2 Jul, 3 Jul; Shimshal 3 Jul. GB declared 6 districts calamity-hit by 2 Sep, but no source found naming them.",
+      "sources": [
+        {"url": "https://www.adaptation-undp.org/sites/default/files/resources/glof-ii-flood_report.pdf", "what": "UNDP GLOF-II report, Annex B", "how_verified": "fetched"},
+        {"url": "https://www.dawn.com/news/1688466", "what": "Dawn, 7 May 2022: Hassanabad bridge swept away", "how_verified": "search_excerpt"}
+      ]
+    },
+    {
+      "district": "Skardu",
+      "affected": "yes",
+      "evidence": "moderate",
+      "impact_reference_date": "2022-07-05",
+      "calamity_declared": "unknown",
+      "observed_hazard": "GLOFs and flash floods",
+      "notes": "GLOF events at Stak Askore nullah (5 Jul), Tormik (7 Jul) and others; GLOF-II reports 162 damaged houses in Strangbut (Bashoo) valley, Skardu. Calamity status not confirmed.",
+      "sources": [
+        {"url": "https://www.adaptation-undp.org/sites/default/files/resources/glof-ii-flood_report.pdf", "what": "UNDP GLOF-II report, Annex B and damage section", "how_verified": "fetched"}
+      ]
+    },
+    {
+      "district": "Mansehra",
+      "affected": "yes",
+      "evidence": "moderate",
+      "impact_reference_date": "2022-07-30",
+      "calamity_declared": "unknown",
+      "observed_hazard": "flash flooding (not primarily landslides, which is the hazard Risk Flag assigns)",
+      "notes": "Hazara flash floods reported 30 Jul: Siran river bridge at Baffa (Mansehra) destroyed, floodwater in residential areas. 8 nomads killed by flooding near Balakot (reported 26 Aug). Whether Mansehra was among KP's 17 notified districts was not confirmed.",
+      "sources": [
+        {"url": "https://dailybalochistantimes.com/flash-floods-leave-people-stranded-damage-roads-bridges/", "what": "30 Jul 2022: Hazara flash floods, Mansehra and Battagram", "how_verified": "fetched"},
+        {"url": "https://tribune.com.pk/story/2373361/eight-dead-as-floods-wreak-havoc-in-balakot", "what": "Express Tribune, 26 Aug 2022: eight dead in Balakot", "how_verified": "cited_via_wikipedia"}
+      ]
+    },
+    {
+      "district": "Battagram",
+      "affected": "yes",
+      "evidence": "weak",
+      "impact_reference_date": "2022-07-30",
+      "calamity_declared": "unknown",
+      "observed_hazard": "flash flooding",
+      "notes": "Only evidence found: one regional news report (30 Jul) that floodwater entered residential areas in Battagram. No district-specific damage figures or calamity notification found.",
+      "sources": [
+        {"url": "https://dailybalochistantimes.com/flash-floods-leave-people-stranded-damage-roads-bridges/", "what": "30 Jul 2022: Hazara flash floods", "how_verified": "fetched"}
+      ]
+    },
+    {
+      "district": "Chagai",
+      "affected": "yes",
+      "evidence": "weak",
+      "impact_reference_date": "2022-08-26",
+      "calamity_declared": "unknown",
+      "observed_hazard": "rain/flood impacts (the opposite of the drought hazard Risk Flag assigns)",
+      "notes": "OCHA SitRep 3 (26 Aug) lists UN food assistance to 4,350 households in Chagai within the flood response; SitRep 4 lists hygiene kits in Chaghi. Balochistan declared 32 of 34 districts calamity-hit on 31 Aug, but no source found naming the two excluded districts, so Chagai's status is unconfirmed.",
+      "sources": [
+        {"url": "https://reliefweb.int/attachments/cea2c65f-e82f-478c-8e47-e5cf8b5c68fd/Pakistan%20Floods%202022%20-%20SitRep%2003%20-%2026%20August%202022.pdf", "what": "OCHA SitRep 3 (26 Aug 2022)", "how_verified": "fetched"},
+        {"url": "https://reliefweb.int/attachments/6cd5fcdf-090a-43e6-b64d-d0d0beb889a5/Pakistan%20Floods%20Response%20SitRep%204%20-%202%20September%202022.pdf", "what": "OCHA SitRep 4 (2 Sep 2022)", "how_verified": "fetched"}
+      ]
+    },
+    {
+      "district": "Tharparkar",
+      "affected": "yes",
+      "evidence": "strong",
+      "impact_reference_date": "2022-09-13",
+      "calamity_declared": "unknown",
+      "observed_hazard": "rain flooding (the opposite of the drought hazard Risk Flag assigns)",
+      "notes": "Explicitly excluded from the 21 Aug Sindh notification, but shown as calamity-hit on OCHA's 13 Sep snapshot map; OCHA (4 Oct) reports increasing floodwaters in Tharparkar during 15-21 Sep. Reference date is the snapshot date, an upper bound outside the backtest window.",
+      "sources": [
+        {"url": "https://tribune.newspackstaging.com/2022/08/22/baring-karachi-thar-entire-sindh-declared-calamity-hit/", "what": "Express Tribune (staging mirror), 22 Aug 2022: Tharparkar excluded from first notification", "how_verified": "search_excerpt"},
+        {"url": "https://reliefweb.int/attachments/65171f8f-46da-4d05-97e6-612fb6cc0e4a/Pakistan%20-%202022%20Monsoon%20Floods%20Humanitarian%20Response%20Snapshot%20%28as%20of%2013%20September%202022%29.pdf", "what": "OCHA Humanitarian Response Snapshot, 13 Sep 2022: Sindh calamity-hit districts incl. Tharparkar", "how_verified": "fetched"},
+        {"url": "https://reliefweb.int/report/pakistan/revised-pakistan-2022-floods-response-plan-01-sep-2022-31-may-2023-04-oct-2022", "what": "OCHA revised plan: Tharparkar floodwaters increasing 15-21 Sep", "how_verified": "search_excerpt"}
+      ]
+    }
+  ]
+}
