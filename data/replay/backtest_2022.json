@@ -1,6 +1,6 @@
 {
  "metadata": {
-  "generated_at": "2026-10-04T10:40:53+00:00",
+  "generated_at": "2026-10-04T15:18:10+00:00",
   "generator": "scripts/build_replay_backtest.py",
   "primary_run": "forecast",
   "rainfall_source": "forecast (JMA GSM via Open-Meteo Previous Runs API, issued on the as-of date)",
@@ -201,7 +201,7 @@
   "evaluation_notes": [
    "impact_reference_date is a documented-by upper bound; true onset may be earlier.",
    "first_high_2022 is the first as-of date flagged high anywhere in the window. For several districts it falls on an earlier rain spell (early July), so days_first_high_before_reference is not a lead time for the documented impact.",
-   "outcome looks only at as-of dates from reference-10 days to the reference date. The 10-day window was chosen after viewing the timelines; the full per-date series is included so other windows can be checked.",
+   "outcome looks only at as-of dates from reference-10 days to the reference date. The 10-day window was chosen after viewing the timelines, so summary.runup_sensitivity repeats the outcome for 7, 10, 14, 21 days; the full per-date series is included so other windows can be checked.",
    "Districts whose hazard is not flood get a constant level from the scorer, so they carry no timing or year-contrast signal."
   ]
  },
@@ -4724,7 +4724,13 @@
        "rainfall_3d_mm": 116.4
       }
      ],
-     "outcome": "warned high"
+     "outcome": "warned high",
+     "outcome_by_runup_days": {
+      "7": "warned high",
+      "10": "warned high",
+      "14": "warned high",
+      "21": "warned high"
+     }
     },
     "Khairpur": {
      "hazard_types": [
@@ -4768,7 +4774,13 @@
        "rainfall_3d_mm": 79.2
       }
      ],
-     "outcome": "medium only"
+     "outcome": "medium only",
+     "outcome_by_runup_days": {
+      "7": "medium only",
+      "10": "medium only",
+      "14": "medium only",
+      "21": "medium only"
+     }
     },
     "Sukkur": {
      "hazard_types": [
@@ -4812,7 +4824,13 @@
        "rainfall_3d_mm": 86.4
       }
      ],
-     "outcome": "medium only"
+     "outcome": "medium only",
+     "outcome_by_runup_days": {
+      "7": "medium only",
+      "10": "medium only",
+      "14": "medium only",
+      "21": "medium only"
+     }
     },
     "Larkana": {
      "hazard_types": [
@@ -4856,7 +4874,13 @@
        "rainfall_3d_mm": 222.0
       }
      ],
-     "outcome": "warned high"
+     "outcome": "warned high",
+     "outcome_by_runup_days": {
+      "7": "warned high",
+      "10": "warned high",
+      "14": "warned high",
+      "21": "warned high"
+     }
     },
     "Jacobabad": {
      "hazard_types": [
@@ -4900,7 +4924,13 @@
        "rainfall_3d_mm": 76.2
       }
      ],
-     "outcome": "medium only"
+     "outcome": "medium only",
+     "outcome_by_runup_days": {
+      "7": "medium only",
+      "10": "medium only",
+      "14": "medium only",
+      "21": "medium only"
+     }
     },
     "Jaffarabad": {
      "hazard_types": [
@@ -4939,7 +4969,13 @@
        "rainfall_3d_mm": 97.8
       }
      ],
-     "outcome": "medium only"
+     "outcome": "medium only",
+     "outcome_by_runup_days": {
+      "7": "medium only",
+      "10": "medium only",
+      "14": "medium only",
+      "21": "medium only"
+     }
     },
     "D.I. Khan": {
      "hazard_types": [
@@ -4980,7 +5016,13 @@
        "rainfall_3d_mm": 15.6
       }
      ],
-     "outcome": "medium only"
+     "outcome": "medium only",
+     "outcome_by_runup_days": {
+      "7": "medium only",
+      "10": "medium only",
+      "14": "medium only",
+      "21": "medium only"
+     }
     },
     "D.G. Khan": {
      "hazard_types": [
@@ -5024,7 +5066,13 @@
        "rainfall_3d_mm": 25.2
       }
      ],
-     "outcome": "medium only"
+     "outcome": "medium only",
+     "outcome_by_runup_days": {
+      "7": "medium only",
+      "10": "medium only",
+      "14": "medium only",
+      "21": "medium only"
+     }
     },
     "Rajanpur": {
      "hazard_types": [
@@ -5068,7 +5116,13 @@
        "rainfall_3d_mm": 25.8
       }
      ],
-     "outcome": "medium only"
+     "outcome": "medium only",
+     "outcome_by_runup_days": {
+      "7": "medium only",
+      "10": "medium only",
+      "14": "medium only",
+      "21": "medium only"
+     }
     },
     "Chitral": {
      "hazard_types": [
@@ -5217,6 +5271,72 @@
      "Rajanpur"
     ],
     "no_warning_in_runup": [],
+    "runup_sensitivity": {
+     "7": {
+      "warned high": [
+       "Dadu",
+       "Larkana"
+      ],
+      "medium only": [
+       "Khairpur",
+       "Sukkur",
+       "Jacobabad",
+       "Jaffarabad",
+       "D.I. Khan",
+       "D.G. Khan",
+       "Rajanpur"
+      ],
+      "no warning": []
+     },
+     "10": {
+      "warned high": [
+       "Dadu",
+       "Larkana"
+      ],
+      "medium only": [
+       "Khairpur",
+       "Sukkur",
+       "Jacobabad",
+       "Jaffarabad",
+       "D.I. Khan",
+       "D.G. Khan",
+       "Rajanpur"
+      ],
+      "no warning": []
+     },
+     "14": {
+      "warned high": [
+       "Dadu",
+       "Larkana"
+      ],
+      "medium only": [
+       "Khairpur",
+       "Sukkur",
+       "Jacobabad",
+       "Jaffarabad",
+       "D.I. Khan",
+       "D.G. Khan",
+       "Rajanpur"
+      ],
+      "no warning": []
+     },
+     "21": {
+      "warned high": [
+       "Dadu",
+       "Larkana"
+      ],
+      "medium only": [
+       "Khairpur",
+       "Sukkur",
+       "Jacobabad",
+       "Jaffarabad",
+       "D.I. Khan",
+       "D.G. Khan",
+       "Rajanpur"
+      ],
+      "no warning": []
+     }
+    },
     "first_high_after_reference": [
      "D.I. Khan",
      "Rajanpur"
@@ -5290,7 +5410,13 @@
        "rainfall_3d_mm": 58.1
       }
      ],
-     "outcome": "medium only"
+     "outcome": "medium only",
+     "outcome_by_runup_days": {
+      "7": "medium only",
+      "10": "medium only",
+      "14": "medium only",
+      "21": "medium only"
+     }
     },
     "Khairpur": {
      "hazard_types": [
@@ -5334,7 +5460,13 @@
        "rainfall_3d_mm": 21.6
       }
      ],
-     "outcome": "no warning"
+     "outcome": "no warning",
+     "outcome_by_runup_days": {
+      "7": "no warning",
+      "10": "no warning",
+      "14": "no warning",
+      "21": "medium only"
+     }
     },
     "Sukkur": {
      "hazard_types": [
@@ -5378,7 +5510,13 @@
        "rainfall_3d_mm": 47.7
       }
      ],
-     "outcome": "medium only"
+     "outcome": "medium only",
+     "outcome_by_runup_days": {
+      "7": "medium only",
+      "10": "medium only",
+      "14": "medium only",
+      "21": "medium only"
+     }
     },
     "Larkana": {
      "hazard_types": [
@@ -5422,7 +5560,13 @@
        "rainfall_3d_mm": 71.9
       }
      ],
-     "outcome": "warned high"
+     "outcome": "warned high",
+     "outcome_by_runup_days": {
+      "7": "warned high",
+      "10": "warned high",
+      "14": "warned high",
+      "21": "warned high"
+     }
     },
     "Jacobabad": {
      "hazard_types": [
@@ -5466,7 +5610,13 @@
        "rainfall_3d_mm": 79.7
       }
      ],
-     "outcome": "warned high"
+     "outcome": "warned high",
+     "outcome_by_runup_days": {
+      "7": "warned high",
+      "10": "warned high",
+      "14": "warned high",
+      "21": "warned high"
+     }
     },
     "Jaffarabad": {
      "hazard_types": [
@@ -5505,7 +5655,13 @@
        "rainfall_3d_mm": 53.4
       }
      ],
-     "outcome": "medium only"
+     "outcome": "medium only",
+     "outcome_by_runup_days": {
+      "7": "medium only",
+      "10": "medium only",
+      "14": "medium only",
+      "21": "medium only"
+     }
     },
     "D.I. Khan": {
      "hazard_types": [
@@ -5544,7 +5700,13 @@
        "rainfall_3d_mm": 3.0
       }
      ],
-     "outcome": "warned high"
+     "outcome": "warned high",
+     "outcome_by_runup_days": {
+      "7": "warned high",
+      "10": "warned high",
+      "14": "warned high",
+      "21": "warned high"
+     }
     },
     "D.G. Khan": {
      "hazard_types": [
@@ -5588,7 +5750,13 @@
        "rainfall_3d_mm": 88.5
       }
      ],
-     "outcome": "medium only"
+     "outcome": "medium only",
+     "outcome_by_runup_days": {
+      "7": "medium only",
+      "10": "medium only",
+      "14": "medium only",
+      "21": "medium only"
+     }
     },
     "Rajanpur": {
      "hazard_types": [
@@ -5632,7 +5800,13 @@
        "rainfall_3d_mm": 23.5
       }
      ],
-     "outcome": "medium only"
+     "outcome": "medium only",
+     "outcome_by_runup_days": {
+      "7": "medium only",
+      "10": "medium only",
+      "14": "medium only",
+      "21": "medium only"
+     }
     },
     "Chitral": {
      "hazard_types": [
@@ -5782,6 +5956,75 @@
     "no_warning_in_runup": [
      "Khairpur"
     ],
+    "runup_sensitivity": {
+     "7": {
+      "warned high": [
+       "Larkana",
+       "Jacobabad",
+       "D.I. Khan"
+      ],
+      "medium only": [
+       "Dadu",
+       "Sukkur",
+       "Jaffarabad",
+       "D.G. Khan",
+       "Rajanpur"
+      ],
+      "no warning": [
+       "Khairpur"
+      ]
+     },
+     "10": {
+      "warned high": [
+       "Larkana",
+       "Jacobabad",
+       "D.I. Khan"
+      ],
+      "medium only": [
+       "Dadu",
+       "Sukkur",
+       "Jaffarabad",
+       "D.G. Khan",
+       "Rajanpur"
+      ],
+      "no warning": [
+       "Khairpur"
+      ]
+     },
+     "14": {
+      "warned high": [
+       "Larkana",
+       "Jacobabad",
+       "D.I. Khan"
+      ],
+      "medium only": [
+       "Dadu",
+       "Sukkur",
+       "Jaffarabad",
+       "D.G. Khan",
+       "Rajanpur"
+      ],
+      "no warning": [
+       "Khairpur"
+      ]
+     },
+     "21": {
+      "warned high": [
+       "Larkana",
+       "Jacobabad",
+       "D.I. Khan"
+      ],
+      "medium only": [
+       "Dadu",
+       "Khairpur",
+       "Sukkur",
+       "Jaffarabad",
+       "D.G. Khan",
+       "Rajanpur"
+      ],
+      "no warning": []
+     }
+    },
     "first_high_after_reference": [
      "Dadu",
      "Khairpur",

@@ -100,6 +100,17 @@ Summary across the 9 flood districts:
 | Mean share flagged medium or high, 2022 / 2021 | 42% / 9% | 24% / 0% |
 | High flags in 2021 (candidate false alarms) | 1 (D.I. Khan, as-of 2021-07-18, 103 mm) | 0 |
 
+The 10-day run-up was chosen after viewing the timelines, so the run-up outcome is repeated for other window lengths (`summary.runup_sensitivity` in the JSON):
+
+| Run-up window | Forecast: high / medium only / low | Hindsight: high / medium only / low |
+|---|---|---|
+| 7 days | 2 / 7 / 0 | 3 / 5 / 1 (Khairpur) |
+| 10 days | 2 / 7 / 0 | 3 / 5 / 1 (Khairpur) |
+| 14 days | 2 / 7 / 0 | 3 / 5 / 1 (Khairpur) |
+| 21 days | 2 / 7 / 0 | 3 / 6 / 0 |
+
+The same districts are flagged `high` at every length. The window choice does not drive the result.
+
 ### Districts the scorer cannot discriminate
 
 | District | Product hazard | Scorer output, both years | What happened in 2022 |

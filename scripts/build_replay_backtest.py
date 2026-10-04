@@ -44,6 +44,7 @@ WINDOW_START = (6, 15)
 WINDOW_END = (9, 10)
 STEP_DAYS = 3
 RUNUP_DAYS = 10            # reporting window before each impact reference date (chosen after viewing timelines)
+RUNUP_SENSITIVITY_DAYS = (7, 10, 14, 21)
 FORECAST_DAYS = 3          # production: forecast_days=3 -> days D, D+1, D+2
 DROUGHT_WINDOWS = (30, 90)  # production: archive past_days=30 / 90
 
@@ -333,19 +334,25 @@ def evaluate(run: dict, districts: dict, gt: dict, dates: dict[int, list[date]])
         else:
             row["first_high_vs_reference"] = "before or on reference" if fh <= ref else "after reference"
 
-        runup = [
-            (d, lv, r3)
-            for d, lv, r3 in zip(dates[2022], lv22, run["2022"][name]["rainfall_3d_mm"])
-            if ref and ref - timedelta(days=RUNUP_DAYS) <= d <= ref
-        ]
-        row["runup"] = [{"as_of": d.isoformat(), "risk_level": lv, "rainfall_3d_mm": r3} for d, lv, r3 in runup]
-        if g["affected"] != "yes" or ref is None:
-            row["outcome"] = "no ground truth"
-        elif not runup:
-            row["outcome"] = "reference date outside window"
-        else:
+        def runup_for(days: int) -> list[tuple]:
+            return [
+                (d, lv, r3)
+                for d, lv, r3 in zip(dates[2022], lv22, run["2022"][name]["rainfall_3d_mm"])
+                if ref and ref - timedelta(days=days) <= d <= ref
+            ]
+
+        def outcome_for(runup: list[tuple]) -> str:
+            if g["affected"] != "yes" or ref is None:
+                return "no ground truth"
+            if not runup:
+                return "reference date outside window"
             top = max((lv for _, lv, _ in runup), key=["low", "medium", "high"].index)
-            row["outcome"] = {"high": "warned high", "medium": "medium only", "low": "no warning"}[top]
+            return {"high": "warned high", "medium": "medium only", "low": "no warning"}[top]
+
+        runup = runup_for(RUNUP_DAYS)
+        row["runup"] = [{"as_of": d.isoformat(), "risk_level": lv, "rainfall_3d_mm": r3} for d, lv, r3 in runup]
+        row["outcome"] = outcome_for(runup)
+        row["outcome_by_runup_days"] = {str(n): outcome_for(runup_for(n)) for n in RUNUP_SENSITIVITY_DAYS}
         per_district[name] = row
 
     flood = {n: r for n, r in per_district.items() if "flood" in r["hazard_types"]}
@@ -356,6 +363,13 @@ def evaluate(run: dict, districts: dict, gt: dict, dates: dict[int, list[date]])
         "warned_high_in_runup": by_outcome("warned high"),
         "medium_only_in_runup": by_outcome("medium only"),
         "no_warning_in_runup": by_outcome("no warning"),
+        "runup_sensitivity": {
+            str(n): {
+                o: [d for d, r in flood.items() if r["outcome_by_runup_days"][str(n)] == o]
+                for o in ("warned high", "medium only", "no warning")
+            }
+            for n in RUNUP_SENSITIVITY_DAYS
+        },
         "first_high_after_reference": [n for n, r in flood.items() if r["first_high_vs_reference"] == "after reference"],
         "never_high_2022": [n for n, r in flood.items() if r["first_high_vs_reference"] == "never high"],
         "mean_share_high": {
@@ -499,8 +513,9 @@ def main() -> None:
                 "districts it falls on an earlier rain spell (early July), so days_first_high_before_reference "
                 "is not a lead time for the documented impact.",
                 f"outcome looks only at as-of dates from reference-{RUNUP_DAYS} days to the reference date. "
-                f"The {RUNUP_DAYS}-day window was chosen after viewing the timelines; the full per-date "
-                "series is included so other windows can be checked.",
+                f"The {RUNUP_DAYS}-day window was chosen after viewing the timelines, so "
+                f"summary.runup_sensitivity repeats the outcome for {', '.join(map(str, RUNUP_SENSITIVITY_DAYS))} "
+                "days; the full per-date series is included so other windows can be checked.",
                 "Districts whose hazard is not flood get a constant level from the scorer, so they carry "
                 "no timing or year-contrast signal.",
             ],
