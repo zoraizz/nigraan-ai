@@ -112,6 +112,30 @@ machines without a GPU.
 v2 checkpoint (`xbd_real_model_v2.pth`) remains on disk as a rollback
 option but is not committed to the repo.
 
+### Scene classification (`POST /classify-scene`)
+
+One large image (multipart field `image`) is cut into a non-overlapping
+grid and each kept tile is classified with the same model and
+out-of-distribution check as `POST /classify-damage`. Query params:
+`tile_size` (default 512, allowed 256–1024) and an optional `area` label
+that is echoed back. A ragged edge tile smaller than half the tile size
+in either dimension is skipped. Tiles the OOD guard flags are reported as
+`uncertain` and left out of the damage percentages.
+
+The endpoint is sized for the 512 MB Render instance. The scene is decoded
+with Pillow and cropped one tile at a time; it is not held as a NumPy
+array. `Image.MAX_IMAGE_PIXELS` is set to a real cap (never disabled).
+Images over `SCENE_MAX_PIXELS` (default 16,777,216) return HTTP 413.
+Scenes that would run more than `SCENE_MAX_TILES` tiles (default 400)
+return HTTP 422.
+
+**Tile-level labels are a proxy.** The model was trained on
+worst-building-per-tile labels at two different scales, 1024 px xBD and
+512 px EBD. A tile labeled destroyed can contain one destroyed building
+and many intact ones. `percent_damaged` is
+`(partial + destroyed) / classified tiles`: a tile-level estimate, not a
+building-level damage rate.
+
 **Out-of-distribution guard (v3):** `/classify-damage` flags uploads that
 don't resemble satellite disaster imagery instead of confidently
 misclassifying them (a photo of a person scored "destroyed" at 0.67
