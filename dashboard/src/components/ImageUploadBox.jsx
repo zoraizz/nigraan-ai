@@ -7,22 +7,30 @@ export default function ImageUploadBox({
   onClassify,
   loading = false,
   disabled = false,
+  showPreview = true,
+  actionLabel = 'Classify damage',
+  loadingLabel = 'Classifying…',
+  emptyText = 'No image selected yet. Choose a post-disaster satellite tile.',
+  inputId = 'damage-image',
 }) {
   return (
     <div className="panel border-dashed p-6 text-center">
-      {previewUrl ? (
+      {showPreview && previewUrl ? (
         <img
           src={previewUrl}
           alt="Selected tile preview"
           className="mx-auto mb-4 max-h-64 rounded-panel border border-line object-contain"
         />
-      ) : (
-        <p className="mb-4 text-sm text-muted">
-          No image selected yet. Choose a post-disaster satellite tile.
-        </p>
-      )}
+      ) : null}
+      {showPreview && !previewUrl ? (
+        <p className="mb-4 text-sm text-muted">{emptyText}</p>
+      ) : null}
+      {!showPreview && !fileName ? (
+        <p className="mb-4 text-sm text-muted">{emptyText}</p>
+      ) : null}
 
       <input
+        id={inputId}
         type="file"
         accept="image/*"
         onChange={onFileSelect}
@@ -35,7 +43,7 @@ export default function ImageUploadBox({
         disabled={disabled || loading}
         className="btn btn-primary mt-4"
       >
-        {loading ? 'Classifying…' : 'Classify damage'}
+        {loading ? loadingLabel : actionLabel}
       </button>
 
       {fileName ? (

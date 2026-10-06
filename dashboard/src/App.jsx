@@ -6,17 +6,19 @@ import Overview from './pages/Overview.jsx'
 import RiskMap from './pages/RiskMap.jsx'
 import DamageAssessment from './pages/DamageAssessment.jsx'
 import AidPriority from './pages/AidPriority.jsx'
+import { SceneDamageProvider } from './scene/SceneDamageProvider.jsx'
 
 // Router + layout shell: persistent sidebar rail + header, routes for the
 // 4 console pages.
 export default function App() {
   return (
-    <div className="flex min-h-screen bg-bg">
-      <Sidebar />
-      <div className="flex min-h-screen flex-1 flex-col">
-        <Header />
-        <main className="flex-1">
-          <Routes>
+    <SceneDamageProvider>
+      <div className="flex min-h-screen bg-bg">
+        <Sidebar />
+        <div className="flex min-h-screen flex-1 flex-col">
+          <Header />
+          <main className="flex-1">
+            <Routes>
             <Route
               path="/"
               element={
@@ -50,8 +52,9 @@ export default function App() {
               }
             />
           </Routes>
-        </main>
+          </main>
+        </div>
       </div>
-    </div>
+    </SceneDamageProvider>
   )
 }

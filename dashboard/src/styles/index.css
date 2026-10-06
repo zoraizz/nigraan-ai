@@ -388,6 +388,58 @@
     border-radius: var(--radius-panel);
   }
 
+  /* Scene overlay tiles. Fill and edge come from risk tokens via --tile-*
+     set on each tile. Border is inside the box (global border-box) so the
+     percentage box stays on the image's x/y/size. Focus ring stays the
+     global :focus-visible outline. */
+  .scene-tile {
+    position: absolute;
+    margin: 0;
+    padding: 0;
+    cursor: pointer;
+    background-color: var(--tile-fill);
+    border: 1px solid var(--tile-edge);
+    border-radius: 0;
+  }
+  .scene-tile-uncertain {
+    border-style: dashed;
+    border-color: var(--color-risk-unknown-bright);
+  }
+  .scene-tile:hover,
+  .scene-tile:focus,
+  .scene-tile:focus-visible {
+    z-index: 1;
+    background-color: var(--tile-fill-hot);
+  }
+  .scene-tile:focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+  .scene-tile-active {
+    z-index: 1;
+  }
+  .scene-tile-tip {
+    position: absolute;
+    z-index: 2;
+    left: 50%;
+    bottom: calc(100% + 4px);
+    transform: translateX(-50%);
+    display: none;
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--color-line-strong);
+    border-radius: var(--radius-chip);
+    background-color: var(--color-surface);
+    color: var(--color-text);
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .scene-tile:hover .scene-tile-tip,
+  .scene-tile:focus .scene-tile-tip,
+  .scene-tile:focus-visible .scene-tile-tip,
+  .scene-tile-active .scene-tile-tip {
+    display: block;
+  }
+
   /* Form control on dark surface. */
   .field {
     width: 100%;

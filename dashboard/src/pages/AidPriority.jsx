@@ -4,6 +4,7 @@ import ScoringExplainer from '../components/ScoringExplainer.jsx'
 import { useAidPriority } from '../hooks/useAidPriority.js'
 import { useLiveAssessment } from '../hooks/useLiveAssessment.js'
 import { SAMPLE_PAIRING, hazardTypeFor } from '../config/samplePairing.js'
+import { useSceneDamage } from '../scene/SceneDamageProvider.jsx'
 
 const statusClass = (status) => {
   if (status === 'ok') return 'text-ok-bright'
@@ -11,18 +12,31 @@ const statusClass = (status) => {
   return 'text-muted'
 }
 
+function sceneLabel(sceneDamage) {
+  if (!sceneDamage) return 'illustrative sample tile'
+  return sceneDamage.truncated
+    ? 'damage from uploaded scene, partial scene'
+    : 'damage from uploaded scene'
+}
+
 export default function AidPriority() {
-  const live = useLiveAssessment()
+  const { sceneDamage, clearSceneDamage } = useSceneDamage()
+  const live = useLiveAssessment(sceneDamage)
   const { ranking, scoring, loading, error, refetch } = useAidPriority(
     live.payload ?? [],
   )
+
+  const handleClearScene = () => {
+    clearSceneDamage()
+    live.reset()
+  }
 
   const running = live.phase === 'assembling' || loading
 
   return (
     <PageContainer
       title="Aid Priority"
-      lead="Districts ranked by aid urgency: 0.4 × risk + 0.6 × damage. Running the ranking calls Risk Flag (/predict-risk, Gemini-backed) and Damage Checker (/classify-damage) live for five districts, then ranks them via /rank-priority."
+      lead="Districts ranked by aid urgency: 0.4 × risk + 0.6 × damage. Running the ranking calls Risk Flag (/predict-risk, Gemini-backed) and Damage Checker live, then ranks them via /rank-priority. A stored scene replaces that district's sample tile."
     >
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <button
@@ -55,33 +69,64 @@ export default function AidPriority() {
           ) : (
             <p className="mt-2 leading-relaxed text-muted">
               The payload assembles when the ranking runs: risk levels come
-              from POST /predict-risk and damage levels from POST
-              /classify-damage on the paired sample tiles.
+              from POST /predict-risk. Damage comes from POST /classify-damage
+              on the paired sample tiles, or from an uploaded scene when one
+              is stored for that district.
             </p>
           )}
         </details>
       </div>
 
+      {sceneDamage ? (
+        <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
+          <p>
+            <span className="font-semibold text-text">{sceneDamage.district}</span>
+            <span className="text-muted">: damage from uploaded scene</span>
+          </p>
+          {sceneDamage.truncated ? <span className="warn-chip">partial scene</span> : null}
+          <button type="button" className="btn" onClick={handleClearScene}>
+            Clear uploaded scene
+          </button>
+        </div>
+      ) : null}
+
       <p className="mb-4 max-w-3xl text-xs leading-relaxed text-muted">
         Damage assessment uses real classified sample imagery
         (damage-checker/sample-images/), illustratively paired with these
-        districts, not a live satellite feed. Risk levels are live Risk Flag
-        assessments and the ranking is computed live by the Aid Priority
-        service.
+        districts, not a live satellite feed. A district marked damage from
+        uploaded scene uses the stored tile counts instead. Risk levels are
+        live Risk Flag assessments and the ranking is computed live by the
+        Aid Priority service.
       </p>
 
       <details className="mb-5 max-w-3xl text-xs">
         <summary className="cursor-pointer text-muted hover:text-text">
-          District and sample tile pairing (illustrative)
+          District damage sources
         </summary>
         <ul className="mt-2 space-y-1 leading-relaxed text-muted">
-          {SAMPLE_PAIRING.map((entry) => (
-            <li key={entry.district}>
-              <span className="text-text">{entry.district}</span>{' '}
-              ({hazardTypeFor(entry.district)}):{' '}
-              <span className="data">{entry.tile}</span>, {entry.tileSource}
+          {SAMPLE_PAIRING.map((entry) => {
+            const fromScene = sceneDamage?.district === entry.district
+            return (
+              <li key={entry.district}>
+                <span className="text-text">{entry.district}</span>{' '}
+                ({hazardTypeFor(entry.district)}):{' '}
+                {fromScene ? (
+                  sceneLabel(sceneDamage)
+                ) : (
+                  <>
+                    illustrative sample tile,{' '}
+                    <span className="data">{entry.tile}</span>, {entry.tileSource}
+                  </>
+                )}
+              </li>
+            )
+          })}
+          {sceneDamage && !SAMPLE_PAIRING.some((entry) => entry.district === sceneDamage.district) ? (
+            <li>
+              <span className="text-text">{sceneDamage.district}</span>{' '}
+              ({hazardTypeFor(sceneDamage.district)}): {sceneLabel(sceneDamage)}
             </li>
-          ))}
+          ) : null}
         </ul>
       </details>
 
@@ -89,7 +134,7 @@ export default function AidPriority() {
         <div className="panel px-4 py-8 text-center">
           <div className="spinner mx-auto mb-4" />
           <p className="text-sm text-muted">
-            Assessing {SAMPLE_PAIRING.length} districts, Risk Flag (Gemini) and
+            Assessing {live.progress.length} districts, Risk Flag (Gemini) and
             Damage Checker <span className="data">{live.elapsed}s</span>
           </p>
           <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-muted">
@@ -103,11 +148,12 @@ export default function AidPriority() {
                 <span className={`w-28 ${statusClass(row.risk)}`}>
                   risk {row.risk === 'ok' ? row.risk_level : row.risk}
                 </span>
-                <span className={`w-40 ${statusClass(row.damage)}`}>
-                  damage{' '}
-                  {row.damage === 'ok'
-                    ? `${row.damage_level} (${(row.confidence * 100).toFixed(1)}%)`
-                    : row.damage}
+                <span className={statusClass(row.damage)}>
+                  {row.damage_source === 'scene' && row.damage === 'ok'
+                    ? sceneLabel({ truncated: row.truncated })
+                    : row.damage === 'ok'
+                      ? `damage ${row.damage_level} (${(row.confidence * 100).toFixed(1)}%)`
+                      : `damage ${row.damage}`}
                 </span>
               </li>
             ))}
