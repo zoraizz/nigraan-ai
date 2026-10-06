@@ -14,6 +14,19 @@ the v3 checkpoint (`checkpoints/xbd_ebd_v3.pth`); predictions were recorded on
 | `joplin-tornado_00000120_post_disaster.png` | xBD (xView2), validation split | Tornado, Joplin, Missouri, USA | destroyed | destroyed (0.9849) | yes |
 | `santa-rosa-wildfire_00000138_post_disaster.png` | xBD (xView2), validation split | Wildfire, Santa Rosa, California, USA | destroyed | destroyed (0.6429) | yes |
 
+## Scene mode demo mosaic
+
+`demo-scene-2x2.png` is a synthetic mosaic of unrelated tiles, for demonstrating Scene mode only. It is a 1024×1024 image: four distinct sample tiles, each scaled to 512×512 and placed in a 2×2 grid with no overlap. The tiles are not a real contiguous scene. Classify it with `POST /classify-scene?tile_size=512`. Expected label for each tile (v3 checkpoint, recorded 2026-10-07):
+
+| Position | Source tile | Expected label |
+|----------|-------------|----------------|
+| row 1, column 1 (x 0, y 0) | `PAKISTAN-FLOODING_018024_post_disaster.png` | none (0.5076) |
+| row 1, column 2 (x 512, y 0) | `PAKISTAN-FLOODING_011306_post_disaster.png` | none (0.5922) |
+| row 2, column 1 (x 0, y 512) | `PAKISTAN-FLOODING_014695_post_disaster.png` | destroyed (0.5406) |
+| row 2, column 2 (x 512, y 512) | `joplin-tornado_00000120_post_disaster.png` (scaled from 1024 to 512) | destroyed (0.985) |
+
+The 011306 quadrant's ground truth is partial; the expected Scene label is the model's published `none` prediction.
+
 ## Why these five
 
 - The three Pakistan tiles come from the **EBD test split** (`data/splits_v3.json`),
