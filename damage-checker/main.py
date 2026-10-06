@@ -64,6 +64,7 @@ import io
 import json
 import os
 import threading
+import time
 import warnings
 from datetime import datetime, timezone
 from pathlib import Path
@@ -146,12 +147,27 @@ _preprocess = transforms.Compose([
 ])
 
 # ---------------------------------------------------------------------------
-# POST /classify-scene memory caps (Render free tier is 512 MB RAM)
+# POST /classify-scene caps (Render free tier: 512 MB RAM, 0.5 vCPU)
 # ---------------------------------------------------------------------------
-# Decoded RGB is about 3 bytes per pixel. 16,777,216 pixels is ~48 MiB,
-# which leaves headroom beside two ResNet-18s. Both caps are env-overridable.
+# Decoded RGB is about 3 bytes per pixel. 16,777,216 pixels is ~48 MiB of
+# pixels. Measured with scripts/measure_classify_scene.py on 2026-10-06.
+# Scene-attributable private bytes were 69 MB for 3000x3000 (9M px,
+# allowed) and 275 MB for 6000x6000 (36M px, rejected). At this cap that
+# scales to about 128 MB, which stays well under 400 MB. The Windows
+# working set on the measurement machine sits near 740 MB before any
+# scene because torch/MKL are mapped in. Both caps are env-overridable.
 DEFAULT_SCENE_MAX_PIXELS = 16_777_216
-DEFAULT_SCENE_MAX_TILES = 400
+# CPU measurement, CUDA_VISIBLE_DEVICES=-1, 8 torch threads, 16 logical
+# CPUs: median 0.0435 s/tile, p95 0.0449 s/tile over 36 tiles.
+# Single-thread median 0.122 s (2.8x). A 0.5 vCPU instance is assumed
+# another 2x slower than one full core, 6x versus the 8-thread p95.
+# 111 tiles * 0.0449 s * 6 ≈ 30 s.
+DEFAULT_SCENE_MAX_TILES = 111
+# Stop classifying once this many seconds have elapsed and return the
+# tiles finished so far. Above the ~30 s tile-cap budget so a full allowed
+# scene can finish, and under a platform timeout if the instance is slower
+# than the 6x assumption.
+DEFAULT_SCENE_TIME_BUDGET_SECONDS = 40.0
 # Worst-class order for overall_damage_level. Uncertain tiles are excluded.
 _DAMAGE_SEVERITY = {"none": 0, "partial": 1, "destroyed": 2}
 
@@ -400,6 +416,26 @@ def _env_int(name: str, default: int) -> int:
     except ValueError:
         return default
     return value if value >= 1 else default
+
+
+def _env_float(name: str, default: float) -> float:
+    """Read a non-negative float env var, or return default.
+
+    Zero is valid: a budget of 0 returns before the first tile.
+    """
+    raw = os.environ.get(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        value = float(str(raw).strip())
+    except ValueError:
+        return default
+    return value if value >= 0 else default
+
+
+def _scene_clock() -> float:
+    """Monotonic clock for the scene time budget. Tests replace this."""
+    return time.monotonic()
 
 
 class _SceneReject(Exception):
@@ -657,10 +693,18 @@ async def classify_scene(
     damage_breakdown includes "uncertain". /rank-priority's DamageBreakdown
     only declares none, partial, and destroyed — those three counts are the
     scoring input. uncertain is not removed here to fit that schema.
+
+    Classification stops once SCENE_TIME_BUDGET_SECONDS have elapsed.
+    The response then has truncated=true, tiles_processed tiles, and
+    tiles_total equal to the full kept-tile plan. Counts and
+    percent_damaged cover only the tiles that finished.
     """
     contents = await image.read()
     max_pixels = _env_int("SCENE_MAX_PIXELS", DEFAULT_SCENE_MAX_PIXELS)
     max_tiles = _env_int("SCENE_MAX_TILES", DEFAULT_SCENE_MAX_TILES)
+    time_budget_s = _env_float(
+        "SCENE_TIME_BUDGET_SECONDS", DEFAULT_SCENE_TIME_BUDGET_SECONDS
+    )
 
     try:
         pil_image = _decode_scene_image(contents, max_pixels)
@@ -687,8 +731,16 @@ async def classify_scene(
 
     counts = {"none": 0, "partial": 0, "destroyed": 0, "uncertain": 0}
     tiles_out = []
+    truncated = False
+    tiles_total = plan["tile_count"]
+    started = _scene_clock()
     try:
         for slot in plan["kept"]:
+            # Check before the tile so a slow tile still finishes, and so
+            # a budget of 0 returns without running the model.
+            if _scene_clock() - started >= time_budget_s:
+                truncated = True
+                break
             # Crop one tile. Do not materialise the whole scene as an array.
             crop = pil_image.crop((
                 slot["x"],
@@ -737,10 +789,14 @@ async def classify_scene(
         present = [name for name in ("none", "partial", "destroyed") if counts[name]]
         overall_damage_level = max(present, key=_DAMAGE_SEVERITY.get)
 
+    tiles_processed = len(tiles_out)
     response = {
         "tile_size": tile_size,
         "grid": {"rows": plan["rows"], "cols": plan["cols"]},
-        "tile_count": len(tiles_out),
+        "tile_count": tiles_processed,
+        "tiles_processed": tiles_processed,
+        "tiles_total": tiles_total,
+        "truncated": truncated,
         "skipped_count": plan["skipped_count"],
         "damage_breakdown": counts,
         "percent_damaged": percent_damaged,

@@ -43,6 +43,7 @@ passthrough label, default "unknown")
 
 Response:
 { "tile_size": 512, "grid": { "rows": 0, "cols": 0 }, "tile_count": 0,
+  "tiles_processed": 0, "tiles_total": 0, "truncated": false,
   "skipped_count": 0,
   "damage_breakdown": { "none": 0, "partial": 0, "destroyed": 0, "uncertain": 0 },
   "percent_damaged": number | null, "overall_damage_level": "none|partial|destroyed" | null,
@@ -53,9 +54,14 @@ Response:
 
 No image bytes are returned. Tiles do not overlap. A ragged edge tile under
 half of `tile_size` in either dimension is skipped (`skipped_count`) and
-omitted from `tiles`. `tile_count` is the number of tiles run through the
-model. OOD-flagged tiles have `label` "uncertain" and `uncertain` true, and
-are excluded from `percent_damaged` and `overall_damage_level`.
+omitted from `tiles`. `tile_count` and `tiles_processed` are the number of
+tiles run through the model. `tiles_total` is the number of kept tiles in
+the full grid. When the request hits `SCENE_TIME_BUDGET_SECONDS` (default
+40) it returns HTTP 200 with `truncated: true` and only the tiles finished
+so far (`tiles_processed` < `tiles_total`). OOD-flagged tiles have `label`
+"uncertain" and `uncertain` true, and are excluded from `percent_damaged`
+and `overall_damage_level`. Those fields, and `damage_breakdown`, count
+only tiles that finished.
 
 `percent_damaged` = (partial + destroyed) / (none + partial + destroyed),
 rounded to 4 decimal places, or null when that denominator is 0.
@@ -68,8 +74,9 @@ a tile-level estimate, not a building-level damage rate.
 
 Errors: pixels over `SCENE_MAX_PIXELS` (default 16777216) → HTTP 413
 { "error": "string", "code": "image_too_large" }. More tiles than
-`SCENE_MAX_TILES` (default 400) → HTTP 422
+`SCENE_MAX_TILES` (default 111) → HTTP 422
 { "error": "string", "code": "too_many_tiles" }. Invalid image → HTTP 400.
+A truncated scene is not an error.
 
 Passing the result to POST /rank-priority: the scoring input is
 `damage_breakdown` for none, partial, and destroyed, plus this response's

@@ -122,12 +122,31 @@ that is echoed back. A ragged edge tile smaller than half the tile size
 in either dimension is skipped. Tiles the OOD guard flags are reported as
 `uncertain` and left out of the damage percentages.
 
-The endpoint is sized for the 512 MB Render instance. The scene is decoded
-with Pillow and cropped one tile at a time; it is not held as a NumPy
-array. `Image.MAX_IMAGE_PIXELS` is set to a real cap (never disabled).
-Images over `SCENE_MAX_PIXELS` (default 16,777,216) return HTTP 413.
-Scenes that would run more than `SCENE_MAX_TILES` tiles (default 400)
-return HTTP 422.
+The endpoint is sized for the Render free instance (512 MB RAM, 0.5 vCPU).
+The scene is decoded with Pillow and cropped one tile at a time; it is
+not held as a NumPy array. `Image.MAX_IMAGE_PIXELS` is set to a real cap
+(never disabled). Images over `SCENE_MAX_PIXELS` (default 16,777,216)
+return HTTP 413. Scenes that would run more than `SCENE_MAX_TILES` tiles
+(default 111) return HTTP 422.
+
+CPU measurement (`CUDA_VISIBLE_DEVICES=-1`, 8 PyTorch threads, 16 logical
+CPUs; re-run with `scripts/measure_classify_scene.py`): median 0.0435 s
+per tile, p95 0.0449 s, over 36 tiles of a 3000×3000 scene. A 0.5 vCPU
+instance is assumed **6×** slower than that 8-thread p95. Single-thread
+median on this machine was 0.122 s, about 2.8× the 8-thread median, and
+half a core is another 2×. 111 tiles × 0.0449 s × 6 is about 30 s. If a
+request is still running after `SCENE_TIME_BUDGET_SECONDS` (default 40),
+tiling stops and the response is the tiles finished so far, with
+`truncated: true`, `tiles_processed`, and `tiles_total`. Counts and
+`percent_damaged` cover only those finished tiles.
+
+Peak RSS while classifying was 805 MB for 3000×3000 and 942 MB for
+6000×6000 (an earlier run of the same scenes peaked at 811 MB and
+1013 MB). About 739 MB is already resident after the models load
+(torch/MKL working set on this Windows machine). Private bytes added by
+the scene were 69 MB and 275 MB. At the default pixel cap that scales to
+about 128 MB, which is well under 400 MB. A 6000×6000 scene is over the
+cap.
 
 **Tile-level labels are a proxy.** The model was trained on
 worst-building-per-tile labels at two different scales, 1024 px xBD and

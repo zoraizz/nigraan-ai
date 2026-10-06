@@ -229,6 +229,109 @@ class TestClassifyScene(unittest.TestCase):
         self.assertEqual(body["code"], "too_many_tiles")
         self.assertIn("2 tiles", body["error"])
 
+    def test_time_budget_zero_returns_no_tiles(self):
+        scene = _png_bytes(Image.new("RGB", (1024, 512), (10, 20, 30)))
+        old = os.environ.get("SCENE_TIME_BUDGET_SECONDS")
+        os.environ["SCENE_TIME_BUDGET_SECONDS"] = "0"
+        try:
+            status, body = _payload(_run(main.classify_scene(
+                image=_upload(scene, "budget.png"),
+                tile_size=512,
+                area="Sindh",
+            )))
+        finally:
+            if old is None:
+                os.environ.pop("SCENE_TIME_BUDGET_SECONDS", None)
+            else:
+                os.environ["SCENE_TIME_BUDGET_SECONDS"] = old
+
+        self.assertEqual(status, 200)
+        self.assertIs(body["truncated"], True)
+        self.assertEqual(body["tiles_processed"], 0)
+        self.assertEqual(body["tiles_total"], 2)
+        self.assertEqual(body["tile_count"], 0)
+        self.assertEqual(body["tiles"], [])
+        self.assertEqual(body["skipped_count"], 0)
+        self.assertEqual(
+            body["damage_breakdown"],
+            {"none": 0, "partial": 0, "destroyed": 0, "uncertain": 0},
+        )
+        self.assertIsNone(body["percent_damaged"])
+        self.assertIsNone(body["overall_damage_level"])
+        self.assertEqual(body["area"], "Sindh")
+
+    def test_time_budget_stops_after_one_tile(self):
+        sample_name, label, confidence = STITCH_SAMPLES[0]
+        sample = Image.open(SAMPLE_DIR / sample_name).convert("RGB")
+        canvas = Image.new("RGB", (1024, 512), (255, 0, 0))
+        canvas.paste(sample, (0, 0))
+        sample.close()
+        scene = _png_bytes(canvas)
+        canvas.close()
+
+        # start, check before tile 0 (elapsed 0), check before tile 1 (over).
+        clocks = iter([1000.0, 1000.0, 1050.0])
+        original_clock = main._scene_clock
+        main._scene_clock = lambda: next(clocks)
+        old = os.environ.get("SCENE_TIME_BUDGET_SECONDS")
+        os.environ["SCENE_TIME_BUDGET_SECONDS"] = "40"
+        try:
+            status, body = _payload(_run(main.classify_scene(
+                image=_upload(scene, "partial-budget.png"),
+                tile_size=512,
+                area="unknown",
+            )))
+        finally:
+            main._scene_clock = original_clock
+            if old is None:
+                os.environ.pop("SCENE_TIME_BUDGET_SECONDS", None)
+            else:
+                os.environ["SCENE_TIME_BUDGET_SECONDS"] = old
+
+        self.assertEqual(status, 200)
+        self.assertIs(body["truncated"], True)
+        self.assertEqual(body["tiles_processed"], 1)
+        self.assertEqual(body["tiles_total"], 2)
+        self.assertEqual(body["tile_count"], 1)
+        self.assertEqual(len(body["tiles"]), 1)
+        single_status, single = _payload(_run(main.classify_damage(
+            image=_upload((SAMPLE_DIR / sample_name).read_bytes(), sample_name),
+            area="unknown",
+        )))
+        self.assertEqual(single_status, 200)
+        tile = body["tiles"][0]
+        self.assertEqual(tile["label"], single["damage_level"])
+        self.assertEqual(tile["confidence"], single["confidence"])
+        self.assertEqual(tile["label"], label)
+        self.assertEqual(tile["confidence"], confidence)
+        self.assertFalse(tile["uncertain"])
+        self.assertEqual(tile["col"], 0)
+        self.assertEqual(body["damage_breakdown"]["none"], 1)
+        self.assertEqual(body["damage_breakdown"]["uncertain"], 0)
+        self.assertEqual(body["percent_damaged"], 0.0)
+        self.assertEqual(body["overall_damage_level"], "none")
+
+    def test_within_budget_is_not_truncated(self):
+        scene = _png_bytes(Image.new("RGB", (512, 512), (10, 20, 30)))
+        old = os.environ.get("SCENE_TIME_BUDGET_SECONDS")
+        os.environ.pop("SCENE_TIME_BUDGET_SECONDS", None)
+        try:
+            status, body = _payload(_run(main.classify_scene(
+                image=_upload(scene, "full.png"),
+                tile_size=512,
+                area="unknown",
+            )))
+        finally:
+            if old is not None:
+                os.environ["SCENE_TIME_BUDGET_SECONDS"] = old
+
+        self.assertEqual(status, 200)
+        self.assertIs(body["truncated"], False)
+        self.assertEqual(body["tiles_processed"], 1)
+        self.assertEqual(body["tiles_total"], 1)
+        self.assertEqual(body["tile_count"], body["tiles_processed"])
+        self.assertEqual(len(body["tiles"]), 1)
+
     def test_classify_damage_output_unchanged(self):
         name, label, confidence = JOPLIN
         status, body = _payload(_run(main.classify_damage(
