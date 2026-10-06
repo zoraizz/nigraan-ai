@@ -6,6 +6,13 @@ Exposes POST /classify-damage matching API_CONTRACT.md:
     Response: { "damage_level": "none|partial|destroyed",
                 "confidence": float, "area": "string" }
 
+Also exposes POST /classify-scene: one large image is cut into a
+non-overlapping grid and each kept tile is classified with the same model
+path and OOD check as /classify-damage. Tile labels are a proxy — the model
+was trained on worst-building-per-tile labels at two scales (1024 px xBD
+and 512 px EBD) — so percent_damaged is a tile-level estimate, not a
+building-level damage rate.
+
 Run:
     uvicorn main:app --host 0.0.0.0 --port 8001
 
@@ -57,6 +64,8 @@ import io
 import json
 import os
 import threading
+import time
+import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -136,6 +145,31 @@ _preprocess = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406],
                          std=[0.229, 0.224, 0.225]),
 ])
+
+# ---------------------------------------------------------------------------
+# POST /classify-scene caps (Render free tier: 512 MB RAM, 0.5 vCPU)
+# ---------------------------------------------------------------------------
+# Decoded RGB is about 3 bytes per pixel. 16,777,216 pixels is ~48 MiB of
+# pixels. Measured with scripts/measure_classify_scene.py on 2026-10-06.
+# Scene-attributable private bytes were 69 MB for 3000x3000 (9M px,
+# allowed) and 275 MB for 6000x6000 (36M px, rejected). At this cap that
+# scales to about 128 MB, which stays well under 400 MB. The Windows
+# working set on the measurement machine sits near 740 MB before any
+# scene because torch/MKL are mapped in. Both caps are env-overridable.
+DEFAULT_SCENE_MAX_PIXELS = 16_777_216
+# CPU measurement, CUDA_VISIBLE_DEVICES=-1, 8 torch threads, 16 logical
+# CPUs: median 0.0435 s/tile, p95 0.0449 s/tile over 36 tiles.
+# Single-thread median 0.122 s (2.8x). A 0.5 vCPU instance is assumed
+# another 2x slower than one full core, 6x versus the 8-thread p95.
+# 111 tiles * 0.0449 s * 6 ≈ 30 s.
+DEFAULT_SCENE_MAX_TILES = 111
+# Stop classifying once this many seconds have elapsed and return the
+# tiles finished so far. Above the ~30 s tile-cap budget so a full allowed
+# scene can finish, and under a platform timeout if the instance is slower
+# than the 6x assumption.
+DEFAULT_SCENE_TIME_BUDGET_SECONDS = 40.0
+# Worst-class order for overall_damage_level. Uncertain tiles are excluded.
+_DAMAGE_SEVERITY = {"none": 0, "partial": 1, "destroyed": 2}
 
 # ---------------------------------------------------------------------------
 # Ground-truth lookup -- built at startup from labels.csv files under data/
@@ -372,6 +406,166 @@ async def startup():
     _load_ood_reference()
 
 
+def _env_int(name: str, default: int) -> int:
+    """Read a positive integer env var, or return default."""
+    raw = os.environ.get(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        value = int(str(raw).strip())
+    except ValueError:
+        return default
+    return value if value >= 1 else default
+
+
+def _env_float(name: str, default: float) -> float:
+    """Read a non-negative float env var, or return default.
+
+    Zero is valid: a budget of 0 returns before the first tile.
+    """
+    raw = os.environ.get(name)
+    if raw is None or not str(raw).strip():
+        return default
+    try:
+        value = float(str(raw).strip())
+    except ValueError:
+        return default
+    return value if value >= 0 else default
+
+
+def _scene_clock() -> float:
+    """Monotonic clock for the scene time budget. Tests replace this."""
+    return time.monotonic()
+
+
+class _SceneReject(Exception):
+    """A scene request that should be rejected before any tile is classified."""
+
+    def __init__(self, status_code: int, code: str, message: str):
+        super().__init__(message)
+        self.status_code = status_code
+        self.code = code
+        self.message = message
+
+
+def _scene_error(exc: _SceneReject) -> JSONResponse:
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={"error": exc.message, "code": exc.code},
+    )
+
+
+def _classify_pil(pil_image: Image.Image) -> dict:
+    """Run one image through the same model path and OOD check as /classify-damage.
+
+    Tiles must be classified one at a time. The OOD hooks stash the latest
+    embedding in module globals, which is the same single-request pattern
+    /classify-damage already uses.
+    """
+    tensor = _preprocess(pil_image).unsqueeze(0).to(DEVICE)  # (1, 3, 224, 224)
+    with torch.no_grad():
+        features = _model.backbone(tensor)
+        logits = _model.head(features)
+        probs = torch.softmax(logits, dim=1)
+        confidence, pred_idx = probs.max(dim=1)
+        if _imagenet_loaded:
+            _imagenet_model(tensor)  # avgpool hook captures the embedding
+
+    confidence_val = round(confidence.item(), 4)
+    return {
+        "damage_level": IDX_TO_LABEL[pred_idx.item()],
+        "confidence": confidence_val,
+        "ood": _ood_check(_last_layer1, _last_imagenet_feat, confidence_val),
+    }
+
+
+def _decode_scene_image(contents: bytes, max_pixels: int) -> Image.Image:
+    """Decode one scene under an explicit pixel cap.
+
+    The caller crops tiles with Pillow one at a time. The full image is
+    never converted to a NumPy array. Image.MAX_IMAGE_PIXELS is set to
+    max_pixels for this decode only (never to None, which would disable
+    Pillow's decompression-bomb guard) and then restored so
+    /classify-damage keeps Pillow's default limit.
+    """
+    previous_cap = Image.MAX_IMAGE_PIXELS
+    # Deliberate ceiling. Do not assign None.
+    Image.MAX_IMAGE_PIXELS = max_pixels
+    opened = None
+    try:
+        # Between 1x and 2x the cap Pillow only warns; the check below returns
+        # 413. At 2x it raises DecompressionBombError, which we also map to 413.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", Image.DecompressionBombWarning)
+            try:
+                opened = Image.open(io.BytesIO(contents))
+                width, height = opened.size
+            except Image.DecompressionBombError:
+                raise _SceneReject(
+                    413,
+                    "image_too_large",
+                    f"Image exceeds the pixel cap of {max_pixels} pixels.",
+                )
+            pixels = width * height
+            if width < 1 or height < 1 or pixels > max_pixels:
+                raise _SceneReject(
+                    413,
+                    "image_too_large",
+                    f"Image is {pixels} pixels, which exceeds the cap of {max_pixels} pixels.",
+                )
+            try:
+                rgb = opened.convert("RGB")
+            except Image.DecompressionBombError:
+                raise _SceneReject(
+                    413,
+                    "image_too_large",
+                    f"Image exceeds the pixel cap of {max_pixels} pixels.",
+                )
+        if rgb is not opened:
+            opened.close()
+        opened = None
+        return rgb
+    finally:
+        if opened is not None:
+            opened.close()
+        Image.MAX_IMAGE_PIXELS = previous_cap
+
+
+def _plan_tiles(width: int, height: int, tile_size: int) -> dict:
+    """Non-overlapping grid. A ragged edge under half the tile size is skipped.
+
+    "Under half" is strict: a remainder of exactly tile_size/2 is kept.
+    grid rows/cols include a ragged slot even when that slot is skipped.
+    tile_count counts slots that will be run through the model.
+    """
+    xs = list(range(0, width, tile_size))
+    ys = list(range(0, height, tile_size))
+    kept = []
+    skipped = 0
+    for row, y in enumerate(ys):
+        for col, x in enumerate(xs):
+            tw = min(tile_size, width - x)
+            th = min(tile_size, height - y)
+            if tw * 2 < tile_size or th * 2 < tile_size:
+                skipped += 1
+                continue
+            kept.append({
+                "row": row,
+                "col": col,
+                "x": x,
+                "y": y,
+                "width": tw,
+                "height": th,
+            })
+    return {
+        "rows": len(ys),
+        "cols": len(xs),
+        "kept": kept,
+        "skipped_count": skipped,
+        "tile_count": len(kept),
+    }
+
+
 # ---------------------------------------------------------------------------
 # Health check
 # ---------------------------------------------------------------------------
@@ -419,23 +613,11 @@ async def classify_damage(
     # Derive image identifier from filename (strip extension)
     image_id = Path(image.filename or "unknown").stem
 
-    tensor = _preprocess(pil_image).unsqueeze(0).to(DEVICE)  # (1, 3, 224, 224)
-
-    # Inference (backbone then head, so the layer1 hook captures the
-    # embedding used by the texture OOD signal; the stock ImageNet model
-    # forward captures the avgpool embedding used by the photo signal)
-    with torch.no_grad():
-        features = _model.backbone(tensor)
-        logits = _model.head(features)
-        probs = torch.softmax(logits, dim=1)
-        confidence, pred_idx = probs.max(dim=1)
-        if _imagenet_loaded:
-            _imagenet_model(tensor)  # avgpool hook captures the embedding
-
-    damage_level = IDX_TO_LABEL[pred_idx.item()]
-    confidence_val = round(confidence.item(), 4)
-
-    ood = _ood_check(_last_layer1, _last_imagenet_feat, confidence_val)
+    # Same model path and OOD check as each tile of POST /classify-scene.
+    pred = _classify_pil(pil_image)
+    damage_level = pred["damage_level"]
+    confidence_val = pred["confidence"]
+    ood = pred["ood"]
 
     response = {
         "damage_level": damage_level,
@@ -474,4 +656,155 @@ async def classify_damage(
     if not _model_loaded:
         headers["X-Model-Warning"] = "untrained-weights"
 
+    return JSONResponse(content=response, headers=headers)
+
+
+# ---------------------------------------------------------------------------
+# POST /classify-scene
+# ---------------------------------------------------------------------------
+@app.post("/classify-scene")
+async def classify_scene(
+    image: UploadFile = File(..., description="Large post-disaster satellite image"),
+    tile_size: int = Query(
+        default=512,
+        ge=256,
+        le=1024,
+        description="Tile edge length in pixels. Tiles do not overlap.",
+    ),
+    area: str = Query(
+        default="unknown",
+        description=(
+            "Geographic area / district name. Passed through to the response, "
+            "same as /classify-damage. Not computed by the model."
+        ),
+    ),
+):
+    """Classify a large scene by tiling it with the single-tile model.
+
+    Tile-level labels are a proxy. The checkpoint was trained on
+    worst-building-per-tile labels at two scales (1024 px xBD and 512 px
+    EBD), so a tile is "destroyed" when its worst building was destroyed
+    even if most of the tile is intact. percent_damaged is
+    (partial + destroyed) / classified tiles: a tile-level estimate, not a
+    building-level damage rate. OOD-flagged tiles are "uncertain" and are
+    left out of that fraction. Ragged edge tiles under half the tile size
+    in either dimension are skipped.
+
+    damage_breakdown includes "uncertain". /rank-priority's DamageBreakdown
+    only declares none, partial, and destroyed — those three counts are the
+    scoring input. uncertain is not removed here to fit that schema.
+
+    Classification stops once SCENE_TIME_BUDGET_SECONDS have elapsed.
+    The response then has truncated=true, tiles_processed tiles, and
+    tiles_total equal to the full kept-tile plan. Counts and
+    percent_damaged cover only the tiles that finished.
+    """
+    contents = await image.read()
+    max_pixels = _env_int("SCENE_MAX_PIXELS", DEFAULT_SCENE_MAX_PIXELS)
+    max_tiles = _env_int("SCENE_MAX_TILES", DEFAULT_SCENE_MAX_TILES)
+    time_budget_s = _env_float(
+        "SCENE_TIME_BUDGET_SECONDS", DEFAULT_SCENE_TIME_BUDGET_SECONDS
+    )
+
+    try:
+        pil_image = _decode_scene_image(contents, max_pixels)
+    except _SceneReject as exc:
+        return _scene_error(exc)
+    except Exception:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "Invalid image file. Expected a valid image format."},
+        )
+
+    width, height = pil_image.size
+    plan = _plan_tiles(width, height, tile_size)
+    if plan["tile_count"] > max_tiles:
+        pil_image.close()
+        return _scene_error(_SceneReject(
+            422,
+            "too_many_tiles",
+            (
+                f"Scene produces {plan['tile_count']} tiles at "
+                f"tile_size={tile_size}; the cap is {max_tiles}."
+            ),
+        ))
+
+    counts = {"none": 0, "partial": 0, "destroyed": 0, "uncertain": 0}
+    tiles_out = []
+    truncated = False
+    tiles_total = plan["tile_count"]
+    started = _scene_clock()
+    try:
+        for slot in plan["kept"]:
+            # Check before the tile so a slow tile still finishes, and so
+            # a budget of 0 returns without running the model.
+            if _scene_clock() - started >= time_budget_s:
+                truncated = True
+                break
+            # Crop one tile. Do not materialise the whole scene as an array.
+            crop = pil_image.crop((
+                slot["x"],
+                slot["y"],
+                slot["x"] + slot["width"],
+                slot["y"] + slot["height"],
+            ))
+            try:
+                pred = _classify_pil(crop)
+            finally:
+                crop.close()
+
+            ood = pred["ood"]
+            uncertain = bool(ood and ood.get("is_out_of_domain"))
+            if uncertain:
+                counts["uncertain"] += 1
+                label = "uncertain"
+            else:
+                label = pred["damage_level"]
+                counts[label] += 1
+            tiles_out.append({
+                "row": slot["row"],
+                "col": slot["col"],
+                "x": slot["x"],
+                "y": slot["y"],
+                "label": label,
+                "confidence": pred["confidence"],
+                "uncertain": uncertain,
+            })
+    finally:
+        pil_image.close()
+
+    classified = counts["none"] + counts["partial"] + counts["destroyed"]
+    if classified == 0:
+        # Nothing /rank-priority can score. Do not invent a class.
+        percent_damaged = None
+        overall_damage_level = None
+    else:
+        # Same ratio as aid-priority score_breakdown. Rounded to 4 d.p.,
+        # which is how /rank-priority reports percent_damaged. That endpoint
+        # recomputes the ratio from the three counts; it does not read this
+        # field. Null when no tile was classified.
+        percent_damaged = round(
+            (counts["partial"] + counts["destroyed"]) / classified, 4
+        )
+        present = [name for name in ("none", "partial", "destroyed") if counts[name]]
+        overall_damage_level = max(present, key=_DAMAGE_SEVERITY.get)
+
+    tiles_processed = len(tiles_out)
+    response = {
+        "tile_size": tile_size,
+        "grid": {"rows": plan["rows"], "cols": plan["cols"]},
+        "tile_count": tiles_processed,
+        "tiles_processed": tiles_processed,
+        "tiles_total": tiles_total,
+        "truncated": truncated,
+        "skipped_count": plan["skipped_count"],
+        "damage_breakdown": counts,
+        "percent_damaged": percent_damaged,
+        "overall_damage_level": overall_damage_level,
+        "tiles": tiles_out,
+        "area": area,
+    }
+    headers = {}
+    if not _model_loaded:
+        headers["X-Model-Warning"] = "untrained-weights"
     return JSONResponse(content=response, headers=headers)

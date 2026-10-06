@@ -1,8 +1,9 @@
 // Shared fetch wrapper used by every api/* module.
 // - Base URLs come from ../config/endpoints.js (env-var driven, one per service)
-// - Non-2xx responses raise ApiError carrying the backend's unified error body
-//   ({ "error": { "code": ..., "message": ... } }) when present; FastAPI's
-//   standard 422 "detail" format is handled too
+// - Non-2xx responses raise ApiError. Message extraction covers Aid Priority's
+//   { "error": { "code", "message" } }, Damage Checker's scene rejects
+//   { "error": "<text that includes the env limit>", "code" }, and FastAPI's
+//   422 "detail" format.
 // - Bodies are parsed as JSON when possible; empty bodies resolve to null
 
 export class ApiError extends Error {
@@ -12,6 +13,25 @@ export class ApiError extends Error {
     this.status = status
     this.body = body
   }
+}
+
+// Damage Checker scene rejects use { "error": "string", "code": "..." }
+// (the string already states the env-configured limit). Aid Priority uses
+// { "error": { "code", "message" } }. FastAPI validation uses "detail".
+export function apiErrorMessage(body, status) {
+  if (body && typeof body.error === 'string' && body.error) {
+    return body.error
+  }
+  if (body && body.error && typeof body.error.message === 'string' && body.error.message) {
+    return body.error.message
+  }
+  if (Array.isArray(body && body.detail)) {
+    return body.detail.map((item) => item.msg || JSON.stringify(item)).join('; ')
+  }
+  if (body && typeof body.detail === 'string' && body.detail) {
+    return body.detail
+  }
+  return `Request failed with status ${status}`
 }
 
 async function request(baseUrl, path, options = {}) {
@@ -36,13 +56,7 @@ async function request(baseUrl, path, options = {}) {
   }
 
   if (!response.ok) {
-    const message =
-      (body && body.error && body.error.message) ||
-      (Array.isArray(body && body.detail)
-        ? body.detail.map((item) => item.msg || JSON.stringify(item)).join('; ')
-        : body && body.detail) ||
-      `Request failed with status ${response.status}`
-    throw new ApiError(message, response.status, body)
+    throw new ApiError(apiErrorMessage(body, response.status), response.status, body)
   }
 
   return body

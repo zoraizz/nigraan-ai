@@ -35,6 +35,60 @@ damage-checker/ood_reference.json), the response additionally carries
 "damage_level"/"confidence" still hold the raw model prediction for
 transparency — treat it as unreliable when flagged.
 
+## POST /classify-scene
+Request: multipart/form-data, field "image"
+
+Query: `tile_size` (default 512, allowed 256–1024), `area` (optional
+passthrough label, default "unknown")
+
+Response:
+{ "tile_size": 512, "grid": { "rows": 0, "cols": 0 }, "tile_count": 0,
+  "tiles_processed": 0, "tiles_total": 0, "truncated": false,
+  "skipped_count": 0,
+  "damage_breakdown": { "none": 0, "partial": 0, "destroyed": 0, "uncertain": 0 },
+  "percent_damaged": number | null, "overall_damage_level": "none|partial|destroyed" | null,
+  "tiles": [ { "row": 0, "col": 0, "x": 0, "y": 0,
+               "label": "none|partial|destroyed|uncertain",
+               "confidence": number, "uncertain": boolean } ],
+  "area": "string" }
+
+No image bytes are returned. Tiles do not overlap. A ragged edge tile under
+half of `tile_size` in either dimension is skipped (`skipped_count`) and
+omitted from `tiles`. `tile_count` and `tiles_processed` are the number of
+tiles run through the model. `tiles_total` is the number of kept tiles in
+the full grid. When the request hits `SCENE_TIME_BUDGET_SECONDS` (default
+40) it returns HTTP 200 with `truncated: true` and only the tiles finished
+so far (`tiles_processed` < `tiles_total`). OOD-flagged tiles have `label`
+"uncertain" and `uncertain` true, and are excluded from `percent_damaged`
+and `overall_damage_level`. Those fields, and `damage_breakdown`, count
+only tiles that finished.
+
+`percent_damaged` = (partial + destroyed) / (none + partial + destroyed),
+rounded to 4 decimal places, or null when that denominator is 0.
+`overall_damage_level` is the worst class among classified tiles
+(none < partial < destroyed), or null when none were classified.
+
+Tile labels are a proxy. The model was trained on worst-building-per-tile
+labels at two scales (1024 px xBD and 512 px EBD), so `percent_damaged` is
+a tile-level estimate, not a building-level damage rate.
+
+Errors: pixels over `SCENE_MAX_PIXELS` (default 16777216) → HTTP 413
+{ "error": "string", "code": "image_too_large" }. More tiles than
+`SCENE_MAX_TILES` (default 111) → HTTP 422
+{ "error": "string", "code": "too_many_tiles" }. Invalid image → HTTP 400.
+A truncated scene is not an error.
+
+Passing the result to POST /rank-priority: the scoring input is
+`damage_breakdown` for none, partial, and destroyed, plus this response's
+`tile_count` when the caller wants coverage. /rank-priority accepts exactly
+one damage source, so a scene submission uses the breakdown on its own.
+This response's `overall_damage_level` means the worst class across
+classified tiles; /rank-priority's `overall_damage_level` means the label
+of one tile. `uncertain` is not a field of /rank-priority's DamageBreakdown
+(the current model ignores that extra key). `skipped_count` has no field
+there. A scene with zero classified tiles has nothing to submit:
+/rank-priority requires at least one classified tile.
+
 ## POST /rank-priority
 Request: JSON body
 {
