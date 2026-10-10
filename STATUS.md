@@ -1,0 +1,9 @@
+# Status (update at the end of every task)
+- Live on Render: all four services; the Open-Meteo 429 fix is deployed and working.
+- feat/replay: 2022 backtest of the rule-based scorer done (scripts/, data/replay/). Not merged.
+- feat/scene-tiling and feat/scene-viewer are merged into dev (merge commit on dev, pushed). Not deployed.
+- Scene mode on dev: grid overlay tracks tile x/y as percentages of the displayed image (verified 2×2, horizontal and vertical). Use in Aid Priority stores one district's damage_breakdown and tile_count; the live ranking labels that district "damage from uploaded scene" and scores it with 0.4×risk + 0.6×damage. A 1 s SCENE_TIME_BUDGET_SECONDS run returns truncated=true and the "partial scene" label; the default 40 s budget is restored locally. An all-uncertain non-satellite photo draws dashed tiles and "no usable tiles".
+- Demo mosaic: damage-checker/sample-images/demo-scene-2x2.png (synthetic 1024×1024, unrelated tiles). Local memory-test image tmp/scene-memory-2048.png is excluded and not committed.
+- Next: feat/risk-signals (preregistered evaluation).
+- Open: README claims check (the "Alibaba PAI" mention).
+- Local backup 2026-10-10: branch `backup/local-snapshot-20261010` from `dev` (`9d82d1f`). Not pushed, not merged. No tracked files differed from `dev`. Included untracked damage-checker scripts (`test_inference.py` and the `_*.py` investigation helpers) plus this file. Skipped: `.env` secrets; `venv` / `.venv` / `node_modules` / `__pycache__` / `dist` / `.vite`; logs; local prewarm scratch under `risk-flag/prewarm_*`; `data/replay/raw/` (96 archive/forecast/previous_runs JSON files, ~5 MB — not referenced by code on `dev`); multi-GB `damage-checker/data`, `xbd_raw`, and `xbd_raw_tier3`; extra checkpoints (`best_model.pth`, `imagenet_resnet18_v1.pth`, `xbd_real_model_v2.pth`) beyond the already-tracked `xbd_ebd_v3.pth`; `tmp/scene-memory-2048.png`; `.cursor/`.
