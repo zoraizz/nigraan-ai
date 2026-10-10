@@ -10,7 +10,12 @@ totals); the caller only identifies the district.
 Response:
 { "district": "string", "hazard_types": ["string"], "rainfall_forecast_mm": number | null,
   "rainfall_30d_mm": number | null, "rainfall_90d_mm": number | null,
-  "risk_level": "low|medium|high|unknown", "reason": "string", "cached": boolean }
+  "risk_level": "low|medium|high|unknown", "reason": "string", "cached": boolean,
+  "reasoning_source": "gemini|grok|fallback|cache" | null,
+  "reasoning_error": "api_error|bad_json" | null }
+
+reasoning_source is null for an unknown district. reasoning_error is a short
+code only (never a stack trace or secret) and is null when scoring succeeded.
 
 ## POST /classify-damage
 Request: multipart/form-data, field "image"

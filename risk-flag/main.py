@@ -49,7 +49,7 @@ def _cache_get(district: str) -> "RiskResponse | None":
         if time.time() - ts > _CACHE_TTL_SECS:
             del _cache[district]
             return None
-        return body.model_copy(update={"cached": True})
+        return body.model_copy(update={"cached": True, "reasoning_source": "cache"})
 
 
 def _cache_set(district: str, body: "RiskResponse") -> None:
@@ -305,6 +305,8 @@ class RiskResponse(BaseModel):
     reason: str
     cached: bool = False
     rainfall_unavailable: bool = False
+    reasoning_source: str | None = None  # "gemini" | "grok" | "fallback" | "cache"
+    reasoning_error: str | None = None  # "api_error" | "bad_json" | null
 
 
 # ---------------------------------------------------------------------------
@@ -601,7 +603,7 @@ def predict_risk(req: RiskRequest):
                 req.district,
             )
 
-    # ── Risk reasoning: try Gemini first, fall back to rules ───────────
+    # ── Risk reasoning: Gemini, then Grok if configured, then rules ──
     result = assess_risk_with_gemini(
         district=req.district,
         hazard_types=hazard_types,
@@ -612,18 +614,23 @@ def predict_risk(req: RiskRequest):
         rainfall_90d=rainfall_90d,
     )
 
-    if result is not None:
+    reasoning_error: str | None = None
+    if result is not None and result.error is None:
         risk_level = result.risk_level
         reason = result.rationale
+        reasoning_source = result.source
         logger.info(
             "Risk for %s: %s (source=%s, tokens=%s/%s)",
             req.district, risk_level, result.source,
             result.prompt_tokens, result.completion_tokens,
         )
     else:
+        if result is not None:
+            reasoning_error = result.error
         risk_level, reason = score_risk_fallback(
             req.district, hazard_types, rainfall_3d, rainfall_30d, rainfall_90d,
         )
+        reasoning_source = "fallback"
         logger.info("Risk for %s: %s (source=fallback)", req.district, risk_level)
 
     # Annotate reason when rainfall was unavailable
@@ -642,6 +649,8 @@ def predict_risk(req: RiskRequest):
         risk_level=risk_level,
         reason=reason,
         rainfall_unavailable=rainfall_unavailable,
+        reasoning_source=reasoning_source,
+        reasoning_error=reasoning_error,
     )
     _cache_set(req.district, body)
     return body

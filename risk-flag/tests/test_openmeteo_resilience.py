@@ -16,6 +16,7 @@ import time
 from unittest.mock import MagicMock, patch
 
 import pytest
+import requests
 from fastapi.testclient import TestClient
 
 # Import the app and internals we need to inspect / reset
@@ -322,3 +323,197 @@ def test_non_retryable_error_no_retry(mock_get, mock_sleep, _mock_gemini, client
     assert body["rainfall_unavailable"] is True
     # Only 1 call — no retries for 400
     assert mock_get.call_count == 1
+
+
+# ---------------------------------------------------------------------------
+# 11. reasoning_source on the response (scoring unchanged)
+# ---------------------------------------------------------------------------
+
+def _gemini_result(level: str = "high", rationale: str = "Gemini assessment."):
+    from risk_reasoning import ReasoningResult
+
+    return ReasoningResult(risk_level=level, rationale=rationale, source="gemini")
+
+
+@patch("main.assess_risk_with_gemini")
+@patch("requests.get", return_value=_mock_response(200, json_data=_FORECAST_OK))
+def test_reasoning_source_gemini_then_cache(mock_get, mock_gemini, client):
+    """A successful Gemini call is labeled gemini; the next hit is cache."""
+    mock_gemini.return_value = _gemini_result()
+
+    first = client.post("/predict-risk", json={"district": "Dadu"})
+    assert first.status_code == 200
+    body = first.json()
+    assert body["reasoning_source"] == "gemini"
+    assert body["reasoning_error"] is None
+    assert body["cached"] is False
+    assert body["risk_level"] == "high"
+    assert mock_gemini.call_count == 1
+
+    second = client.post("/predict-risk", json={"district": "Dadu"})
+    assert second.status_code == 200
+    cached = second.json()
+    assert cached["reasoning_source"] == "cache"
+    assert cached["reasoning_error"] is None
+    assert cached["cached"] is True
+    assert cached["risk_level"] == "high"
+    assert mock_gemini.call_count == 1
+    mock_get.assert_called()
+
+
+@patch("main.assess_risk_with_gemini")
+@patch("requests.get", return_value=_mock_response(200, json_data=_FORECAST_OK))
+def test_reasoning_source_fallback_on_api_error(mock_get, mock_gemini, client):
+    """An API error keeps rule scoring and reports reasoning_error."""
+    from risk_reasoning import ReasoningResult
+
+    mock_gemini.return_value = ReasoningResult(
+        risk_level="high",
+        rationale="do not use this rationale",
+        source="gemini",
+        error="api_error",
+    )
+
+    resp = client.post("/predict-risk", json={"district": "Dadu"})
+    assert resp.status_code == 200
+    body = resp.json()
+    # 60 mm over 3 days is the rule-based medium band, not the Gemini level.
+    assert body["risk_level"] == "medium"
+    assert "moderate flood risk" in body["reason"]
+    assert "do not use this rationale" not in body["reason"]
+    assert body["reasoning_source"] == "fallback"
+    assert body["reasoning_error"] == "api_error"
+    assert body["cached"] is False
+    mock_get.assert_called()
+
+
+# ---------------------------------------------------------------------------
+# 12. Gemini → Grok → rules
+# ---------------------------------------------------------------------------
+
+def _llm(source: str, level: str = "high", rationale: str = "model assessment"):
+    from risk_reasoning import ReasoningResult
+
+    return ReasoningResult(risk_level=level, rationale=rationale, source=source)
+
+
+def _llm_error(code: str):
+    from risk_reasoning import ReasoningResult
+
+    return ReasoningResult(
+        risk_level="", rationale="", source="fallback", error=code,
+    )
+
+
+def test_default_model_ids(monkeypatch):
+    import risk_reasoning
+
+    monkeypatch.delenv("GEMINI_MODEL", raising=False)
+    monkeypatch.delenv("GROK_MODEL", raising=False)
+    assert risk_reasoning._gemini_model() == "gemini-3.8-flash"
+    assert risk_reasoning._grok_model() == "grok-4.3"
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-custom")
+    monkeypatch.setenv("GROK_MODEL", "grok-custom")
+    assert risk_reasoning._gemini_model() == "gemini-custom"
+    assert risk_reasoning._grok_model() == "grok-custom"
+
+
+@patch("main.get_rainfall_forecast", return_value=60.0)
+@patch("risk_reasoning._call_grok")
+@patch("risk_reasoning._call_gemini", return_value=_llm("gemini"))
+def test_chain_gemini_ok(_gemini, mock_grok, _rain, client):
+    resp = client.post("/predict-risk", json={"district": "Dadu"})
+    body = resp.json()
+    assert resp.status_code == 200
+    assert body["reasoning_source"] == "gemini"
+    assert body["reasoning_error"] is None
+    assert body["risk_level"] == "high"
+    mock_grok.assert_not_called()
+
+
+@patch("main.get_rainfall_forecast", return_value=60.0)
+@patch("risk_reasoning._call_grok", return_value=_llm("grok", rationale="Grok assessment."))
+@patch("risk_reasoning._call_gemini", return_value=_llm_error("api_error"))
+def test_chain_gemini_fail_grok_ok(_gemini, _grok, _rain, client):
+    resp = client.post("/predict-risk", json={"district": "Dadu"})
+    body = resp.json()
+    assert body["reasoning_source"] == "grok"
+    assert body["reasoning_error"] is None
+    assert body["risk_level"] == "high"
+    assert "Grok assessment." in body["reason"]
+
+
+@patch("main.get_rainfall_forecast", return_value=60.0)
+@patch("risk_reasoning._call_grok", return_value=_llm_error("bad_json"))
+@patch("risk_reasoning._call_gemini", return_value=_llm_error("api_error"))
+def test_chain_both_fail_uses_rules(_gemini, _grok, _rain, client):
+    resp = client.post("/predict-risk", json={"district": "Dadu"})
+    body = resp.json()
+    assert body["reasoning_source"] == "fallback"
+    assert body["reasoning_error"] == "bad_json"
+    assert body["risk_level"] == "medium"
+    assert "moderate flood risk" in body["reason"]
+
+
+@patch("risk_reasoning.requests.post")
+@patch("main.get_rainfall_forecast", return_value=60.0)
+@patch("risk_reasoning._call_gemini", return_value=_llm_error("api_error"))
+def test_chain_no_grok_key_skips_grok(_gemini, _rain, mock_post, client, monkeypatch):
+    monkeypatch.delenv("XAI_API_KEY", raising=False)
+    resp = client.post("/predict-risk", json={"district": "Dadu"})
+    body = resp.json()
+    assert body["reasoning_source"] == "fallback"
+    assert body["reasoning_error"] == "api_error"
+    assert body["risk_level"] == "medium"
+    mock_post.assert_not_called()
+
+
+@patch("risk_reasoning.requests.post")
+def test_call_grok_reads_json(mock_post, monkeypatch):
+    import risk_reasoning
+
+    monkeypatch.setenv("XAI_API_KEY", "test-key-not-real")
+    monkeypatch.delenv("GROK_MODEL", raising=False)
+    mock_resp = MagicMock()
+    mock_resp.json.return_value = {
+        "choices": [{
+            "message": {"content": '{"risk_level":"low","rationale":"dry week"}'},
+        }],
+        "usage": {"prompt_tokens": 3, "completion_tokens": 4},
+    }
+    mock_post.return_value = mock_resp
+
+    result = risk_reasoning._call_grok("Dadu", "prompt")
+    assert result is not None
+    assert result.source == "grok"
+    assert result.risk_level == "low"
+    assert result.rationale == "dry week"
+    assert result.error is None
+    assert mock_post.call_args.args[0] == "https://api.x.ai/v1/chat/completions"
+    assert mock_post.call_args.kwargs["timeout"] == 15
+    assert mock_post.call_args.kwargs["json"]["model"] == "grok-4.3"
+    assert mock_post.call_args.kwargs["json"]["reasoning_effort"] == "none"
+    assert mock_post.call_args.kwargs["headers"]["Authorization"].startswith("Bearer ")
+
+
+@patch("risk_reasoning.requests.post", side_effect=requests.RequestException("sk-secret-should-not-leak"))
+def test_call_grok_error_is_a_short_code(mock_post, monkeypatch):
+    """Provider failures stay as api_error. The exception text is not returned."""
+    import risk_reasoning
+
+    monkeypatch.setenv("XAI_API_KEY", "test-key-not-real")
+    result = risk_reasoning._call_grok("Dadu", "prompt")
+    assert result is not None
+    assert result.error == "api_error"
+    assert result.rationale == ""
+    assert "sk-secret" not in repr(result)
+    mock_post.assert_called_once()
+
+
+def test_unknown_district_has_null_reasoning_fields(client):
+    resp = client.post("/predict-risk", json={"district": "Nowhere"})
+    body = resp.json()
+    assert resp.status_code == 200
+    assert body["risk_level"] == "unknown"
+    assert body["reasoning_source"] is None
+    assert body["reasoning_error"] is None

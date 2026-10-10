@@ -1,0 +1,10 @@
+# Status (update at the end of every task)
+- Live on Render: all four services; the Open-Meteo 429 fix is deployed and working.
+- feat/replay: 2022 backtest of the rule-based scorer done (scripts/, data/replay/). Not merged.
+- feat/scene-tiling and feat/scene-viewer are merged into dev (merge commit on dev, pushed). Not deployed.
+- Scene mode on dev: grid overlay tracks tile x/y as percentages of the displayed image (verified 2×2, horizontal and vertical). Use in Aid Priority stores one district's damage_breakdown and tile_count; the live ranking labels that district "damage from uploaded scene" and scores it with 0.4×risk + 0.6×damage. A 1 s SCENE_TIME_BUDGET_SECONDS run returns truncated=true and the "partial scene" label; the default 40 s budget is restored locally. An all-uncertain non-satellite photo draws dashed tiles and "no usable tiles".
+- Demo mosaic: damage-checker/sample-images/demo-scene-2x2.png (synthetic 1024×1024, unrelated tiles). Local memory-test image tmp/scene-memory-2048.png is excluded and not committed.
+- Next: feat/risk-signals (preregistered evaluation).
+- Open: README claims check (the "Alibaba PAI" mention).
+- Local backup 2026-10-10: branch `backup/local-snapshot-20261010` from `dev` (`9d82d1f`). Not pushed, not merged.
+- On dev (merged from feat/risk-reasoning-source): POST /predict-risk tries Gemini (`GEMINI_MODEL`, default `gemini-3.8-flash`), then Grok only when `XAI_API_KEY` is set (`GROK_MODEL`, default `grok-4.3`, one non-reasoning call to `https://api.x.ai/v1`), then the rule scorer. Response adds `reasoning_source` (`gemini` | `grok` | `fallback` | `cache`; null for an unknown district) and `reasoning_error` (`api_error` | `bad_json` | null). One 15s attempt per provider, no extra retries. Open-Meteo, dashboard, damage-checker, and aid-priority are unchanged. Not deployed. Live needs Render → risk-flag → Manual Deploy, plus env `GEMINI_API_KEY`, `GEMINI_MODEL=gemini-3.8-flash`, `XAI_API_KEY`, and optional `GROK_MODEL`. Local `.env` is not on Render. Do not commit real keys.
