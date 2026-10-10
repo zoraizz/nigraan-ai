@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../auth/useAuth.js'
+import Logo from './Logo.jsx'
 
-// Top bar — console identity, live PKT clock (a data readout, hence mono),
-// and the (no-op) auth status wiring.
 export default function Header() {
   const { user, isAuthenticated } = useAuth()
   const [now, setNow] = useState(() => new Date())
@@ -18,10 +17,13 @@ export default function Header() {
   })
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-line bg-surface px-4 lg:px-6">
-      <h1 className="font-heading text-[15px] font-semibold tracking-tight text-text">
-        Disaster Response Console
-      </h1>
+    <header className="flex h-14 shrink-0 items-center justify-between border-b border-line bg-surface/80 backdrop-blur-md px-4 lg:px-6">
+      <div className="flex items-center gap-3">
+        <Logo size="sm" className="lg:hidden" />
+        <h1 className="font-heading text-sm font-semibold tracking-tight text-text">
+          Disaster Response Console
+        </h1>
+      </div>
       <div className="flex items-center gap-4 text-xs text-muted">
         <span className="data" title="Pakistan Standard Time">
           PKT {clock}

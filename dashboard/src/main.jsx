@@ -4,6 +4,7 @@ import { HashRouter } from 'react-router-dom'
 import App from './App.jsx'
 import { AuthProvider } from './auth/AuthProvider.jsx'
 import './styles/index.css'
+import './styles/landing.css'
 
 // HashRouter (not BrowserRouter): the dashboard is deployed as a static site
 // on Render, whose free static hosting serves /index.html only for the root

@@ -1,70 +1,85 @@
-/* Nigraan design tokens — emergency-operations instrument panel.
-   Tailwind v4 CSS-first config: every --color-* / --font-* / --radius-* below
-   also generates utilities (bg-surface, text-muted, font-heading, rounded-panel). */
+/* Nigraan design tokens — "Command Center" theme.
+   Deep forest greens with signal colours (green / amber / orange / red),
+   Georgia headlines and a system-ui body, taken from the project's
+   homepage design. Tailwind v4 CSS-first config: every --color-* /
+   --font-* / --radius-* below also generates utilities (bg-surface,
+   text-muted, font-heading, rounded-panel). */
 
 @import "tailwindcss";
 
 @theme {
-  /* Surfaces */
-  --color-bg: #141922;
-  --color-surface: #1c222c;
-  --color-surface-2: #232b37;
-  --color-surface-hover: #2a3441;
-  --color-line: #2a3340;
-  --color-line-strong: #3a4656;
+  /* Surfaces: forest green, darkest at the page edge, lighter on panels. */
+  --color-bg: #04120c;
+  --color-surface: #0a2418;
+  --color-surface-2: #0e3a28;
+  --color-surface-hover: #13492f;
+  --color-line: #1b4a33;
+  --color-line-strong: #3a8a60;
 
   /* Text */
-  --color-text: #e7e4dd;
-  --color-muted: #a5a19a;
+  --color-text: #f6faf7;
+  --color-muted: #9dbdac;
 
-  /* Risk levels. Base hex per design brief (stripes, fills, dots);
-     -bright variants are luminance-adjusted for WCAG AA text on dark panels. */
-  --color-risk-low: #5c8a5c;
-  --color-risk-medium: #d9a441;
-  --color-risk-high: #b23a2e;
-  --color-risk-unknown: #6b7280;
-  --color-risk-low-bright: #7fbf7f;
-  --color-risk-medium-bright: #e3b75c;
-  --color-risk-high-bright: #e0705f;
-  --color-risk-unknown-bright: #9ca3af;
+  /* Brand accent (buttons, active nav, focus, map strokes). */
+  --color-accent: #2fa866;
+  --color-accent-bright: #3ddc84;
+
+  /* Risk levels. Base hex = stripes, fills, dots; -bright = text on dark
+     panels (WCAG AA). High is orange and red is kept for danger/critical,
+     so low-vs-high never relies on a red/green pair. */
+  --color-risk-low: #2fa866;
+  --color-risk-medium: #e8c52a;
+  --color-risk-high: #ff7a1a;
+  --color-risk-unknown: #6f8f7e;
+  --color-risk-low-bright: #4fd18b;
+  --color-risk-medium-bright: #f1d457;
+  --color-risk-high-bright: #ff9a4d;
+  --color-risk-unknown-bright: #a7c2b4;
 
   /* Hazard types. Same scheme: base = fill, -bright = text. */
   --color-hazard-flood: #3b82c4;
   --color-hazard-drought: #c08a2e;
-  --color-hazard-landslide: #b4532a;
+  --color-hazard-landslide: #c05f33;
   --color-hazard-avalanche: #6fb8c9;
-  --color-hazard-glof: #2e8f82;
+  --color-hazard-glof: #2e9f90;
   --color-hazard-flood-bright: #7ab3e8;
   --color-hazard-drought-bright: #dfaf5b;
-  --color-hazard-landslide-bright: #d97e57;
+  --color-hazard-landslide-bright: #f0a37d;
   --color-hazard-avalanche-bright: #8fd0de;
-  --color-hazard-glof-bright: #5bbfb2;
+  --color-hazard-glof-bright: #5bd3c3;
 
   /* Status + interaction */
-  --color-danger: #b23a2e;
-  --color-danger-bright: #e0705f;
-  --color-ok: #5c8a5c;
-  --color-ok-bright: #7fbf7f;
-  --color-focus: #7fb2e5;
+  --color-danger: #e5262f;
+  --color-danger-bright: #ff8d91;
+  --color-ok: #2fa866;
+  --color-ok-bright: #4fd18b;
+  --color-focus: #3ddc84;
 
-  /* Typography: Archivo for headings, Public Sans for UI, IBM Plex Mono
-     strictly for data readouts (scores, coordinates, timestamps, confidence). */
-  --font-heading: "Archivo", "Public Sans", system-ui, sans-serif;
-  --font-body: "Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* Typography: Plus Jakarta Sans for ultra-clean modern headings & body,
+     IBM Plex Mono strictly for data readouts (scores, coordinates,
+     timestamps, confidence). */
+  --font-heading: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
+  --font-body: "Plus Jakarta Sans", system-ui, -apple-system, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
 
   /* Shape: flat panels, near-square chips. */
-  --radius-panel: 3px;
-  --radius-chip: 2px;
+  --radius-panel: 6px;
+  --radius-chip: 4px;
 }
 
 @layer base {
   html {
     color-scheme: dark;
+    background-color: #030a07;
   }
 
+  /* Page backdrop: deep rich obsidian-to-emerald gradient with ambient glow. */
   body {
-    background-color: var(--color-bg);
+    background-color: #030a07;
+    background-image: 
+      radial-gradient(135% 85% at 75% -5%, #0b3d27 0%, #061810 40%, #030b08 100%),
+      radial-gradient(45% 35% at 15% 45%, rgba(61, 220, 132, 0.04) 0%, transparent 100%);
+    background-attachment: fixed;
     color: var(--color-text);
     font-family: var(--font-body);
     font-size: 15px;
@@ -155,16 +170,16 @@
     background-color: transparent;
   }
   .btn-primary {
-    background-color: var(--color-text);
-    border-color: var(--color-text);
-    color: var(--color-bg);
+    background-color: var(--color-accent);
+    border-color: var(--color-accent);
+    color: #021a0e;
   }
   .btn-primary:hover {
-    background-color: #ffffff;
-    border-color: #ffffff;
+    background-color: var(--color-accent-bright);
+    border-color: var(--color-accent-bright);
   }
   .btn-primary:disabled:hover {
-    background-color: var(--color-text);
+    background-color: var(--color-accent);
   }
 
   /* Spinner (loading states). */
@@ -172,7 +187,7 @@
     width: 1.5rem;
     height: 1.5rem;
     border: 2px solid var(--color-line-strong);
-    border-top-color: var(--color-text);
+    border-top-color: var(--color-accent-bright);
     border-radius: 9999px;
     animation: spin 0.8s linear infinite;
   }
@@ -300,7 +315,7 @@
     font-weight: 600;
   }
   .nav-item-active::before {
-    background-color: var(--color-text);
+    background-color: var(--color-accent-bright);
   }
 
   /* Selectable district rows (Risk Map list) — same accent-bar idiom. */
@@ -333,7 +348,7 @@
     background-color: var(--color-surface-2);
   }
   .select-row-active::before {
-    background-color: var(--color-text);
+    background-color: var(--color-accent-bright);
   }
 
   /* Priority table — CSS grid "table" so rows can FLIP-animate on re-sort. */

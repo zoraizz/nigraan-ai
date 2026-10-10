@@ -1,4 +1,5 @@
-import { NavLink } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
+import Logo from './Logo.jsx'
 
 // Nav icons — 20px inline glyphs, stroke inherits currentColor.
 function OverviewIcon() {
@@ -73,7 +74,7 @@ function PriorityIcon() {
 }
 
 const NAV_ITEMS = [
-  { to: '/', label: 'Overview', end: true, icon: OverviewIcon },
+  { to: '/overview', label: 'Overview', icon: OverviewIcon },
   { to: '/risk-map', label: 'Risk Map', icon: RiskMapIcon },
   { to: '/damage-assessment', label: 'Damage Assessment', icon: DamageIcon },
   { to: '/aid-priority', label: 'Aid Priority', icon: PriorityIcon },
@@ -84,15 +85,13 @@ const NAV_ITEMS = [
 export default function Sidebar() {
   return (
     <aside className="flex w-14 shrink-0 flex-col border-r border-line bg-surface lg:w-56">
-      <div className="flex h-14 items-center gap-3 border-b border-line px-3 lg:px-4">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-chip border border-line-strong font-heading text-sm font-bold text-text">
-          N
-        </span>
-        <span className="hidden min-w-0 leading-tight lg:block">
-          <span className="block font-heading text-[15px] font-bold text-text">Nigraan</span>
-          <span className="block text-[11px] text-muted">disaster operations</span>
-        </span>
-      </div>
+      <Link
+        to="/"
+        aria-label="Nigraan AI home"
+        className="flex h-14 items-center border-b border-line px-3 lg:px-4"
+      >
+        <Logo size="sm" />
+      </Link>
 
       <nav className="flex-1 space-y-1 p-2" aria-label="Primary">
         {NAV_ITEMS.map((item) => (
