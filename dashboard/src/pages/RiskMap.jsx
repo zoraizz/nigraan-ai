@@ -6,6 +6,7 @@ import { useRiskData } from '../hooks/useRiskData.js'
 import { DISTRICTS, DISTRICT_NAMES } from '../config/districts.js'
 import { ENDPOINTS } from '../config/endpoints.js'
 import { buildRiskMetricRows, formatMetricValue } from './riskMetrics.js'
+import { availabilityBanner } from './availabilityNote.js'
 
 const LOADING_MESSAGES = [
   'Analyzing weather and snow metrics…',
@@ -75,6 +76,7 @@ export default function RiskMap() {
 
   const selected = DISTRICTS.find((entry) => entry.name === district)
   const coords = selected?.coords
+  const banner = availabilityBanner(data)
 
   return (
     <PageContainer
@@ -151,13 +153,9 @@ export default function RiskMap() {
                   Returned from server cache (pre-warmed, no Gemini call)
                 </p>
               ) : null}
-              {data.weather_unavailable ? (
+              {banner ? (
                 <p className="alert-error mb-4 px-3 py-1.5 text-xs">
-                  Live weather data was unavailable — risk assessment is based on static NDMA hazard context only.
-                </p>
-              ) : data.rainfall_unavailable ? (
-                <p className="alert-error mb-4 px-3 py-1.5 text-xs">
-                  Live rainfall data was unavailable — risk assessment is based on static NDMA hazard context only.
+                  {banner}
                 </p>
               ) : null}
               {data.hazard_types?.length > 0 ? (

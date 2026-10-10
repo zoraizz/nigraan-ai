@@ -61,9 +61,15 @@ _FORECAST_OK = {
     "daily": {"precipitation_sum": [10.0, 20.0, 30.0]},
 }
 
-_ARCHIVE_OK_90 = {
-    "daily": {"precipitation_sum": [1.0] * 90},
-}
+def _archive_ok_90():
+    start, end = weather_bundle.archive_date_window()
+    dates = weather_bundle.inclusive_dates(start, end)
+    return {
+        "daily": {
+            "time": dates,
+            "precipitation_sum": [1.0] * len(dates),
+        }
+    }
 
 _DISCHARGE_EMPTY = {"daily": {"river_discharge": [None, None, None]}}
 
@@ -211,7 +217,7 @@ def test_drought_archive_retry_success(mock_get, mock_sleep, _mock_gemini, clien
         _mock_response(200, json_data=_DROUGHT_FORECAST),
         # 90-day archive: fail once, then succeed. 30-day is derived from it.
         _mock_response(503),
-        _mock_response(200, json_data=_ARCHIVE_OK_90),
+        _mock_response(200, json_data=_archive_ok_90()),
     ]
 
     resp = client.post("/predict-risk", json={"district": "Tharparkar"})
@@ -227,8 +233,13 @@ def test_drought_archive_retry_success(mock_get, mock_sleep, _mock_gemini, clien
         call for call in mock_get.call_args_list if "archive-api" in call.args[0]
     ]
     assert len(archive_calls) == 2
-    assert archive_calls[0].kwargs["params"]["past_days"] == 90
-    assert archive_calls[1].kwargs["params"]["past_days"] == 90
+    start, end = weather_bundle.archive_date_window()
+    for call in archive_calls:
+        params = call.kwargs["params"]
+        assert params["start_date"] == start
+        assert params["end_date"] == end
+        assert params["timezone"] == weather_bundle.DISTRICT_TIMEZONE
+        assert "past_days" not in params
 
 
 @patch("main.assess_risk_with_gemini", return_value=None)
@@ -244,7 +255,9 @@ def test_drought_archive_fully_unavailable(mock_get, mock_sleep, _mock_gemini, c
     assert body["rainfall_30d_mm"] is None
     assert body["rainfall_90d_mm"] is None
     assert body["rainfall_unavailable"] is True
-    assert "unavailable" in body["reason"].lower()
+    assert body["weather_unavailable"] is True
+    assert body["weather_metrics"]["temperature_max_c_3d"] is None
+    assert "static NDMA hazard context only" in body["reason"]
 
 
 # ---------------------------------------------------------------------------

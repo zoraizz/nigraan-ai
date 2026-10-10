@@ -21,6 +21,7 @@ from weather_bundle import (  # noqa: E402
     WeatherMetrics,
     assemble_weather,
     availability_flags,
+    availability_note,
 )
 
 # ---------------------------------------------------------------------------
@@ -274,17 +275,8 @@ class RiskResponse(BaseModel):
     reasoning_error: str | None = None  # "api_error" | "bad_json" | null
 
 
-_WEATHER_NOTE = (
-    "[Note: Live weather data was unavailable; this assessment is "
-    "based on static NDMA hazard context only.] "
-)
-_RAIN_NOTE = (
-    "[Note: Live rainfall data was unavailable; this assessment is "
-    "based on static NDMA hazard context only.] "
-)
-
-
-# Weather fetch, retry, and the 3-hour bundle cache live in weather_bundle.py.
+# Availability notes live in weather_bundle.availability_note so the
+# reason prefix and the Risk Map banner describe the same three cases.
 
 
 # ---------------------------------------------------------------------------
@@ -516,10 +508,9 @@ def predict_risk(req: RiskRequest):
         reasoning_source = "fallback"
         logger.info("Risk for %s: %s (source=fallback)", req.district, risk_level)
 
-    if weather_unavailable:
-        reason = _WEATHER_NOTE + reason
-    elif rainfall_unavailable:
-        reason = _RAIN_NOTE + reason
+    reason = availability_note(
+        hazard_types, metrics, weather_unavailable, rainfall_unavailable,
+    ) + reason
 
     body = RiskResponse(
         district=req.district,

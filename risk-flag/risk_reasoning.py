@@ -120,6 +120,21 @@ def _build_weather_block(metrics: dict | None, hazard_types: list[str]) -> str:
         lines.append(
             "River discharge: unavailable (no usable GloFAS value for this coordinate)."
         )
+    if "drought" in hazard_types:
+        missing_history = [
+            label
+            for key, label in (
+                ("rainfall_30d_mm", "30-day"),
+                ("rainfall_90d_mm", "90-day"),
+            )
+            if _metric_number(metrics, key) is None
+        ]
+        if missing_history:
+            joined = " and ".join(missing_history)
+            lines.append(
+                f"Historical rainfall unavailable: {joined} total was not returned. "
+                "Do not treat 3-day forecast rainfall as a substitute."
+            )
     if not lines:
         return "No weather metrics available for this district."
     return "\n".join(lines)
@@ -158,10 +173,19 @@ def _build_prompt(
         "the latest forecast hour.\n"
         "Weigh the metrics by this district's hazard types:\n"
         "- flood: rainfall, precipitation probability, wind, and river discharge when present\n"
-        "- drought: rainfall deficit (30-day and 90-day), temperature, humidity, and soil moisture\n"
+        "- drought: 30-day and 90-day rainfall totals when present, temperature, humidity, "
+        "and 0-1 cm soil moisture\n"
         "- glof and avalanche: temperature (melt), snowfall, snow depth, and wind\n"
         "- landslide: rainfall, soil moisture, and wind\n"
-        "Do not invent metrics that are missing.\n\n"
+        "Do not invent metrics that are missing.\n"
+        "A 3-day forecast rainfall total cannot establish a persistent drought "
+        "or a 30-day or 90-day rainfall deficit.\n"
+        "An absolute historical rainfall total is not a deficit unless this context "
+        "states a baseline for comparison.\n"
+        "Soil moisture is the measured 0-1 cm layer in m³/m³. Do not call it "
+        "critically low unless a supported threshold is given.\n"
+        "When a 30-day or 90-day total is missing, say that historical rainfall "
+        "is unavailable.\n\n"
         "Respond with a JSON object containing exactly two fields:\n"
         '- "risk_level": one of "low", "medium", or "high"\n'
         '- "rationale": a single sentence explaining your assessment, '

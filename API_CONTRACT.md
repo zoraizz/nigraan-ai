@@ -42,10 +42,32 @@ discharge m³/s (3-day maximum).
 
 Fetch plan (free Open-Meteo, no API key), before retries: one forecast call
 per district (`/v1/forecast`, daily + hourly variables, 3 days). Drought
-districts add one archive call (`/v1/archive`, 90-day precipitation; the
-30-day total is the last 30 days of that series). Flood districts add one
-Flood API call (`flood-api.open-meteo.com/v1/flood`, `river_discharge`).
-Hourly series are reduced to scalars before the response and the LLM prompt.
+districts add one archive call (`/v1/archive`). That call sends `start_date`
+and `end_date` for 90 inclusive dates in timezone `Asia/Karachi`. The end
+date is the earlier of the Asia/Karachi calendar day and the UTC calendar
+day, and `start_date` is that end date minus 89 days. Open-Meteo documents
+the default Best Match as available "to present" (ECMWF IFS has no delay;
+ERA5's five-day delay is not applied as a Best Match cutoff) but does not
+define present as the Asia/Karachi date, so a Karachi day that is still the
+next UTC day is not requested. The UTC day is not assumed to be published.
+If that request returns HTTP 400 and the body says `end_date` is outside an
+allowed range ending on a real earlier date, one recovery request uses that
+date as the end of a new 90-day window. The returned days are checked
+against the dates that were actually requested, including a recovery. No
+other HTTP 400 is recovered, and a failed recovery leaves both rainfall
+totals null. A learned end date is remembered for the 3-hour weather-cache
+lifetime so later districts do not repeat the rejected date. A failed
+response is not stored as rainfall. The call does not use `past_days`.
+`precipitation_sum` is millimetres. A historical total counts a day only
+when that requested date appears once and is paired with a numeric
+precipitation value. Ninety numbers without those dates, a mismatched
+`time` array, or a repeated date do not form a total and are not filled in.
+The 90-day total needs all 90 dates. The 30-day total is the last 30 dates
+of that same window and can stand on its own when only older dates are
+missing or duplicated, including genuine zeros. A gap is not turned into
+zero. Flood districts add one Flood API call
+(`flood-api.open-meteo.com/v1/flood`, `river_discharge`). Hourly series are
+reduced to scalars before the response and the LLM prompt.
 
 `rainfall_forecast_mm` is set for every district when the forecast bundle
 succeeds, including GLOF, landslide, and drought. `rainfall_30d_mm` and
@@ -60,7 +82,17 @@ flood district, or 30/90-day rain missing for a drought district.
 hazards is missing (forecast bundle for flood, landslide, and GLOF/avalanche;
 historical rain or 3-day max temperature for drought). A missing discharge,
 humidity, or soil-moisture series does not by itself set the flag when the
-primary signal is present.
+primary signal is present. Missing drought history still sets
+`weather_unavailable` true.
+
+The reason text, not a new response field, says which case applies. When no
+usable weather value was returned, it says the assessment uses static NDMA
+hazard context only. When some metrics are present, it says some required
+weather data is unavailable and the assessment uses the available weather
+plus static hazard context. For a drought district with forecast max
+temperature and a missing 30-day or 90-day total, it says historical rainfall
+is unavailable and the drought assessment is limited. The Risk Map banner
+uses the same three sentences from the existing flags and metric fields.
 
 reasoning_source is null for an unknown district. reasoning_error is a short
 code only (never a stack trace or secret) and is null when scoring succeeded.
