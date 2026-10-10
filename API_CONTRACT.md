@@ -8,14 +8,65 @@ Rainfall is fetched server-side from Open-Meteo (forecast, 30-day, and 90-day
 totals); the caller only identifies the district.
 
 Response:
-{ "district": "string", "hazard_types": ["string"], "rainfall_forecast_mm": number | null,
+{ "district": "string", "hazard_types": ["string"],
+  "rainfall_forecast_mm": number | null,
   "rainfall_30d_mm": number | null, "rainfall_90d_mm": number | null,
+  "weather_metrics": {
+    "rainfall_forecast_mm": number | null,
+    "rainfall_30d_mm": number | null,
+    "rainfall_90d_mm": number | null,
+    "temperature_max_c_3d": number | null,
+    "temperature_min_c_3d": number | null,
+    "precip_probability_max_pct_3d": number | null,
+    "wind_speed_max_kmh_3d": number | null,
+    "wind_gust_max_kmh_3d": number | null,
+    "humidity_mean_pct_3d": number | null,
+    "soil_moisture_0_1cm_m3m3": number | null,
+    "snowfall_cm_3d": number | null,
+    "snow_depth_cm": number | null,
+    "river_discharge_max_m3s_3d": number | null
+  } | null,
   "risk_level": "low|medium|high|unknown", "reason": "string", "cached": boolean,
+  "rainfall_unavailable": boolean, "weather_unavailable": boolean,
   "reasoning_source": "gemini|grok|fallback|cache" | null,
   "reasoning_error": "api_error|bad_json" | null }
 
+`weather_metrics` is null for an unknown district and an object for every
+covered district (individual fields may be null). The top-level `rainfall_*`
+fields mirror the same keys inside `weather_metrics`.
+
+Units: rainfall mm; temperature °C; precipitation probability and humidity %;
+wind km/h; soil moisture m³/m³ at 0–1 cm (3-day mean); snowfall cm (3-day
+sum); snow depth cm (latest forecast hour, converted from metres); river
+discharge m³/s (3-day maximum).
+
+Fetch plan (free Open-Meteo, no API key), before retries: one forecast call
+per district (`/v1/forecast`, daily + hourly variables, 3 days). Drought
+districts add one archive call (`/v1/archive`, 90-day precipitation; the
+30-day total is the last 30 days of that series). Flood districts add one
+Flood API call (`flood-api.open-meteo.com/v1/flood`, `river_discharge`).
+Hourly series are reduced to scalars before the response and the LLM prompt.
+
+`rainfall_forecast_mm` is set for every district when the forecast bundle
+succeeds, including GLOF, landslide, and drought. `rainfall_30d_mm` and
+`rainfall_90d_mm` are set for drought districts. `river_discharge_max_m3s_3d`
+is set only for flood districts, and only when GloFAS returns a number. Null
+means no usable value. It is the nearest ~5 km model cell, and the rule
+scorer does not turn that number into a risk level.
+
+`rainfall_unavailable` keeps its previous meaning: 3-day rain missing for a
+flood district, or 30/90-day rain missing for a drought district.
+`weather_unavailable` is true when a critical input for that district's
+hazards is missing (forecast bundle for flood, landslide, and GLOF/avalanche;
+historical rain or 3-day max temperature for drought). A missing discharge,
+humidity, or soil-moisture series does not by itself set the flag when the
+primary signal is present.
+
 reasoning_source is null for an unknown district. reasoning_error is a short
 code only (never a stack trace or secret) and is null when scoring succeeded.
+
+This is rainfall-and-weather context plus LLM reasoning. It is not a
+hydrological, glacier, or avalanche model.
 
 ## POST /classify-damage
 Request: multipart/form-data, field "image"

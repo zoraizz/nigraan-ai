@@ -3,7 +3,7 @@
 Disaster damage assessment & aid-priority platform for NDMA/PDMA — Bano Qabil × Alibaba Cloud AI Hackathon.
 
 ## Structure
-- `risk-flag/` — pre-storm risk scoring (rainfall + LLM)
+- `risk-flag/` — pre-storm risk scoring (Open-Meteo weather metrics + LLM)
 - `damage-checker/` — post-storm damage classification (xBD + EBD Pakistan + Alibaba PAI)
 - `aid-priority/` — urgency ranking (risk + damage scoring)
 - `dashboard/` — frontend

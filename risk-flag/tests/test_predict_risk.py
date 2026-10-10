@@ -54,6 +54,22 @@ ALL_KNOWN = FLOOD_DISTRICTS + GLOF_AVALANCHE_DISTRICTS + LANDSLIDE_DISTRICTS + D
 
 VALID_RISK_LEVELS = {"low", "medium", "high"}
 
+WEATHER_METRIC_KEYS = (
+    "rainfall_forecast_mm",
+    "rainfall_30d_mm",
+    "rainfall_90d_mm",
+    "temperature_max_c_3d",
+    "temperature_min_c_3d",
+    "precip_probability_max_pct_3d",
+    "wind_speed_max_kmh_3d",
+    "wind_gust_max_kmh_3d",
+    "humidity_mean_pct_3d",
+    "soil_moisture_0_1cm_m3m3",
+    "snowfall_cm_3d",
+    "snow_depth_cm",
+    "river_discharge_max_m3s_3d",
+)
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -62,6 +78,34 @@ def post_risk(district: str) -> dict:
     r = requests.post(f"{BASE_URL}/predict-risk", json={"district": district}, timeout=30)
     r.raise_for_status()
     return r.json()
+
+
+def check_weather_metrics(data: dict, district: str) -> bool:
+    """Schema only. Live values may be null when Open-Meteo is down."""
+    ok = True
+    metrics = data.get("weather_metrics")
+    ok &= check(
+        isinstance(metrics, dict),
+        f"[{district}] weather_metrics is an object",
+        f"got {type(metrics).__name__}",
+    )
+    if not isinstance(metrics, dict):
+        return ok
+    for key in WEATHER_METRIC_KEYS:
+        ok &= check(key in metrics, f"[{district}] weather_metrics.{key} present")
+    ok &= check(
+        metrics.get("rainfall_forecast_mm") == data.get("rainfall_forecast_mm"),
+        f"[{district}] rainfall_forecast_mm matches weather_metrics",
+    )
+    ok &= check(
+        isinstance(data.get("weather_unavailable"), bool),
+        f"[{district}] weather_unavailable is a bool",
+    )
+    ok &= check(
+        isinstance(data.get("rainfall_unavailable"), bool),
+        f"[{district}] rainfall_unavailable is a bool",
+    )
+    return ok
 
 
 def check(condition: bool, label: str, detail: str = "") -> bool:
@@ -116,6 +160,7 @@ def test_flood_districts():
             data["rainfall_30d_mm"] is None and data["rainfall_90d_mm"] is None,
             f"[{district}] drought fields are None",
         )
+        ok &= check_weather_metrics(data, district)
     return ok
 
 
@@ -129,9 +174,12 @@ def test_glof_avalanche_districts():
             f"[{district}] hazard_types == {expected_hazards}",
         )
         ok &= check(
-            data["rainfall_forecast_mm"] is None,
-            f"[{district}] rainfall_forecast_mm is None (non-flood)",
+            data["rainfall_forecast_mm"] is None
+            or isinstance(data["rainfall_forecast_mm"], (int, float)),
+            f"[{district}] rainfall_forecast_mm is a number or null",
+            f"got {data.get('rainfall_forecast_mm')}",
         )
+        ok &= check_weather_metrics(data, district)
         # Risk level can be any valid level (LLM or fallback)
         ok &= check(
             data["risk_level"] in VALID_RISK_LEVELS,
@@ -163,6 +211,7 @@ def test_landslide_districts():
             isinstance(data["reason"], str) and len(data["reason"]) > 0,
             f"[{district}] reason is non-empty string",
         )
+        ok &= check_weather_metrics(data, district)
     return ok
 
 
@@ -199,6 +248,7 @@ def test_drought_districts():
             isinstance(data["reason"], str) and len(data["reason"]) > 0,
             f"[{district}] reason is non-empty string",
         )
+        ok &= check_weather_metrics(data, district)
     return ok
 
 

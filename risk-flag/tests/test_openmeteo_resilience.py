@@ -21,21 +21,20 @@ from fastapi.testclient import TestClient
 
 # Import the app and internals we need to inspect / reset
 import main as risk_main
+import weather_bundle
 from main import app
 
 
 @pytest.fixture(autouse=True)
 def _clear_caches():
-    """Reset both the response cache and rainfall cache between tests."""
+    """Reset the response cache and the weather-bundle cache between tests."""
     with risk_main._cache_lock:
         risk_main._cache.clear()
-    with risk_main._rainfall_cache_lock:
-        risk_main._rainfall_cache.clear()
+    weather_bundle.clear_weather_cache()
     yield
     with risk_main._cache_lock:
         risk_main._cache.clear()
-    with risk_main._rainfall_cache_lock:
-        risk_main._rainfall_cache.clear()
+    weather_bundle.clear_weather_cache()
 
 
 @pytest.fixture
@@ -62,13 +61,23 @@ _FORECAST_OK = {
     "daily": {"precipitation_sum": [10.0, 20.0, 30.0]},
 }
 
-_ARCHIVE_OK_30 = {
-    "daily": {"precipitation_sum": [1.0] * 30},
-}
-
 _ARCHIVE_OK_90 = {
     "daily": {"precipitation_sum": [1.0] * 90},
 }
+
+_DISCHARGE_EMPTY = {"daily": {"river_discharge": [None, None, None]}}
+
+_DROUGHT_FORECAST = {
+    "daily": {
+        "precipitation_sum": [1.0, 2.0, 3.0],
+        "temperature_2m_max": [41.0, 42.0, 40.0],
+    },
+}
+
+
+def _then_discharge(*responses):
+    """Flood districts make a discharge call after the forecast bundle."""
+    return [*responses, _mock_response(200, json_data=_DISCHARGE_EMPTY)]
 
 
 # ---------------------------------------------------------------------------
@@ -80,18 +89,20 @@ _ARCHIVE_OK_90 = {
 @patch("requests.get")
 def test_retry_on_429_then_success(mock_get, mock_sleep, _mock_gemini, client):
     """429 on first attempt → retry → 200 on second → returns rainfall."""
-    mock_get.side_effect = [
+    mock_get.side_effect = _then_discharge(
         _mock_response(429, headers={"Retry-After": "1"}),
         _mock_response(200, json_data=_FORECAST_OK),
-    ]
+    )
 
     resp = client.post("/predict-risk", json={"district": "Dadu"})
     assert resp.status_code == 200
     body = resp.json()
     assert body["rainfall_forecast_mm"] == 60.0
+    assert body["weather_metrics"]["rainfall_forecast_mm"] == 60.0
     assert body["rainfall_unavailable"] is False
-    # Should have been called twice (first 429, then 200)
-    assert mock_get.call_count == 2
+    assert body["weather_unavailable"] is False
+    # Forecast: 429 then 200. Discharge: one 200.
+    assert mock_get.call_count == 3
 
 
 @patch("main.assess_risk_with_gemini", return_value=None)
@@ -105,10 +116,12 @@ def test_retry_exhausted_returns_unavailable(mock_get, mock_sleep, _mock_gemini,
     assert resp.status_code == 200
     body = resp.json()
     assert body["rainfall_forecast_mm"] is None
+    assert body["weather_metrics"]["rainfall_forecast_mm"] is None
     assert body["rainfall_unavailable"] is True
+    assert body["weather_unavailable"] is True
     assert "unavailable" in body["reason"].lower()
-    # 1 initial + 2 retries = 3 calls
-    assert mock_get.call_count == 3
+    # Forecast 3 attempts + discharge 3 attempts.
+    assert mock_get.call_count == 6
 
 
 # ---------------------------------------------------------------------------
@@ -120,10 +133,10 @@ def test_retry_exhausted_returns_unavailable(mock_get, mock_sleep, _mock_gemini,
 @patch("requests.get")
 def test_retry_on_500_then_success(mock_get, mock_sleep, _mock_gemini, client):
     """500 on first attempt → retry → 200 on second → returns rainfall."""
-    mock_get.side_effect = [
+    mock_get.side_effect = _then_discharge(
         _mock_response(500),
         _mock_response(200, json_data=_FORECAST_OK),
-    ]
+    )
 
     resp = client.post("/predict-risk", json={"district": "Dadu"})
     assert resp.status_code == 200
@@ -143,11 +156,13 @@ def test_stale_cache_fallback(mock_get, mock_sleep, _mock_gemini, client):
     """Pre-populate rainfall cache with an expired entry. When Open-Meteo
     fails, the stale value should be served."""
     lat, lon = 26.73033, 67.7769  # Dadu coords
-    window = "forecast_3d"
-    # Insert a stale entry (expired 1 hour ago)
-    stale_ts = time.time() - risk_main._RAINFALL_CACHE_TTL_SECS - 3600
-    with risk_main._rainfall_cache_lock:
-        risk_main._rainfall_cache[(lat, lon, window)] = (42.5, stale_ts)
+    # Insert a stale forecast bundle (expired 1 hour ago).
+    stale_ts = time.time() - weather_bundle.WEATHER_CACHE_TTL_SECS - 3600
+    weather_bundle.cache_put(
+        lat, lon, weather_bundle.FORECAST_WINDOW,
+        {"rainfall_forecast_mm": 42.5},
+        written_at=stale_ts,
+    )
 
     # Open-Meteo returns 429 on all attempts
     mock_get.return_value = _mock_response(429)
@@ -193,19 +208,27 @@ def test_null_rainfall_returns_200(mock_get, mock_sleep, _mock_gemini, client):
 def test_drought_archive_retry_success(mock_get, mock_sleep, _mock_gemini, client):
     """Drought district archive calls succeed after one retry."""
     mock_get.side_effect = [
-        # 30-day: fail then succeed
+        _mock_response(200, json_data=_DROUGHT_FORECAST),
+        # 90-day archive: fail once, then succeed. 30-day is derived from it.
         _mock_response(503),
-        _mock_response(200, json_data=_ARCHIVE_OK_30),
-        # 90-day: succeed immediately
         _mock_response(200, json_data=_ARCHIVE_OK_90),
     ]
 
     resp = client.post("/predict-risk", json={"district": "Tharparkar"})
     assert resp.status_code == 200
     body = resp.json()
+    assert body["rainfall_forecast_mm"] == 6.0
     assert body["rainfall_30d_mm"] == 30.0
     assert body["rainfall_90d_mm"] == 90.0
+    assert body["weather_metrics"]["temperature_max_c_3d"] == 42.0
     assert body["rainfall_unavailable"] is False
+    assert body["weather_unavailable"] is False
+    archive_calls = [
+        call for call in mock_get.call_args_list if "archive-api" in call.args[0]
+    ]
+    assert len(archive_calls) == 2
+    assert archive_calls[0].kwargs["params"]["past_days"] == 90
+    assert archive_calls[1].kwargs["params"]["past_days"] == 90
 
 
 @patch("main.assess_risk_with_gemini", return_value=None)
@@ -234,10 +257,10 @@ def test_drought_archive_fully_unavailable(mock_get, mock_sleep, _mock_gemini, c
 def test_request_timeout_triggers_retry(mock_get, mock_sleep, _mock_gemini, client):
     """requests.Timeout on first attempt → retry → 200."""
     import requests as req_lib
-    mock_get.side_effect = [
+    mock_get.side_effect = _then_discharge(
         req_lib.Timeout("Connection timed out"),
         _mock_response(200, json_data=_FORECAST_OK),
-    ]
+    )
 
     resp = client.post("/predict-risk", json={"district": "Dadu"})
     assert resp.status_code == 200
@@ -255,10 +278,10 @@ def test_request_timeout_triggers_retry(mock_get, mock_sleep, _mock_gemini, clie
 @patch("requests.get")
 def test_retry_after_header_honored(mock_get, mock_sleep, _mock_gemini, client):
     """Retry-After header value is passed to time.sleep."""
-    mock_get.side_effect = [
+    mock_get.side_effect = _then_discharge(
         _mock_response(429, headers={"Retry-After": "3"}),
         _mock_response(200, json_data=_FORECAST_OK),
-    ]
+    )
 
     resp = client.post("/predict-risk", json={"district": "Dadu"})
     assert resp.status_code == 200
@@ -275,13 +298,20 @@ def test_retry_after_header_honored(mock_get, mock_sleep, _mock_gemini, client):
 def test_fresh_cache_avoids_request(mock_get, _mock_gemini, client):
     """When a fresh rainfall cache entry exists, Open-Meteo is not called."""
     lat, lon = 26.73033, 67.7769  # Dadu coords
-    window = "forecast_3d"
-    risk_main._rainfall_cache_set(lat, lon, window, 55.0)
+    weather_bundle.cache_put(
+        lat, lon, weather_bundle.FORECAST_WINDOW,
+        {"rainfall_forecast_mm": 55.0},
+    )
+    weather_bundle.cache_put(
+        lat, lon, weather_bundle.DISCHARGE_WINDOW,
+        {"river_discharge_max_m3s_3d": 10.0},
+    )
 
     resp = client.post("/predict-risk", json={"district": "Dadu"})
     assert resp.status_code == 200
     body = resp.json()
     assert body["rainfall_forecast_mm"] == 55.0
+    assert body["weather_metrics"]["river_discharge_max_m3s_3d"] == 10.0
     assert body["rainfall_unavailable"] is False
     # No HTTP call should have been made
     mock_get.assert_not_called()
@@ -321,8 +351,9 @@ def test_non_retryable_error_no_retry(mock_get, mock_sleep, _mock_gemini, client
     body = resp.json()
     assert body["rainfall_forecast_mm"] is None
     assert body["rainfall_unavailable"] is True
-    # Only 1 call — no retries for 400
-    assert mock_get.call_count == 1
+    assert body["weather_unavailable"] is True
+    # Forecast 400 (no retry) plus discharge 400 (no retry).
+    assert mock_get.call_count == 2
 
 
 # ---------------------------------------------------------------------------
@@ -418,10 +449,13 @@ def test_default_model_ids(monkeypatch):
     assert risk_reasoning._grok_model() == "grok-custom"
 
 
-@patch("main.get_rainfall_forecast", return_value=60.0)
+@patch("main.assemble_weather")
 @patch("risk_reasoning._call_grok")
 @patch("risk_reasoning._call_gemini", return_value=_llm("gemini"))
-def test_chain_gemini_ok(_gemini, mock_grok, _rain, client):
+def test_chain_gemini_ok(_gemini, mock_grok, mock_weather, client):
+    from weather_bundle import WeatherMetrics
+
+    mock_weather.return_value = WeatherMetrics(rainfall_forecast_mm=60.0)
     resp = client.post("/predict-risk", json={"district": "Dadu"})
     body = resp.json()
     assert resp.status_code == 200
@@ -431,10 +465,13 @@ def test_chain_gemini_ok(_gemini, mock_grok, _rain, client):
     mock_grok.assert_not_called()
 
 
-@patch("main.get_rainfall_forecast", return_value=60.0)
+@patch("main.assemble_weather")
 @patch("risk_reasoning._call_grok", return_value=_llm("grok", rationale="Grok assessment."))
 @patch("risk_reasoning._call_gemini", return_value=_llm_error("api_error"))
-def test_chain_gemini_fail_grok_ok(_gemini, _grok, _rain, client):
+def test_chain_gemini_fail_grok_ok(_gemini, _grok, mock_weather, client):
+    from weather_bundle import WeatherMetrics
+
+    mock_weather.return_value = WeatherMetrics(rainfall_forecast_mm=60.0)
     resp = client.post("/predict-risk", json={"district": "Dadu"})
     body = resp.json()
     assert body["reasoning_source"] == "grok"
@@ -443,10 +480,13 @@ def test_chain_gemini_fail_grok_ok(_gemini, _grok, _rain, client):
     assert "Grok assessment." in body["reason"]
 
 
-@patch("main.get_rainfall_forecast", return_value=60.0)
+@patch("main.assemble_weather")
 @patch("risk_reasoning._call_grok", return_value=_llm_error("bad_json"))
 @patch("risk_reasoning._call_gemini", return_value=_llm_error("api_error"))
-def test_chain_both_fail_uses_rules(_gemini, _grok, _rain, client):
+def test_chain_both_fail_uses_rules(_gemini, _grok, mock_weather, client):
+    from weather_bundle import WeatherMetrics
+
+    mock_weather.return_value = WeatherMetrics(rainfall_forecast_mm=60.0)
     resp = client.post("/predict-risk", json={"district": "Dadu"})
     body = resp.json()
     assert body["reasoning_source"] == "fallback"
@@ -456,9 +496,12 @@ def test_chain_both_fail_uses_rules(_gemini, _grok, _rain, client):
 
 
 @patch("risk_reasoning.requests.post")
-@patch("main.get_rainfall_forecast", return_value=60.0)
+@patch("main.assemble_weather")
 @patch("risk_reasoning._call_gemini", return_value=_llm_error("api_error"))
-def test_chain_no_grok_key_skips_grok(_gemini, _rain, mock_post, client, monkeypatch):
+def test_chain_no_grok_key_skips_grok(_gemini, mock_weather, mock_post, client, monkeypatch):
+    from weather_bundle import WeatherMetrics
+
+    mock_weather.return_value = WeatherMetrics(rainfall_forecast_mm=60.0)
     monkeypatch.delenv("XAI_API_KEY", raising=False)
     resp = client.post("/predict-risk", json={"district": "Dadu"})
     body = resp.json()
@@ -517,3 +560,5 @@ def test_unknown_district_has_null_reasoning_fields(client):
     assert body["risk_level"] == "unknown"
     assert body["reasoning_source"] is None
     assert body["reasoning_error"] is None
+    assert body["weather_metrics"] is None
+    assert body["weather_unavailable"] is False

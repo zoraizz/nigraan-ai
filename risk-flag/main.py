@@ -12,12 +12,16 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-import requests
 
 # Load .env from the risk-flag directory (before other imports that read env vars)
 load_dotenv(Path(__file__).parent / ".env")
 
 from risk_reasoning import assess_risk_with_gemini  # noqa: E402
+from weather_bundle import (  # noqa: E402
+    WeatherMetrics,
+    assemble_weather,
+    availability_flags,
+)
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -55,47 +59,6 @@ def _cache_get(district: str) -> "RiskResponse | None":
 def _cache_set(district: str, body: "RiskResponse") -> None:
     with _cache_lock:
         _cache[district] = (body, time.time())
-
-
-# ---------------------------------------------------------------------------
-# Rainfall cache -- longer TTL (3 hours) keyed by (lat, lon, window).
-# Survives across response-cache misses so stale rainfall data can be reused
-# when Open-Meteo is unavailable.
-# ---------------------------------------------------------------------------
-_RAINFALL_CACHE_TTL_SECS = 3 * 60 * 60  # 3 hours
-_rainfall_cache: dict[tuple[float, float, str], tuple[float, float]] = {}
-_rainfall_cache_lock = threading.Lock()
-
-
-def _rainfall_cache_get(
-    lat: float, lon: float, window: str, *, allow_stale: bool = False,
-) -> float | None:
-    """Return cached rainfall value, or None.
-
-    *allow_stale* returns expired entries as a last-resort fallback.
-    """
-    key = (lat, lon, window)
-    with _rainfall_cache_lock:
-        entry = _rainfall_cache.get(key)
-        if entry is None:
-            return None
-        value, ts = entry
-        age = time.time() - ts
-        if age <= _RAINFALL_CACHE_TTL_SECS:
-            return value
-        if allow_stale:
-            logger.info(
-                "Serving stale rainfall cache for (%s, %s, %s) — age %.0fs",
-                lat, lon, window, age,
-            )
-            return value
-        return None
-
-
-def _rainfall_cache_set(lat: float, lon: float, window: str, value: float) -> None:
-    key = (lat, lon, window)
-    with _rainfall_cache_lock:
-        _rainfall_cache[key] = (value, time.time())
 
 
 # ---------------------------------------------------------------------------
@@ -301,198 +264,74 @@ class RiskResponse(BaseModel):
     rainfall_forecast_mm: float | None
     rainfall_30d_mm: float | None
     rainfall_90d_mm: float | None
+    weather_metrics: WeatherMetrics | None = None
     risk_level: str
     reason: str
     cached: bool = False
     rainfall_unavailable: bool = False
+    weather_unavailable: bool = False
     reasoning_source: str | None = None  # "gemini" | "grok" | "fallback" | "cache"
     reasoning_error: str | None = None  # "api_error" | "bad_json" | null
 
 
-# ---------------------------------------------------------------------------
-# Open-Meteo helpers — resilient with retry + cache
-# ---------------------------------------------------------------------------
-_FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
-_ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
-_REQUEST_TIMEOUT = 10  # seconds
-_MAX_RETRIES = 2
-_BASE_BACKOFF = 1.0  # seconds
-
-_OPENMETEO_HEADERS = {
-    "User-Agent": "NigraanAI-RiskFlag/1.0 (disaster-risk-assessment; github.com/nigraan-ai)",
-}
+_WEATHER_NOTE = (
+    "[Note: Live weather data was unavailable; this assessment is "
+    "based on static NDMA hazard context only.] "
+)
+_RAIN_NOTE = (
+    "[Note: Live rainfall data was unavailable; this assessment is "
+    "based on static NDMA hazard context only.] "
+)
 
 
-def _is_retryable(status_code: int) -> bool:
-    """Return True for status codes that warrant a retry (429 or 5xx)."""
-    return status_code == 429 or 500 <= status_code < 600
-
-
-def _openmeteo_request_with_retry(url: str, params: dict) -> dict | None:
-    """Make a GET request to Open-Meteo with retry on 429/5xx.
-
-    Returns the parsed JSON dict on success, or None on failure after
-    exhausting retries.
-    """
-    last_exc: Exception | None = None
-
-    for attempt in range(_MAX_RETRIES + 1):
-        try:
-            response = requests.get(
-                url, params=params, timeout=_REQUEST_TIMEOUT,
-                headers=_OPENMETEO_HEADERS,
-            )
-
-            if response.ok:
-                return response.json()
-
-            # Retryable error — back off and retry
-            if _is_retryable(response.status_code):
-                retry_after = response.headers.get("Retry-After")
-                if retry_after is not None:
-                    try:
-                        wait = float(retry_after)
-                    except (ValueError, TypeError):
-                        wait = _BASE_BACKOFF * (2 ** attempt)
-                else:
-                    wait = _BASE_BACKOFF * (2 ** attempt)
-
-                logger.warning(
-                    "Open-Meteo %s returned %d (attempt %d/%d), "
-                    "retrying in %.1fs",
-                    url, response.status_code, attempt + 1,
-                    _MAX_RETRIES + 1, wait,
-                )
-                if attempt < _MAX_RETRIES:
-                    time.sleep(wait)
-                    continue
-
-                # Final attempt exhausted
-                logger.error(
-                    "Open-Meteo %s returned %d after %d attempts — giving up",
-                    url, response.status_code, _MAX_RETRIES + 1,
-                )
-                return None
-
-            # Non-retryable error (e.g. 400, 404)
-            logger.error(
-                "Open-Meteo %s returned non-retryable %d: %s",
-                url, response.status_code, response.text[:300],
-            )
-            return None
-
-        except requests.RequestException as exc:
-            last_exc = exc
-            logger.warning(
-                "Open-Meteo %s request error (attempt %d/%d): %s",
-                url, attempt + 1, _MAX_RETRIES + 1, exc,
-            )
-            if attempt < _MAX_RETRIES:
-                time.sleep(_BASE_BACKOFF * (2 ** attempt))
-                continue
-
-    logger.error(
-        "Open-Meteo %s failed after %d attempts: %s",
-        url, _MAX_RETRIES + 1, last_exc,
-    )
-    return None
-
-
-def get_rainfall_forecast(lat: float, lon: float, days: int = 3) -> float | None:
-    """Cumulative rainfall forecast over *days* (1-16) from Open-Meteo.
-
-    Returns None if the data cannot be fetched (after retries + stale-cache
-    fallback).
-    """
-    window = f"forecast_{days}d"
-
-    # Check fresh cache first
-    cached = _rainfall_cache_get(lat, lon, window)
-    if cached is not None:
-        logger.info("Rainfall cache hit for (%s, %s, %s)", lat, lon, window)
-        return cached
-
-    params = {
-        "latitude": lat,
-        "longitude": lon,
-        "daily": "precipitation_sum",
-        "forecast_days": days,
-        "timezone": "auto",
-    }
-    data = _openmeteo_request_with_retry(_FORECAST_URL, params)
-
-    if data is not None:
-        try:
-            total = sum(data["daily"]["precipitation_sum"])
-            _rainfall_cache_set(lat, lon, window, total)
-            return total
-        except (KeyError, TypeError) as exc:
-            logger.error("Unexpected Open-Meteo forecast response: %s", exc)
-
-    # Fallback: stale cache
-    stale = _rainfall_cache_get(lat, lon, window, allow_stale=True)
-    if stale is not None:
-        return stale
-
-    return None
-
-
-def get_rainfall_historical(lat: float, lon: float, past_days: int) -> float | None:
-    """Cumulative observed rainfall over the last *past_days* from Open-Meteo.
-
-    Returns None if the data cannot be fetched (after retries + stale-cache
-    fallback).
-    """
-    window = f"archive_{past_days}d"
-
-    # Check fresh cache first
-    cached = _rainfall_cache_get(lat, lon, window)
-    if cached is not None:
-        logger.info("Rainfall cache hit for (%s, %s, %s)", lat, lon, window)
-        return cached
-
-    params = {
-        "latitude": lat,
-        "longitude": lon,
-        "past_days": past_days,
-        "daily": "precipitation_sum",
-        "timezone": "auto",
-    }
-    data = _openmeteo_request_with_retry(_ARCHIVE_URL, params)
-
-    if data is not None:
-        try:
-            daily = data.get("daily", {}).get("precipitation_sum", [])
-            total = sum(v for v in daily if v is not None)
-            _rainfall_cache_set(lat, lon, window, total)
-            return total
-        except (KeyError, TypeError) as exc:
-            logger.error("Unexpected Open-Meteo archive response: %s", exc)
-
-    # Fallback: stale cache
-    stale = _rainfall_cache_get(lat, lon, window, allow_stale=True)
-    if stale is not None:
-        return stale
-
-    return None
+# Weather fetch, retry, and the 3-hour bundle cache live in weather_bundle.py.
 
 
 # ---------------------------------------------------------------------------
 # Risk scoring — rule-based fallback (used when Gemini is unavailable)
 # ---------------------------------------------------------------------------
+def _metric_value(weather_metrics, name: str) -> float | None:
+    if weather_metrics is None:
+        return None
+    if isinstance(weather_metrics, dict):
+        value = weather_metrics.get(name)
+    else:
+        value = getattr(weather_metrics, name, None)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _raise_level(level: str, new: str) -> str:
+    rank = {"low": 0, "medium": 1, "high": 2}
+    if rank.get(new, 0) > rank.get(level, 0):
+        return new
+    return level
+
+
 def score_risk_fallback(
     district: str,
     hazard_types: list[str],
     rainfall_3d: float | None,
     rainfall_30d: float | None,
     rainfall_90d: float | None,
+    weather_metrics=None,
 ) -> tuple[str, str]:
     """Rule-based risk scoring — used as fallback when LLM is unavailable.
 
-    Flood districts use 3-day rainfall thresholds; static-risk districts
-    (GLOF/avalanche/landslide) default to medium; drought districts report
-    rainfall deficit context.
+    Flood level still follows 3-day rainfall. Discharge is mentioned and is
+    not a level threshold (GloFAS is not a gauge). Drought can rise on
+    extreme heat with a short rainfall total. Northern hazards can rise on
+    heavy snow or a warm spell over a deep snowpack. Landslide can rise on
+    heavy rain or rain on wet soil. The LLM remains the primary scorer.
     """
+    temp_max = _metric_value(weather_metrics, "temperature_max_c_3d")
+    humidity = _metric_value(weather_metrics, "humidity_mean_pct_3d")
+    soil = _metric_value(weather_metrics, "soil_moisture_0_1cm_m3m3")
+    snowfall = _metric_value(weather_metrics, "snowfall_cm_3d")
+    snow_depth = _metric_value(weather_metrics, "snow_depth_cm")
+    discharge = _metric_value(weather_metrics, "river_discharge_max_m3s_3d")
+
     parts: list[str] = []
 
     if "flood" in hazard_types and rainfall_3d is not None:
@@ -511,14 +350,40 @@ def score_risk_fallback(
                 f"{district} is forecast {rainfall_3d:.0f} mm over 3 days "
                 f"— low flood risk."
             )
-
-    for ht in ("glof", "avalanche", "landslide"):
-        if ht in hazard_types:
-            ctx = HAZARD_CONTEXT.get(ht, {})
+        if discharge is not None:
             parts.append(
-                f"{district} is flagged for {ht.upper()} vulnerability "
-                f"({ctx.get('source', 'NDMA reference')})."
+                f"Nearest GloFAS river cell peaks at {discharge:.0f} m³/s (modelled)."
             )
+
+    northern = [ht for ht in ("glof", "avalanche") if ht in hazard_types]
+    if northern:
+        ctx = HAZARD_CONTEXT.get(northern[0], {})
+        detail: list[str] = []
+        if temp_max is not None:
+            detail.append(f"max temperature {temp_max:.0f} °C")
+        if snowfall is not None:
+            detail.append(f"snowfall {snowfall:.0f} cm over 3 days")
+        if snow_depth is not None:
+            detail.append(f"snow depth {snow_depth:.0f} cm")
+        suffix = f"; {', '.join(detail)}" if detail else ""
+        label = "/".join(ht.upper() for ht in northern)
+        parts.append(
+            f"{district} is flagged for {label} vulnerability "
+            f"({ctx.get('source', 'NDMA reference')}){suffix}."
+        )
+
+    if "landslide" in hazard_types:
+        ctx = HAZARD_CONTEXT.get("landslide", {})
+        detail = []
+        if rainfall_3d is not None:
+            detail.append(f"rainfall {rainfall_3d:.0f} mm over 3 days")
+        if soil is not None:
+            detail.append(f"soil moisture {soil:.2f} m³/m³")
+        suffix = f"; {', '.join(detail)}" if detail else ""
+        parts.append(
+            f"{district} is flagged for LANDSLIDE vulnerability "
+            f"({ctx.get('source', 'NDMA reference')}){suffix}."
+        )
 
     if "drought" in hazard_types:
         deficit_info = ""
@@ -526,6 +391,12 @@ def score_risk_fallback(
             deficit_info += f" 30-day rainfall: {rainfall_30d:.1f} mm."
         if rainfall_90d is not None:
             deficit_info += f" 90-day rainfall: {rainfall_90d:.1f} mm."
+        if temp_max is not None:
+            deficit_info += f" 3-day max temperature: {temp_max:.0f} °C."
+        if humidity is not None:
+            deficit_info += f" Mean humidity: {humidity:.0f}%."
+        if soil is not None:
+            deficit_info += f" Soil moisture (0-1 cm): {soil:.2f} m³/m³."
         parts.append(
             f"{district} is in a drought-prone zone "
             f"(NDMA-flagged).{deficit_info}"
@@ -542,6 +413,28 @@ def score_risk_fallback(
     else:
         level = "low"
 
+    if "drought" in hazard_types and temp_max is not None:
+        if rainfall_30d is not None and rainfall_30d < 10 and temp_max >= 45:
+            level = _raise_level(level, "high")
+        elif temp_max >= 40 and (rainfall_30d is None or rainfall_30d < 15):
+            level = _raise_level(level, "medium")
+
+    if northern:
+        heavy_snow = snowfall is not None and snowfall >= 30
+        warm_on_snow = (
+            temp_max is not None
+            and temp_max >= 25
+            and snow_depth is not None
+            and snow_depth >= 40
+        )
+        if heavy_snow or warm_on_snow:
+            level = _raise_level(level, "high")
+
+    if "landslide" in hazard_types and rainfall_3d is not None:
+        saturated = soil is not None and soil >= 0.4 and rainfall_3d > 40
+        if rainfall_3d > 80 or saturated:
+            level = _raise_level(level, "high")
+
     return level, reason
 
 
@@ -557,6 +450,8 @@ def predict_risk(req: RiskRequest):
             rainfall_forecast_mm=None,
             rainfall_30d_mm=None,
             rainfall_90d_mm=None,
+            weather_metrics=None,
+            weather_unavailable=False,
             risk_level="unknown",
             reason=f"District '{req.district}' not in coverage list. "
                    f"Available: {', '.join(sorted(DISTRICTS.keys()))}",
@@ -575,33 +470,19 @@ def predict_risk(req: RiskRequest):
     hazard_types = info["hazard_types"]
     province = info["province"]
 
-    rainfall_unavailable = False
-
-    # Rainfall: 3-day forecast for flood districts
-    rainfall_3d: float | None = None
-    if "flood" in hazard_types:
-        rainfall_3d = get_rainfall_forecast(lat, lon, days=3)
-        if rainfall_3d is None:
-            rainfall_unavailable = True
-            logger.warning(
-                "Rainfall forecast unavailable for %s — "
-                "assessing risk from NDMA context only",
-                req.district,
-            )
-
-    # Rainfall: historical deficit for drought districts
-    rainfall_30d: float | None = None
-    rainfall_90d: float | None = None
-    if "drought" in hazard_types:
-        rainfall_30d = get_rainfall_historical(lat, lon, past_days=30)
-        rainfall_90d = get_rainfall_historical(lat, lon, past_days=90)
-        if rainfall_30d is None or rainfall_90d is None:
-            rainfall_unavailable = True
-            logger.warning(
-                "Historical rainfall unavailable for %s — "
-                "assessing risk from NDMA context only",
-                req.district,
-            )
+    metrics = assemble_weather(lat, lon, hazard_types)
+    rainfall_3d = metrics.rainfall_forecast_mm
+    rainfall_30d = metrics.rainfall_30d_mm
+    rainfall_90d = metrics.rainfall_90d_mm
+    rainfall_unavailable, weather_unavailable = availability_flags(
+        hazard_types, metrics,
+    )
+    if weather_unavailable or rainfall_unavailable:
+        logger.warning(
+            "Weather bundle incomplete for %s (weather_unavailable=%s, "
+            "rainfall_unavailable=%s) — assessment may use NDMA context only",
+            req.district, weather_unavailable, rainfall_unavailable,
+        )
 
     # ── Risk reasoning: Gemini, then Grok if configured, then rules ──
     result = assess_risk_with_gemini(
@@ -612,6 +493,7 @@ def predict_risk(req: RiskRequest):
         rainfall_3d=rainfall_3d,
         rainfall_30d=rainfall_30d,
         rainfall_90d=rainfall_90d,
+        weather_metrics=metrics.model_dump(),
     )
 
     reasoning_error: str | None = None
@@ -629,26 +511,27 @@ def predict_risk(req: RiskRequest):
             reasoning_error = result.error
         risk_level, reason = score_risk_fallback(
             req.district, hazard_types, rainfall_3d, rainfall_30d, rainfall_90d,
+            weather_metrics=metrics,
         )
         reasoning_source = "fallback"
         logger.info("Risk for %s: %s (source=fallback)", req.district, risk_level)
 
-    # Annotate reason when rainfall was unavailable
-    if rainfall_unavailable:
-        reason = (
-            "[Note: Live rainfall data was unavailable; this assessment is "
-            "based on static NDMA hazard context only.] " + reason
-        )
+    if weather_unavailable:
+        reason = _WEATHER_NOTE + reason
+    elif rainfall_unavailable:
+        reason = _RAIN_NOTE + reason
 
     body = RiskResponse(
         district=req.district,
         hazard_types=hazard_types,
-        rainfall_forecast_mm=round(rainfall_3d, 1) if rainfall_3d is not None else None,
-        rainfall_30d_mm=round(rainfall_30d, 1) if rainfall_30d is not None else None,
-        rainfall_90d_mm=round(rainfall_90d, 1) if rainfall_90d is not None else None,
+        rainfall_forecast_mm=rainfall_3d,
+        rainfall_30d_mm=rainfall_30d,
+        rainfall_90d_mm=rainfall_90d,
+        weather_metrics=metrics,
         risk_level=risk_level,
         reason=reason,
         rainfall_unavailable=rainfall_unavailable,
+        weather_unavailable=weather_unavailable,
         reasoning_source=reasoning_source,
         reasoning_error=reasoning_error,
     )

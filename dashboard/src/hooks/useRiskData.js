@@ -3,13 +3,13 @@ import { predictRisk } from '../api/riskFlag.js'
 
 // Live risk prediction for a single district via Risk Flag (POST /predict-risk).
 //   useRiskData(district) -> { data, loading, error, refetch }
-// - data: /predict-risk response body (risk_level, reason, rainfall fields)
+// - data: /predict-risk response body (risk_level, reason, weather_metrics, rainfall fields)
 // - error: ApiError from ../api/client.js (network failure or non-2xx)
 // - refetch(): re-run the request for the current district
 // Pass a falsy district to idle the hook (no request, data cleared).
-// Risk Flag fetches Open-Meteo rainfall (and may call Gemini) server-side,
-// so requests can take several minutes — consumers should show a loading
-// state rather than assume instant resolution.
+// Risk Flag fetches an Open-Meteo weather bundle (and may call Gemini, then
+// Grok) server-side, so requests can take several minutes — consumers should
+// show a loading state rather than assume instant resolution.
 export function useRiskData(district) {
   const [data, setData] = useState(null)
   const [loading, setLoading] = useState(Boolean(district))

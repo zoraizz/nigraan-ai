@@ -73,9 +73,12 @@ be no CORS errors in the console at any step.**
 1. Click **Risk Map** in the sidebar.
 2. A risk card for **Dadu** (default) loads in roughly 3 minutes (observed 172-177 s; the Gemini call dominates).
 3. Expected: risk badge (`low`/`medium`/`high`), `Flood` hazard chip,
-   "3-day forecast: X mm" row, and a reason sentence.
+   a Weather panel (rain, precip probability, wind, and other non-null
+   metrics), and a reason sentence.
 4. Click another district (e.g. **Tharparkar**) → card refetches (allow another ~3 min); expect
-   `Drought` chip and 30-day/90-day rainfall rows.
+   `Drought` chip plus 30-day/90-day rain, temperature, and humidity when those
+   values are present. **Chitral**, **Hunza**, or **Skardu** also show snowfall
+   and snow depth, including zero.
 5. Network tab: one `OPTIONS` (200) then one `POST /predict-risk` (200) per fetch.
 
 ### Step 2 — DamageAssessment page

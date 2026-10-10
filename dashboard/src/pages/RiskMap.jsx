@@ -5,20 +5,57 @@ import HazardIcon from '../components/HazardIcon.jsx'
 import { useRiskData } from '../hooks/useRiskData.js'
 import { DISTRICTS, DISTRICT_NAMES } from '../config/districts.js'
 import { ENDPOINTS } from '../config/endpoints.js'
-
-const RAINFALL_ROWS = [
-  ['rainfall_forecast_mm', '3-day forecast'],
-  ['rainfall_30d_mm', 'Last 30 days'],
-  ['rainfall_90d_mm', 'Last 90 days'],
-]
+import { buildRiskMetricRows, formatMetricValue } from './riskMetrics.js'
 
 const LOADING_MESSAGES = [
-  'Analyzing rainfall patterns…',
+  'Analyzing weather and snow metrics…',
   'Cross-referencing NDMA hazard history…',
-  'Consulting Gemini for risk assessment…',
-  'Comparing against historical flood patterns…',
+  'Consulting the risk model…',
+  'Comparing against historical hazard patterns…',
   'Synthesizing multi-signal risk score…',
 ]
+
+function WeatherMetrics({ data }) {
+  const rows = buildRiskMetricRows(data)
+  const showDischargeNote = rows.some((row) => row.discharge)
+  const showSnowNote = rows.some((row) => row.snow)
+
+  if (rows.length === 0) {
+    return (
+      <p className="mb-4 text-sm text-muted">No live weather metrics for this district.</p>
+    )
+  }
+
+  return (
+    <div className="mb-4">
+      <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-muted">
+        Weather
+      </p>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-sm">
+        {rows.map((row) => (
+          <div
+            key={row.key}
+            className="flex items-baseline justify-between gap-2 border-b border-line pb-1.5"
+          >
+            <dt className={row.relevant ? 'text-text' : 'text-muted'}>{row.label}</dt>
+            <dd className={`data shrink-0 ${row.relevant ? 'font-semibold text-text' : 'text-muted'}`}>
+              {formatMetricValue(row.value, row.digits)} {row.unit}
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {showDischargeNote ? (
+        <p className="mt-2 text-[11px] leading-snug text-muted">
+          River discharge is the nearest GloFAS model cell (~5 km).
+        </p>
+      ) : showSnowNote ? (
+        <p className="mt-2 text-[11px] leading-snug text-muted">
+          Snowfall is the 3-day sum. Snow depth is the latest forecast hour.
+        </p>
+      ) : null}
+    </div>
+  )
+}
 
 // District risk view — live Risk Flag data for the selected district.
 export default function RiskMap() {
@@ -42,7 +79,7 @@ export default function RiskMap() {
   return (
     <PageContainer
       title="District Risk"
-      lead="Select a district to fetch its live risk assessment from Risk Flag. Weather data is fetched server-side; requests can take a few minutes."
+      lead="Select a district to fetch its live risk assessment from Risk Flag. Open-Meteo weather metrics are fetched server-side; requests can take a few minutes."
     >
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
         {/* District list */}
@@ -92,7 +129,7 @@ export default function RiskMap() {
               <div className="spinner mx-auto mb-4" />
               <p className="text-sm font-medium text-text">{LOADING_MESSAGES[msgIdx]}</p>
               <p className="data mt-2 text-xs text-muted">
-                elapsed {elapsed}s · Open-Meteo + Gemini can take up to 3 minutes
+                elapsed {elapsed}s · Open-Meteo and the risk model can take up to 3 minutes
               </p>
             </div>
           ) : error ? (
@@ -114,9 +151,13 @@ export default function RiskMap() {
                   Returned from server cache (pre-warmed, no Gemini call)
                 </p>
               ) : null}
-              {data.rainfall_unavailable ? (
+              {data.weather_unavailable ? (
                 <p className="alert-error mb-4 px-3 py-1.5 text-xs">
-                  ⚠ Live rainfall data was unavailable — risk assessment is based on static NDMA hazard context only.
+                  Live weather data was unavailable — risk assessment is based on static NDMA hazard context only.
+                </p>
+              ) : data.rainfall_unavailable ? (
+                <p className="alert-error mb-4 px-3 py-1.5 text-xs">
+                  Live rainfall data was unavailable — risk assessment is based on static NDMA hazard context only.
                 </p>
               ) : null}
               {data.hazard_types?.length > 0 ? (
@@ -127,24 +168,7 @@ export default function RiskMap() {
                 </div>
               ) : null}
 
-              <dl className="mb-4 space-y-1.5 text-sm">
-                {RAINFALL_ROWS.map(([field, label]) =>
-                  data[field] != null ? (
-                    <div
-                      key={field}
-                      className="flex items-baseline justify-between gap-4 border-b border-line pb-1.5"
-                    >
-                      <dt className="text-muted">{label}</dt>
-                      <dd className="data text-text">
-                        {Number.isFinite(data[field])
-                          ? data[field].toFixed(1)
-                          : data[field]}{' '}
-                        mm
-                      </dd>
-                    </div>
-                  ) : null,
-                )}
-              </dl>
+              <WeatherMetrics data={data} />
 
               <p className="well p-3 text-sm leading-relaxed text-text">{data.reason}</p>
 

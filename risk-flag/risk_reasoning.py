@@ -78,22 +78,51 @@ def _build_context_block(
     return "\n".join(lines)
 
 
-def _build_rainfall_block(
-    rainfall_3d: float | None,
-    rainfall_30d: float | None,
-    rainfall_90d: float | None,
-) -> str:
-    """Assemble the rainfall data section of the prompt."""
-    parts: list[str] = []
-    if rainfall_3d is not None:
-        parts.append(f"3-day rainfall forecast: {rainfall_3d:.1f} mm")
-    if rainfall_30d is not None:
-        parts.append(f"30-day cumulative rainfall (historical): {rainfall_30d:.1f} mm")
-    if rainfall_90d is not None:
-        parts.append(f"90-day cumulative rainfall (historical): {rainfall_90d:.1f} mm")
-    if not parts:
-        return "No rainfall data available for this district."
-    return "\n".join(parts)
+_WEATHER_LINES: tuple[tuple[str, str, str, int], ...] = (
+    ("rainfall_forecast_mm", "3-day rainfall forecast", "mm", 1),
+    ("rainfall_30d_mm", "30-day cumulative rainfall (historical)", "mm", 1),
+    ("rainfall_90d_mm", "90-day cumulative rainfall (historical)", "mm", 1),
+    ("temperature_max_c_3d", "3-day maximum temperature", "°C", 1),
+    ("temperature_min_c_3d", "3-day minimum temperature", "°C", 1),
+    ("precip_probability_max_pct_3d", "3-day maximum precipitation probability", "%", 1),
+    ("wind_speed_max_kmh_3d", "3-day maximum wind speed", "km/h", 1),
+    ("wind_gust_max_kmh_3d", "3-day maximum wind gust", "km/h", 1),
+    ("humidity_mean_pct_3d", "3-day mean relative humidity", "%", 1),
+    ("soil_moisture_0_1cm_m3m3", "Mean soil moisture at 0-1 cm", "m³/m³", 3),
+    ("snowfall_cm_3d", "3-day snowfall", "cm", 1),
+    ("snow_depth_cm", "Latest snow depth", "cm", 1),
+    (
+        "river_discharge_max_m3s_3d",
+        "3-day maximum river discharge (GloFAS nearest ~5 km cell)",
+        "m³/s",
+        1,
+    ),
+)
+
+
+def _metric_number(metrics: dict, key: str) -> float | None:
+    value = metrics.get(key)
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    return float(value)
+
+
+def _build_weather_block(metrics: dict | None, hazard_types: list[str]) -> str:
+    """Scalar weather lines only. Hourly arrays never reach the model."""
+    metrics = metrics or {}
+    lines: list[str] = []
+    for key, label, unit, digits in _WEATHER_LINES:
+        value = _metric_number(metrics, key)
+        if value is None:
+            continue
+        lines.append(f"{label}: {value:.{digits}f} {unit}")
+    if "flood" in hazard_types and _metric_number(metrics, "river_discharge_max_m3s_3d") is None:
+        lines.append(
+            "River discharge: unavailable (no usable GloFAS value for this coordinate)."
+        )
+    if not lines:
+        return "No weather metrics available for this district."
+    return "\n".join(lines)
 
 
 def _build_prompt(
@@ -104,10 +133,17 @@ def _build_prompt(
     rainfall_3d: float | None,
     rainfall_30d: float | None,
     rainfall_90d: float | None,
+    weather_metrics: dict | None = None,
 ) -> str:
-    """Build the full prompt sent to Gemini."""
+    """Build the full prompt sent to Gemini and Grok."""
+    if weather_metrics is None:
+        weather_metrics = {
+            "rainfall_forecast_mm": rainfall_3d,
+            "rainfall_30d_mm": rainfall_30d,
+            "rainfall_90d_mm": rainfall_90d,
+        }
     ctx = _build_context_block(district, hazard_types, hazard_context, province)
-    rain = _build_rainfall_block(rainfall_3d, rainfall_30d, rainfall_90d)
+    weather = _build_weather_block(weather_metrics, hazard_types)
 
     return (
         "You are a disaster risk analyst for Pakistan's National Disaster "
@@ -115,13 +151,22 @@ def _build_prompt(
         "the current disaster risk level for this district.\n\n"
         "## District & Hazard Context\n"
         f"{ctx}\n"
-        "## Rainfall Data\n"
-        f"{rain}\n\n"
+        "## Weather & snow metrics\n"
+        f"{weather}\n\n"
+        "These figures are Open-Meteo grid-cell values at the district "
+        "coordinate. River discharge is a GloFAS model cell. Snow depth is "
+        "the latest forecast hour.\n"
+        "Weigh the metrics by this district's hazard types:\n"
+        "- flood: rainfall, precipitation probability, wind, and river discharge when present\n"
+        "- drought: rainfall deficit (30-day and 90-day), temperature, humidity, and soil moisture\n"
+        "- glof and avalanche: temperature (melt), snowfall, snow depth, and wind\n"
+        "- landslide: rainfall, soil moisture, and wind\n"
+        "Do not invent metrics that are missing.\n\n"
         "Respond with a JSON object containing exactly two fields:\n"
         '- "risk_level": one of "low", "medium", or "high"\n'
-        '- "rationale": a single sentence explaining your assessment\n\n'
-        "Consider the district's hazard history, current rainfall, and "
-        "vulnerability profile. Do not include any text outside the JSON."
+        '- "rationale": a single sentence explaining your assessment, '
+        "citing the metrics that matter for these hazards\n\n"
+        "Do not include any text outside the JSON."
     )
 
 
@@ -321,14 +366,17 @@ def assess_risk_with_gemini(
     rainfall_3d: float | None = None,
     rainfall_30d: float | None = None,
     rainfall_90d: float | None = None,
+    weather_metrics: dict | None = None,
 ) -> ReasoningResult | None:
     """Gemini, then Grok if a key is set. None or ``error`` means use rules.
 
     A missing Grok key skips that attempt. Each provider is one timed call.
+    ``weather_metrics`` is a compact scalar bundle. When omitted, the prompt
+    falls back to the rainfall arguments only.
     """
     prompt = _build_prompt(
         district, hazard_types, hazard_context, province,
-        rainfall_3d, rainfall_30d, rainfall_90d,
+        rainfall_3d, rainfall_30d, rainfall_90d, weather_metrics,
     )
 
     gemini = _call_gemini(district, prompt)
