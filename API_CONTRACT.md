@@ -69,6 +69,17 @@ zero. Flood districts add one Flood API call
 (`flood-api.open-meteo.com/v1/flood`, `river_discharge`). Hourly series are
 reduced to scalars before the response and the LLM prompt.
 
+HTTP 429 is not retried inside the user request and is not stored as zero
+rainfall. The server records a process-local cooldown for the Open-Meteo URL
+that returned it. Forecast, archive, and flood cooldowns are independent. A
+valid `Retry-After` delay-seconds or HTTP-date sets that cooldown, capped at
+the 3-hour weather-cache lifetime. A missing or invalid `Retry-After` uses
+60 seconds. The request returns the existing nulls and availability flags
+without sleeping for the cooldown. Fresh cache entries are still used. A
+restart clears the cooldown. 5xx responses and timeouts still retry up to
+two times. Concurrent requests for the same coordinate and weather window
+share one in-flight fetch in that process.
+
 `rainfall_forecast_mm` is set for every district when the forecast bundle
 succeeds, including GLOF, landslide, and drought. `rainfall_30d_mm` and
 `rainfall_90d_mm` are set for drought districts. `river_discharge_max_m3s_3d`

@@ -12,7 +12,10 @@ Usage:
 
 from __future__ import annotations
 
+import threading
 import time
+from datetime import datetime, timedelta, timezone
+from email.utils import format_datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -94,21 +97,28 @@ def _then_discharge(*responses):
 @patch("time.sleep")  # Don't actually sleep in tests
 @patch("requests.get")
 def test_retry_on_429_then_success(mock_get, mock_sleep, _mock_gemini, client):
-    """429 on first attempt → retry → 200 on second → returns rainfall."""
-    mock_get.side_effect = _then_discharge(
-        _mock_response(429, headers={"Retry-After": "1"}),
-        _mock_response(200, json_data=_FORECAST_OK),
-    )
+    """A 429 does not retry inside the request, and it is not stored as rain."""
+    blocked = _mock_response(429, headers={"Retry-After": "1"})
+    blocked.text = "minutely API limit exceeded"
+    mock_get.side_effect = [
+        blocked,
+        _mock_response(200, json_data=_DISCHARGE_EMPTY),
+    ]
 
     resp = client.post("/predict-risk", json={"district": "Dadu"})
     assert resp.status_code == 200
     body = resp.json()
-    assert body["rainfall_forecast_mm"] == 60.0
-    assert body["weather_metrics"]["rainfall_forecast_mm"] == 60.0
-    assert body["rainfall_unavailable"] is False
-    assert body["weather_unavailable"] is False
-    # Forecast: 429 then 200. Discharge: one 200.
-    assert mock_get.call_count == 3
+    assert body["rainfall_forecast_mm"] is None
+    assert body["weather_metrics"]["rainfall_forecast_mm"] is None
+    assert body["rainfall_unavailable"] is True
+    assert body["weather_unavailable"] is True
+    assert "minutely" not in body["reason"]
+    assert "limit exceeded" not in body["reason"]
+    # One forecast 429. Discharge is a different endpoint and still runs once.
+    assert mock_get.call_count == 2
+    mock_sleep.assert_not_called()
+    assert weather_bundle.rate_limit_remaining(weather_bundle._FORECAST_URL) > 0
+    assert weather_bundle.rate_limit_remaining(weather_bundle._FLOOD_URL) == 0
 
 
 @patch("main.assess_risk_with_gemini", return_value=None)
@@ -126,8 +136,9 @@ def test_retry_exhausted_returns_unavailable(mock_get, mock_sleep, _mock_gemini,
     assert body["rainfall_unavailable"] is True
     assert body["weather_unavailable"] is True
     assert "unavailable" in body["reason"].lower()
-    # Forecast 3 attempts + discharge 3 attempts.
-    assert mock_get.call_count == 6
+    # One attempt per endpoint. A 429 is not retried inside the request.
+    assert mock_get.call_count == 2
+    mock_sleep.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -290,16 +301,17 @@ def test_request_timeout_triggers_retry(mock_get, mock_sleep, _mock_gemini, clie
 @patch("time.sleep")
 @patch("requests.get")
 def test_retry_after_header_honored(mock_get, mock_sleep, _mock_gemini, client):
-    """Retry-After header value is passed to time.sleep."""
-    mock_get.side_effect = _then_discharge(
+    """A numeric Retry-After sets the cooldown and is not slept inside the request."""
+    mock_get.side_effect = [
         _mock_response(429, headers={"Retry-After": "3"}),
-        _mock_response(200, json_data=_FORECAST_OK),
-    )
+        _mock_response(200, json_data=_DISCHARGE_EMPTY),
+    ]
 
     resp = client.post("/predict-risk", json={"district": "Dadu"})
     assert resp.status_code == 200
-    # Verify sleep was called with the Retry-After value
-    mock_sleep.assert_any_call(3.0)
+    mock_sleep.assert_not_called()
+    remaining = weather_bundle.rate_limit_remaining(weather_bundle._FORECAST_URL)
+    assert 2.5 <= remaining <= 3.0
 
 
 # ---------------------------------------------------------------------------
@@ -575,3 +587,221 @@ def test_unknown_district_has_null_reasoning_fields(client):
     assert body["reasoning_error"] is None
     assert body["weather_metrics"] is None
     assert body["weather_unavailable"] is False
+
+
+# ---------------------------------------------------------------------------
+# 12. 429 cooldown and in-flight deduplication
+# ---------------------------------------------------------------------------
+
+def test_retry_after_parser_accepts_seconds_and_http_dates():
+    now = datetime(2026, 10, 11, tzinfo=timezone.utc).timestamp()
+    assert weather_bundle.retry_after_delay("1.5", now=now) == 1.5
+    assert weather_bundle.retry_after_delay("0", now=now) == 0.0
+    assert weather_bundle.retry_after_delay("-5", now=now) is None
+    assert weather_bundle.retry_after_delay("soon", now=now) is None
+    assert weather_bundle.retry_after_delay("", now=now) is None
+    assert weather_bundle.retry_after_delay(None, now=now) is None
+    future = format_datetime(datetime(2026, 10, 11, 0, 2, tzinfo=timezone.utc), usegmt=True)
+    assert weather_bundle.retry_after_delay(future, now=now) == 120
+    past = format_datetime(datetime(2020, 1, 1, tzinfo=timezone.utc), usegmt=True)
+    assert weather_bundle.retry_after_delay(past, now=now) < 0
+
+
+@patch("time.sleep")
+@patch("requests.get")
+def test_long_retry_after_returns_without_sleeping(mock_get, mock_sleep):
+    mock_get.return_value = _mock_response(429, headers={"Retry-After": "100000"})
+    started = time.perf_counter()
+    data, status, text = weather_bundle._openmeteo_exchange(
+        weather_bundle._FORECAST_URL, {"latitude": 1, "longitude": 2},
+    )
+    elapsed = time.perf_counter() - started
+    assert data is None
+    assert status == 429
+    assert text == ""
+    assert elapsed < 0.5
+    mock_sleep.assert_not_called()
+    assert mock_get.call_count == 1
+    remaining = weather_bundle.rate_limit_remaining(weather_bundle._FORECAST_URL)
+    assert remaining == weather_bundle.MAX_429_COOLDOWN_SECS or (
+        weather_bundle.MAX_429_COOLDOWN_SECS - 1 <= remaining <= weather_bundle.MAX_429_COOLDOWN_SECS
+    )
+    assert weather_bundle._cache_get(1, 2, weather_bundle.FORECAST_WINDOW) is None
+
+
+@patch("time.sleep")
+@patch("requests.get")
+def test_invalid_retry_after_uses_the_default_cooldown(mock_get, mock_sleep):
+    mock_get.return_value = _mock_response(429, headers={"Retry-After": "soon"})
+    assert weather_bundle.fetch_forecast_bundle(1.0, 2.0) is None
+    remaining = weather_bundle.rate_limit_remaining(weather_bundle._FORECAST_URL)
+    assert 59 <= remaining <= weather_bundle.DEFAULT_429_COOLDOWN_SECS
+    assert weather_bundle.fetch_forecast_bundle(9.0, 9.0) is None
+    assert mock_get.call_count == 1
+    mock_sleep.assert_not_called()
+
+
+@patch("time.sleep")
+@patch("requests.get")
+def test_forecast_cooldown_does_not_block_archive(mock_get, mock_sleep):
+    def router(url, params=None, timeout=None, headers=None):
+        if "archive-api" in url:
+            start = params["start_date"]
+            end = params["end_date"]
+            dates = weather_bundle.inclusive_dates(start, end)
+            return _mock_response(200, {
+                "daily": {"time": dates, "precipitation_sum": [1.0] * len(dates)},
+            })
+        return _mock_response(429, headers={"Retry-After": "30"})
+
+    mock_get.side_effect = router
+    assert weather_bundle.fetch_forecast_bundle(29.3, 64.7) is None
+    historical = weather_bundle.fetch_historical_rainfall(29.3, 64.7)
+    assert historical["rainfall_90d_mm"] == 90.0
+    assert historical["rainfall_30d_mm"] == 30.0
+    assert weather_bundle.fetch_forecast_bundle(24.7, 69.8) is None
+    urls = [call.args[0] for call in mock_get.call_args_list]
+    assert urls.count(weather_bundle._FORECAST_URL) == 1
+    assert urls.count(weather_bundle._ARCHIVE_URL) == 1
+    mock_sleep.assert_not_called()
+
+
+@patch("time.sleep")
+@patch("requests.get")
+def test_archive_cooldown_does_not_block_forecast(mock_get, mock_sleep):
+    def router(url, params=None, timeout=None, headers=None):
+        if "archive-api" in url:
+            return _mock_response(429)
+        return _mock_response(200, json_data=_FORECAST_OK)
+
+    mock_get.side_effect = router
+    assert weather_bundle.fetch_historical_rainfall(29.3, 64.7) is None
+    forecast = weather_bundle.fetch_forecast_bundle(29.3, 64.7)
+    assert forecast["rainfall_forecast_mm"] == 60.0
+    assert weather_bundle.fetch_historical_rainfall(24.7, 69.8) is None
+    urls = [call.args[0] for call in mock_get.call_args_list]
+    assert urls.count(weather_bundle._ARCHIVE_URL) == 1
+    assert urls.count(weather_bundle._FORECAST_URL) == 1
+
+
+@patch("requests.get")
+def test_cooldown_expiry_allows_a_new_call(mock_get):
+    mock_get.return_value = _mock_response(200, json_data=_FORECAST_OK)
+    weather_bundle._rate_limit_until[weather_bundle._FORECAST_URL] = time.monotonic() - 1
+    summary = weather_bundle.fetch_forecast_bundle(1.0, 2.0)
+    assert summary["rainfall_forecast_mm"] == 60.0
+    assert mock_get.call_count == 1
+    assert weather_bundle.rate_limit_remaining(weather_bundle._FORECAST_URL) == 0
+
+
+@patch("time.sleep")
+@patch("requests.get")
+def test_past_http_date_does_not_keep_the_endpoint_closed(mock_get, mock_sleep):
+    past = format_datetime(datetime.now(timezone.utc) - timedelta(minutes=5), usegmt=True)
+    mock_get.side_effect = [
+        _mock_response(429, headers={"Retry-After": past}),
+        _mock_response(200, json_data=_FORECAST_OK),
+    ]
+    assert weather_bundle.fetch_forecast_bundle(1.0, 2.0) is None
+    summary = weather_bundle.fetch_forecast_bundle(1.0, 2.0)
+    assert summary["rainfall_forecast_mm"] == 60.0
+    assert mock_get.call_count == 2
+    mock_sleep.assert_not_called()
+
+
+def test_identical_inflight_requests_share_one_upstream_call():
+    entered = threading.Event()
+    release = threading.Event()
+    calls = {"n": 0}
+
+    def slow_get(url, params=None, timeout=None, headers=None):
+        calls["n"] += 1
+        entered.set()
+        assert release.wait(2)
+        return _mock_response(200, json_data=_FORECAST_OK)
+
+    results = []
+    errors = []
+
+    def run():
+        try:
+            results.append(weather_bundle.fetch_forecast_bundle(1.0, 2.0))
+        except Exception as exc:  # pragma: no cover - failure is asserted below
+            errors.append(exc)
+
+    with patch("requests.get", side_effect=slow_get):
+        first = threading.Thread(target=run)
+        second = threading.Thread(target=run)
+        first.start()
+        assert entered.wait(2)
+        second.start()
+        time.sleep(0.05)
+        assert calls["n"] == 1
+        release.set()
+        first.join(2)
+        second.join(2)
+
+    assert errors == []
+    assert calls["n"] == 1
+    assert [row["rainfall_forecast_mm"] for row in results] == [60.0, 60.0]
+    assert weather_bundle._inflight == {}
+
+
+def test_inflight_waiter_gives_up_without_a_second_call():
+    entered = threading.Event()
+    release = threading.Event()
+    calls = {"n": 0}
+
+    def slow_get(url, params=None, timeout=None, headers=None):
+        calls["n"] += 1
+        entered.set()
+        assert release.wait(2)
+        return _mock_response(200, json_data=_FORECAST_OK)
+
+    waiter_result = []
+
+    def lead():
+        weather_bundle.fetch_forecast_bundle(4.0, 5.0)
+
+    def follow():
+        waiter_result.append(weather_bundle.fetch_forecast_bundle(4.0, 5.0))
+
+    with patch("requests.get", side_effect=slow_get), patch.object(
+        weather_bundle, "INFLIGHT_WAIT_SECS", 0.05,
+    ):
+        leader = threading.Thread(target=lead)
+        leader.start()
+        assert entered.wait(2)
+        follower = threading.Thread(target=follow)
+        follower.start()
+        follower.join(2)
+        assert waiter_result == [None]
+        assert calls["n"] == 1
+        release.set()
+        leader.join(2)
+
+    assert calls["n"] == 1
+    assert weather_bundle._inflight == {}
+    cached = weather_bundle._cache_get(4.0, 5.0, weather_bundle.FORECAST_WINDOW)
+    assert cached["rainfall_forecast_mm"] == 60.0
+
+
+def test_inflight_failure_clears_the_slot_for_a_later_call():
+    def boom():
+        raise RuntimeError("upstream failed")
+
+    with pytest.raises(RuntimeError, match="upstream failed"):
+        weather_bundle._join_or_lead(8.0, 8.0, weather_bundle.FORECAST_WINDOW, boom)
+    assert weather_bundle._inflight == {}
+
+    ran = {"n": 0}
+
+    def recover():
+        ran["n"] += 1
+        return {"rainfall_forecast_mm": 4.0}
+
+    assert weather_bundle._join_or_lead(
+        8.0, 8.0, weather_bundle.FORECAST_WINDOW, recover,
+    ) == {"rainfall_forecast_mm": 4.0}
+    assert ran["n"] == 1
+    assert weather_bundle._inflight == {}

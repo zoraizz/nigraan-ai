@@ -477,7 +477,8 @@ def test_glof_outage_flags_weather_not_legacy_rainfall(_gemini, mock_get, _sleep
     assert body["weather_unavailable"] is True
     assert body["reasoning_source"] == "fallback"
     assert all("flood-api" not in url and "archive-api" not in url for url in _urls(mock_get))
-    assert mock_get.call_count == 3
+    # One forecast attempt. HTTP 429 is not retried inside the request.
+    assert mock_get.call_count == 1
 
 
 def _grab_prompt(store):

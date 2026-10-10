@@ -10,15 +10,19 @@ gets one recovery request ending on that day. The 30-day total is the last
 30 dates of the accepted window when every one of them is numeric. Flood
 districts add one GloFAS river-discharge call.
 No API key. Raw hourly arrays stay on the server and are reduced to scalars.
+An HTTP 429 records a process-local cooldown for that endpoint and is not
+retried inside the request. 5xx and timeouts still use the existing retries.
 """
 
 from __future__ import annotations
 
 import logging
+import math
 import re
 import time
 import threading
 from datetime import date, datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 
 import requests
 from pydantic import BaseModel
@@ -66,9 +70,25 @@ _DISTRICT_UTC_OFFSET = timezone(timedelta(hours=5))
 ARCHIVE_DAYS = 90
 
 WEATHER_CACHE_TTL_SECS = 3 * 60 * 60  # 3 hours
+# The terms page lists free-tier ceilings (600/minute, 5,000/hour, 10,000/day)
+# and does not document Retry-After. The maintainer has described HTTP 429 as
+# the limit response, without saying which window a given 429 belongs to. A
+# missing or invalid Retry-After therefore pauses that one endpoint for one
+# minute. A valid delay is honored up to the weather-cache lifetime so one
+# header cannot silence the endpoint until process restart.
+DEFAULT_429_COOLDOWN_SECS = 60
+MAX_429_COOLDOWN_SECS = WEATHER_CACHE_TTL_SECS
+# Waiters share the leader's result. The bound covers one endpoint's existing
+# timeout/retry budget plus one archive date-range recovery (two exchanges).
+# A waiter that exceeds it returns missing data and does not start a second call.
+INFLIGHT_WAIT_SECS = 70
 
 _cache: dict[tuple, tuple[dict, float]] = {}
 _cache_lock = threading.Lock()
+# url -> monotonic deadline. Per endpoint, not per district. Process-local.
+_rate_limit_until: dict[str, float] = {}
+# (lat, lon, window) -> _Flight. Cleared on success and failure.
+_inflight: dict[tuple, "_Flight"] = {}
 # Latest archive end date learned from a date-range HTTP 400. Not a rainfall
 # total. Same lifetime as the weather cache so a rejected end date is not
 # requested again for every drought district.
@@ -98,11 +118,22 @@ class WeatherMetrics(BaseModel):
     river_discharge_max_m3s_3d: float | None = None
 
 
+class _Flight:
+    """One in-flight fetch shared by concurrent callers for the same window."""
+
+    def __init__(self) -> None:
+        self.event = threading.Event()
+        self.result: dict | None = None
+        self.failed = False
+
+
 def clear_weather_cache() -> None:
     global _archive_end_ceiling
     with _cache_lock:
         _cache.clear()
         _archive_end_ceiling = None
+        _rate_limit_until.clear()
+        _inflight.clear()
 
 
 def cache_put(
@@ -139,17 +170,157 @@ def _cache_get(lat: float, lon: float, window: str, *, allow_stale: bool = False
 
 
 def _is_retryable(status_code: int) -> bool:
-    return status_code == 429 or 500 <= status_code < 600
+    """5xx only. HTTP 429 arms a cooldown and is not retried in this request."""
+    return 500 <= status_code < 600
+
+
+def retry_after_delay(header: str | None, *, now: float | None = None) -> float | None:
+    """Seconds from ``now`` until a Retry-After deadline.
+
+    Accepts delay-seconds and an HTTP-date. Returns None when the header is
+    missing or invalid, including a negative or non-finite delay. A date in
+    the past returns a negative or zero delay so the caller does not replace
+    it with the default cooldown.
+    """
+    if header is None:
+        return None
+    text = str(header).strip()
+    if not text:
+        return None
+    if now is None:
+        now = time.time()
+    try:
+        seconds = float(text)
+    except (TypeError, ValueError):
+        seconds = None
+    else:
+        if not math.isfinite(seconds) or seconds < 0:
+            return None
+        return seconds
+    try:
+        parsed = parsedate_to_datetime(text)
+    except (TypeError, ValueError, IndexError, OverflowError):
+        return None
+    if parsed is None:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp() - now
+
+
+def _cooldown_seconds(header: str | None) -> float:
+    """Cooldown to record for one 429. Does not sleep."""
+    parsed = retry_after_delay(header)
+    if parsed is None:
+        return float(DEFAULT_429_COOLDOWN_SECS)
+    if parsed <= 0:
+        return 0.0
+    return min(float(parsed), float(MAX_429_COOLDOWN_SECS))
+
+
+def _rate_limit_active(url: str) -> bool:
+    with _cache_lock:
+        until = _rate_limit_until.get(url)
+        if until is None:
+            return False
+        if time.monotonic() >= until:
+            _rate_limit_until.pop(url, None)
+            return False
+        return True
+
+
+def rate_limit_remaining(url: str) -> float:
+    """Seconds left on this endpoint's cooldown. Zero when it is not cooling."""
+    with _cache_lock:
+        until = _rate_limit_until.get(url)
+        if until is None:
+            return 0.0
+        return max(0.0, until - time.monotonic())
+
+
+def _arm_rate_limit(url: str, seconds: float) -> None:
+    if seconds <= 0:
+        return
+    bounded = min(float(seconds), float(MAX_429_COOLDOWN_SECS))
+    with _cache_lock:
+        until = time.monotonic() + bounded
+        current = _rate_limit_until.get(url, 0.0)
+        if until > current:
+            _rate_limit_until[url] = until
+
+
+def _fresh_cached(lat: float, lon: float, window: str) -> dict | None:
+    """Fresh cache entry. Caller must hold ``_cache_lock``."""
+    entry = _cache.get((lat, lon, window))
+    if entry is None:
+        return None
+    payload, stamp = entry
+    if time.time() - stamp > WEATHER_CACHE_TTL_SECS:
+        return None
+    return dict(payload)
+
+
+def _join_or_lead(lat: float, lon: float, window: str, producer):
+    """Run ``producer`` once for this coordinate and window.
+
+    The wait is a ``threading.Event`` on the request thread. ``predict_risk``
+    is a synchronous endpoint, so FastAPI runs it in a worker thread and this
+    wait does not block the server event loop. On timeout or leader failure
+    the waiter returns None and does not call upstream itself.
+    """
+    key = (lat, lon, window)
+    if _cache_get(lat, lon, window) is not None:
+        return _cache_get(lat, lon, window)
+
+    with _cache_lock:
+        fresh = _fresh_cached(lat, lon, window)
+        if fresh is not None:
+            return fresh
+        flight = _inflight.get(key)
+        leader = flight is None
+        if leader:
+            flight = _Flight()
+            _inflight[key] = flight
+
+    if not leader:
+        if not flight.event.wait(INFLIGHT_WAIT_SECS):
+            logger.warning(
+                "In-flight weather fetch for %s did not finish within %.0fs",
+                key, INFLIGHT_WAIT_SECS,
+            )
+            return None
+        if flight.failed or flight.result is None:
+            return None
+        return dict(flight.result)
+
+    try:
+        produced = producer()
+        flight.result = dict(produced) if isinstance(produced, dict) else None
+        return None if flight.result is None else dict(flight.result)
+    except Exception:
+        flight.failed = True
+        raise
+    finally:
+        flight.event.set()
+        with _cache_lock:
+            if _inflight.get(key) is flight:
+                del _inflight[key]
 
 
 def _openmeteo_exchange(url: str, params: dict) -> tuple[dict | None, int | None, str]:
     """GET Open-Meteo with the shared retry policy.
 
     Returns parsed JSON, the last HTTP status, and the last response text.
-    Retryable statuses stay 429 and 5xx. A 400 is returned once, with its
-    body, so the archive caller can decide whether one date-range recovery
-    is possible. Other callers ignore the status and text.
+    HTTP 429 records a cooldown for this URL and returns immediately. 5xx and
+    connection errors still retry. A 400 is returned once, with its body, so
+    the archive caller can decide whether one date-range recovery is possible.
+    Other callers ignore the status and text. The response text is not
+    returned to API clients.
     """
+    if _rate_limit_active(url):
+        logger.info("Open-Meteo %s skipped; rate-limit cooldown still active", url)
+        return None, None, ""
+
     last_exc: Exception | None = None
     last_status: int | None = None
     last_text = ""
@@ -167,16 +338,17 @@ def _openmeteo_exchange(url: str, params: dict) -> tuple[dict | None, int | None
                 body = response.json()
                 return (body if isinstance(body, dict) else None), last_status, last_text
 
-            if _is_retryable(response.status_code):
-                retry_after = response.headers.get("Retry-After")
-                if retry_after is not None:
-                    try:
-                        wait = float(retry_after)
-                    except (ValueError, TypeError):
-                        wait = _BASE_BACKOFF * (2 ** attempt)
-                else:
-                    wait = _BASE_BACKOFF * (2 ** attempt)
+            if response.status_code == 429:
+                delay = _cooldown_seconds(response.headers.get("Retry-After"))
+                _arm_rate_limit(url, delay)
+                logger.warning(
+                    "Open-Meteo %s returned 429; cooldown %.0fs, no further attempt in this request",
+                    url, delay,
+                )
+                return None, last_status, ""
 
+            if _is_retryable(response.status_code):
+                wait = _BASE_BACKOFF * (2 ** attempt)
                 logger.warning(
                     "Open-Meteo %s returned %d (attempt %d/%d), retrying in %.1fs",
                     url, response.status_code, attempt + 1, _MAX_RETRIES + 1, wait,
@@ -474,20 +646,27 @@ def summarize_discharge(data: dict | None) -> dict:
     return summary
 
 
-def _cached_or_fetch(lat: float, lon: float, window: str, url: str, params: dict, summarize) -> dict | None:
-    cached = _cache_get(lat, lon, window)
-    if cached is not None:
-        logger.info("Weather cache hit for (%s, %s, %s)", lat, lon, window)
-        return cached
-
+def _fetch_and_summarize(lat: float, lon: float, window: str, url: str, params: dict, summarize) -> dict | None:
     data = _openmeteo_request_with_retry(url, params)
     if data is not None:
         summary = summarize(data)
         if summary:
             cache_put(lat, lon, window, summary)
             return summary
-
+    # Existing failure path. A cooldown or 429 is not stored as zero rainfall.
     return _cache_get(lat, lon, window, allow_stale=True)
+
+
+def _cached_or_fetch(lat: float, lon: float, window: str, url: str, params: dict, summarize) -> dict | None:
+    cached = _cache_get(lat, lon, window)
+    if cached is not None:
+        logger.info("Weather cache hit for (%s, %s, %s)", lat, lon, window)
+        return cached
+
+    return _join_or_lead(
+        lat, lon, window,
+        lambda: _fetch_and_summarize(lat, lon, window, url, params, summarize),
+    )
 
 
 def fetch_forecast_bundle(lat: float, lon: float) -> dict | None:
@@ -515,18 +694,7 @@ def _archive_params(lat: float, lon: float, start_date: str, end_date: str) -> d
     }
 
 
-def fetch_historical_rainfall(lat: float, lon: float) -> dict | None:
-    """90-day archive precipitation. One date-range recovery at most.
-
-    Summaries are cached only when at least one total is numeric. A rejected
-    end date is remembered for the weather-cache lifetime so the next
-    district does not repeat it. A failed recovery leaves history missing.
-    """
-    cached = _cache_get(lat, lon, ARCHIVE_WINDOW)
-    if cached is not None:
-        logger.info("Weather cache hit for (%s, %s, %s)", lat, lon, ARCHIVE_WINDOW)
-        return cached
-
+def _fetch_historical_uncached(lat: float, lon: float) -> dict | None:
     start_date, end_date = _initial_archive_window()
     data, status, text = _openmeteo_exchange(
         _ARCHIVE_URL, _archive_params(lat, lon, start_date, end_date),
@@ -552,6 +720,24 @@ def fetch_historical_rainfall(lat: float, lon: float) -> dict | None:
             return summary
 
     return _cache_get(lat, lon, ARCHIVE_WINDOW, allow_stale=True)
+
+
+def fetch_historical_rainfall(lat: float, lon: float) -> dict | None:
+    """90-day archive precipitation. One date-range recovery at most.
+
+    Summaries are cached only when at least one total is numeric. A rejected
+    end date is remembered for the weather-cache lifetime so the next
+    district does not repeat it. A failed recovery leaves history missing.
+    Concurrent callers for the same coordinate share one in-flight fetch.
+    """
+    cached = _cache_get(lat, lon, ARCHIVE_WINDOW)
+    if cached is not None:
+        logger.info("Weather cache hit for (%s, %s, %s)", lat, lon, ARCHIVE_WINDOW)
+        return cached
+
+    return _join_or_lead(
+        lat, lon, ARCHIVE_WINDOW, lambda: _fetch_historical_uncached(lat, lon),
+    )
 
 
 def fetch_river_discharge(lat: float, lon: float) -> dict | None:
