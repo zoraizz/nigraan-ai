@@ -33,7 +33,7 @@ export const RESOURCES = [
   },
   {
     label: 'Open-Meteo',
-    note: 'Free weather API behind our live rainfall data.',
+    note: 'Free weather API behind the live town-coordinate weather context.',
     href: 'https://open-meteo.com',
   },
   {

@@ -51,7 +51,7 @@ const MODULES = [
   {
     name: 'Risk Flag',
     stripe: 'var(--color-risk-high)',
-    body: 'Reads the 3-day rainfall forecast for flood districts and recent rainfall totals for drought districts, adds NDMA hazard context, and has an AI model rate each district low, medium or high. A rule-based scorer takes over if the model is unavailable.',
+    body: 'Uses Open-Meteo weather at the district town coordinate, including temperature, wind, and snow when the forecast returns them, plus NDMA hazard context. An AI model rates each district low, medium, or high. A rule-based scorer takes over if the model is unavailable.',
     to: '/risk-map',
     cta: 'Open Risk Map',
   },
@@ -73,7 +73,7 @@ const MODULES = [
 
 const LIMITS = [
   'The damage model is a screening aid, not a building-by-building audit. It is right about two times in three across its three classes, and least reliable on partial damage.',
-  'Live rainfall covers flood and drought districts. GLOF, avalanche and landslide districts rely on NDMA reference context, not live measurements.',
+  'Risk Flag is town-coordinate weather plus an LLM, not a hydrological, glacier, or avalanche model. Snow on high peaks can be understated because the figure is the forecast cell at the town, not the glacier. GLOF, avalanche, and landslide districts still receive live weather inputs when Open-Meteo returns them.',
   'A backtest on the 2022 monsoon showed our rainfall-based scorer flagged only some flood districts as high risk before documented impact. Treat ratings as a starting point.',
   'Nigraan AI supports prioritization. It does not replace emergency responders or official instructions.',
 ]

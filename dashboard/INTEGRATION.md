@@ -64,7 +64,16 @@ foreach ($d in 'Dadu','Tharparkar','Chitral') {
 During the demo, clicking those same districts in the dashboard will return
 in < 1 s and show a green "✓ Returned from server cache" banner.
 
-## 4. Dashboard end-to-end script (open http://localhost:5173)
+Damage Assessment calls `VITE_DAMAGE_API_URL` (default `http://127.0.0.1:8001`).
+A browser message "Failed to fetch" for `127.0.0.1:8001` means damage-checker
+is not running. Start it with `python -m uvicorn main:app --port 8001` in
+`damage-checker`, or set
+`VITE_DAMAGE_API_URL=https://nigraan-damage-checker.onrender.com` in
+`dashboard/.env` and restart Vite. A Render cold start can take 30–60 s.
+The public landing page is `http://localhost:5173/#/`; Damage Assessment is
+`http://localhost:5173/#/damage-assessment`.
+
+## 4. Dashboard end-to-end script (open http://localhost:5173/#/)
 
 Keep the browser DevTools console + Network tab open throughout. **There must
 be no CORS errors in the console at any step.**
@@ -117,6 +126,7 @@ Zero red errors; zero CORS warnings. (React DevTools suggestions are fine.)
 | Symptom | Meaning |
 |---|---|
 | Card shows "Risk Flag request failed — Network error contacting…" | That backend is down (or wrong port). The page stays usable; press Retry after starting it. |
+| Damage Assessment: "Failed to fetch" for `127.0.0.1:8001` | damage-checker is not running locally. Start `python -m uvicorn main:app --port 8001` in `damage-checker`, or point `VITE_DAMAGE_API_URL` at `https://nigraan-damage-checker.onrender.com` and restart Vite. Cold start on Render is 30–60 s. |
 | Console: "blocked by CORS policy" | Backend started without the CORS middleware — you're on an old commit of that service's branch. |
 | Damage result unusually fast + header `X-Model-Warning: untrained-weights` | Checkpoint didn't load — check `damage-checker/checkpoints/xbd_real_model_v2.pth` exists. |
 | `POST /predict-risk` takes ~3 min | Normal — observed 172-177 s per call (server-side Open-Meteo fetch + Gemini reasoning). Keep waiting; do not restart the backend mid-call. |
