@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Sidebar from './components/layout/Sidebar.jsx'
 import Header from './components/layout/Header.jsx'
@@ -11,12 +12,16 @@ import { SceneDamageProvider } from './scene/SceneDamageProvider.jsx'
 
 // Console shell: persistent sidebar rail + header around the 4 console pages.
 function ConsoleShell() {
+  const [isCollapsed, setIsCollapsed] = useState(false)
+
+  const toggleSidebar = () => setIsCollapsed((prev) => !prev)
+
   return (
-    <div className="flex min-h-screen">
-      <Sidebar />
-      <div className="flex min-h-screen min-w-0 flex-1 flex-col">
-        <Header />
-        <main className="flex-1">
+    <div className="flex min-h-screen bg-[#030b06] text-slate-100">
+      <Sidebar isCollapsed={isCollapsed} toggleSidebar={toggleSidebar} />
+      <div className="flex min-h-screen min-w-0 flex-1 flex-col transition-all duration-300">
+        <Header isCollapsed={isCollapsed} toggleSidebar={toggleSidebar} />
+        <main className="flex-1 overflow-x-hidden p-4 lg:p-6">
           <Routes>
             <Route
               path="/overview"
@@ -70,3 +75,4 @@ export default function App() {
     </SceneDamageProvider>
   )
 }
+

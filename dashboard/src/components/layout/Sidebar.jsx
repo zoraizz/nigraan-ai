@@ -8,13 +8,14 @@ function OverviewIcon() {
       viewBox="0 0 20 20"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="1.75"
       aria-hidden="true"
       className="h-5 w-5 shrink-0"
     >
-      <circle cx="10" cy="10" r="7" />
-      <path d="M3 10h14" />
-      <ellipse cx="10" cy="10" rx="3" ry="7" />
+      <rect x="2.5" y="2.5" width="6.5" height="6.5" rx="1.5" />
+      <rect x="11" y="2.5" width="6.5" height="6.5" rx="1.5" />
+      <rect x="2.5" y="11" width="6.5" height="6.5" rx="1.5" />
+      <rect x="11" y="11" width="6.5" height="6.5" rx="1.5" />
     </svg>
   )
 }
@@ -25,13 +26,13 @@ function RiskMapIcon() {
       viewBox="0 0 20 20"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="1.75"
       aria-hidden="true"
       className="h-5 w-5 shrink-0"
     >
-      <circle cx="10" cy="10" r="5" />
-      <path d="M10 1.5v3M10 15.5v3M1.5 10h3M15.5 10h3" />
-      <circle cx="10" cy="10" r="1" fill="currentColor" stroke="none" />
+      <circle cx="10" cy="10" r="6" />
+      <path d="M10 2v3M10 15v3M2 10h3M15 10h3" />
+      <circle cx="10" cy="10" r="1.5" fill="currentColor" stroke="none" />
     </svg>
   )
 }
@@ -42,7 +43,7 @@ function DamageIcon() {
       viewBox="0 0 20 20"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="1.75"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -60,15 +61,15 @@ function PriorityIcon() {
       viewBox="0 0 20 20"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.5"
+      strokeWidth="1.75"
       strokeLinecap="round"
       aria-hidden="true"
       className="h-5 w-5 shrink-0"
     >
       <path d="M7.5 4.5H17M7.5 10H17M7.5 15.5H17" />
-      <rect x="3" y="3.4" width="2.2" height="2.2" fill="currentColor" stroke="none" />
-      <rect x="3" y="8.9" width="2.2" height="2.2" fill="currentColor" stroke="none" />
-      <rect x="3" y="14.4" width="2.2" height="2.2" fill="currentColor" stroke="none" />
+      <circle cx="4" cy="4.5" r="1.25" fill="currentColor" />
+      <circle cx="4" cy="10" r="1.25" fill="currentColor" />
+      <circle cx="4" cy="15.5" r="1.25" fill="currentColor" />
     </svg>
   )
 }
@@ -80,37 +81,57 @@ const NAV_ITEMS = [
   { to: '/aid-priority', label: 'Aid Priority', icon: PriorityIcon },
 ]
 
-// Persistent left rail. Icons only below lg (tooltip via title), icon + label
-// from lg up. Active item is marked by a left accent bar, not a background pill.
-export default function Sidebar() {
+export default function Sidebar({ isCollapsed }) {
   return (
-    <aside className="flex w-14 shrink-0 flex-col border-r border-line bg-surface lg:w-56">
+    <aside
+      className={`sticky top-0 flex h-screen shrink-0 flex-col overflow-y-auto border-r border-[#1b4a33]/80 bg-[#071a0e] transition-all duration-300 ${
+        isCollapsed ? 'w-16' : 'w-60'
+      }`}
+    >
+      {/* Brand Header */}
       <Link
         to="/"
         aria-label="Nigraan AI home"
-        className="flex h-14 items-center border-b border-line px-3 lg:px-4"
+        className="flex h-14 items-center border-b border-[#1b4a33]/80 px-3 overflow-hidden"
       >
-        <Logo size="sm" />
+        <Logo size="sm" showText={!isCollapsed} />
       </Link>
 
-      <nav className="flex-1 space-y-1 p-2" aria-label="Primary">
+      {/* Nav list */}
+      <nav className="flex-1 space-y-1.5 p-2.5" aria-label="Primary Navigation">
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
-            end={item.end}
-            title={item.label}
-            className={({ isActive }) => `nav-item ${isActive ? 'nav-item-active' : ''}`}
+            title={isCollapsed ? item.label : undefined}
+            className={({ isActive }) =>
+              `group relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all ${
+                isActive
+                  ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 shadow-[0_0_12px_rgba(16,185,129,0.15)]'
+                  : 'text-slate-400 hover:bg-[#0a2418]/60 hover:text-slate-200 border border-transparent'
+              } ${isCollapsed ? 'justify-center px-0' : ''}`
+            }
           >
-            <item.icon />
-            <span className="hidden lg:inline">{item.label}</span>
+            {({ isActive }) => (
+              <>
+                <item.icon />
+                {!isCollapsed && <span className="truncate">{item.label}</span>}
+                {isActive && !isCollapsed && (
+                  <span className="ml-auto h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_6px_#3ddc84]" />
+                )}
+              </>
+            )}
           </NavLink>
         ))}
       </nav>
 
-      <div className="hidden border-t border-line px-4 py-3 text-[11px] leading-snug text-muted lg:block">
-        NDMA / PDMA decision support
-      </div>
+      {/* Footer version tag */}
+      {!isCollapsed && (
+        <div className="border-t border-[#1b4a33]/80 px-4 py-3 text-[11px] leading-snug text-[#6f8f7e]">
+          <span className="font-semibold text-slate-400">Nigraan AI</span> v0.1 · Pakistan 2026
+        </div>
+      )}
     </aside>
   )
 }
+

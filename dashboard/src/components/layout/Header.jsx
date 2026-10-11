@@ -1,8 +1,25 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../../auth/useAuth.js'
-import Logo from './Logo.jsx'
 
-export default function Header() {
+function MenuIcon() {
+  return (
+    <svg
+      className="h-5 w-5"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <line x1="3" y1="12" x2="21" y2="12" />
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="18" x2="21" y2="18" />
+    </svg>
+  )
+}
+
+export default function Header({ toggleSidebar }) {
   const { user, isAuthenticated } = useAuth()
   const [now, setNow] = useState(() => new Date())
 
@@ -17,21 +34,29 @@ export default function Header() {
   })
 
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between border-b border-line bg-surface/80 backdrop-blur-md px-4 lg:px-6">
+    <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center justify-between border-b border-[#1b4a33]/80 bg-[#071a0e]/90 px-4 backdrop-blur-md lg:px-6">
       <div className="flex items-center gap-3">
-        <Logo size="sm" className="lg:hidden" />
-        <h1 className="font-heading text-sm font-semibold tracking-tight text-text">
-          Disaster Response Console
-        </h1>
+        {/* Hamburger 3-line sidebar toggle button */}
+        <button
+          onClick={toggleSidebar}
+          type="button"
+          aria-label="Toggle navigation menu"
+          className="text-slate-300 hover:text-emerald-400 transition-colors cursor-pointer focus:outline-none p-1 shrink-0"
+        >
+          <MenuIcon />
+        </button>
       </div>
-      <div className="flex items-center gap-4 text-xs text-muted">
-        <span className="data" title="Pakistan Standard Time">
+
+      <div className="flex items-center gap-4 text-xs text-slate-400">
+        <span className="flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-mono text-emerald-400">
+          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
           PKT {clock}
         </span>
-        <span className="hidden sm:inline">
-          {isAuthenticated ? (user ? user.name : 'Authenticated') : 'Not signed in'}
+        <span className="hidden sm:inline text-slate-300 font-medium">
+          {isAuthenticated ? (user ? user.name : 'Operator') : 'Guest'}
         </span>
       </div>
     </header>
   )
 }
+
