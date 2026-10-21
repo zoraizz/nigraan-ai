@@ -67,16 +67,20 @@ Kotri did not show a separate crest for wave 1; outflow was still rising. Wave 2
 
 ### Leave-one-wave-out
 
-Lags from wave 1 only. Wave 2's peak at each barrage is predicted from the **observed** wave-2 peak at the barrage immediately upstream, plus the wave-1 lag. Error is predicted minus observed.
+Lags from wave 1 only. Wave 2's peak at each barrage is predicted from the **observed** wave-2 peak at the barrage immediately upstream, plus the wave-1 lag. Error is observed minus predicted (`error_hours = actual - predicted`, as in the `/replay/2022` scorecard): positive means the crest came later than predicted.
 
 | Barrage | Predicted wave-2 peak | Observed | Error |
 | --- | --- | --- | --- |
 | Tarbela | anchor, not predicted | 27 Aug 06:00 | — |
 | Kalabagh | 28 Aug 06:00 | 28 Aug 06:00 | 0 h |
-| Chashma | 28 Aug 06:00 | 29 Aug 06:00 | −24 h |
-| Taunsa | 1 Sep 06:00 | 30 Aug 06:00 | +48 h |
-| Guddu | 31 Aug 06:00 | 2 Sep 06:00 | −48 h |
-| Sukkur | 4 Sep 06:00 | 3 Sep 06:00 | +24 h |
+| Chashma | 28 Aug 06:00 | 29 Aug 06:00 | +24 h |
+| Taunsa | 1 Sep 06:00 | 30 Aug 06:00 | −48 h |
+| Guddu | 31 Aug 06:00 | 2 Sep 06:00 | +48 h |
+| Sukkur | 4 Sep 06:00 | 3 Sep 06:00 | −24 h |
 | Kotri | not predicted | 8 Sep 06:00 | no wave-1 lag |
 
 The errors are multiples of the daily sample. Wave 1 was slower than wave 2 from Chashma to Taunsa (72 h vs 24 h) and faster from Taunsa to Guddu (24 h vs 72 h). A single lag does not carry both waves inside a day.
+
+### Replay scorecard (`GET /replay/2022`)
+
+`error_hours = actual - predicted`; positive means the crest came later than predicted. Rows whose crest is one of the `events_used` above carry `"in_sample": true`: the lags were calibrated on those same two waves, so those errors flatter the model. The leave-one-wave-out table above is the out-of-sample check, and `scorecard_note` repeats it. Kotri's wave-2 crest is the 584000 plateau (5–8 Sep 06:00): it scores 0 h when the prediction falls inside the plateau and otherwise the hours to the nearest edge.

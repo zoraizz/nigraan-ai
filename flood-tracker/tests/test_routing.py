@@ -148,7 +148,8 @@ VILLAGE_KEYS = {"id", "name", "district", "lat", "lon", "eta", "eta_low",
                 "eta_high", "hours_to_arrival", "population", "population_source"}
 PROVENANCE_KEYS = {"flows", "etas", "villages", "population"}
 SCORECARD_KEYS = {"barrage", "wave_id", "wave_label", "actual_peak_time",
-                  "predicted_time", "predicted_low", "predicted_high", "error_hours"}
+                  "predicted_time", "predicted_low", "predicted_high", "error_hours",
+                  "in_sample", "note"}
 
 
 def _label_ok(label) -> bool:
@@ -204,7 +205,8 @@ def assert_situation_shape(s: dict) -> None:
 
 
 def assert_replay_shape(r: dict) -> None:
-    assert set(r) == {"steps", "scorecard"}
+    assert set(r) == {"steps", "scorecard", "scorecard_note"}
+    assert isinstance(r["scorecard_note"], str) and "In-sample" in r["scorecard_note"]
     assert r["steps"], "replay must have steps"
     for s in r["steps"]:
         assert_situation_shape(s)
@@ -213,6 +215,8 @@ def assert_replay_shape(r: dict) -> None:
         assert set(row) == SCORECARD_KEYS, sorted(row)
         assert _num(row["error_hours"])
         assert _label_ok(row["wave_label"]), row
+        assert isinstance(row["in_sample"], bool)
+        assert row["note"] is None or (isinstance(row["note"], str) and row["note"])
 
 
 # ---------------------------------------------------------------------------
@@ -570,6 +574,39 @@ def test_replay_and_scorecard():
         assert r["predicted_high"] == fmt_time(high)
 
 
+def test_plateau_error_is_zero_inside_else_hours_to_nearest_edge():
+    start, end = day(5), day(8)
+    assert routing._plateau_error(start, end, day(6)) == 0.0
+    assert routing._plateau_error(start, end, day(5)) == 0.0
+    assert routing._plateau_error(start, end, day(8)) == 0.0
+    assert routing._plateau_error(start, end, day(4)) == 24.0     # crest came later
+    assert routing._plateau_error(start, end, day(10)) == -48.0   # crest came earlier
+    # One-reading crest: plain actual - predicted.
+    assert routing._plateau_error(day(5), day(5), day(4)) == 24.0
+    rs = _series([300000, 500000, 584000, 584000, 584000, 500000])
+    assert routing.crest_plateau(rs, day(4)) == (day(2), day(4))
+    assert routing.crest_plateau(rs, day(1)) == (day(1), day(1))
+
+
+def test_scorecard_scores_a_plateau_crest():
+    # Guddu holds its wave-2 crest for three readings (days 15-17).
+    data = make_data()
+    hold = {day(15), day(16), day(17)}
+    data.readings["Guddu"] = [
+        Reading(r.time, r.inflow, BASE + AMP) if r.time in hold else r
+        for r in data.readings["Guddu"]
+    ]
+    rows = {(r["barrage"], r["wave_label"]): r for r in routing.scorecard(data)}
+    g = rows[("Guddu", "Wave 2")]
+    assert g["actual_peak_time"] == t(17)
+    pred = routing.parse_time(g["predicted_time"])
+    assert day(15) <= pred <= day(17), g
+    assert g["error_hours"] == 0.0
+    assert "plateau" in g["note"] and t(15) in g["note"] and t(17) in g["note"]
+    assert rows[("Guddu", "Wave 1")]["note"] is None
+    assert g["in_sample"] is False      # synthetic reaches have no events_used
+
+
 def test_scorecard_uses_only_upstream_data_before_the_peak():
     # Corrupt everything at and after Guddu's wave-2 peak upstream of Guddu;
     # Guddu's wave-2 prediction must not change.
@@ -704,6 +741,40 @@ def test_real_wave_2_arrives_at_sukkur_and_labels_are_stable():
     assert sorted(label_of) == ["Wave 1", "Wave 2"], label_of
 
 
+def test_real_scorecard_wave_2_sukkur_and_kotri_plateau():
+    data = _real_data()
+    if data is None:
+        return
+    rows = {(r["barrage"], r["wave_label"]): r for r in routing.scorecard(data)}
+    suk = rows[("Sukkur", "Wave 2")]
+    assert suk["actual_peak_time"] == "2022-09-03T06:00" and suk["in_sample"] is True
+    kotri = rows[("Kotri", "Wave 2")]
+    assert kotri["actual_peak_time"] == "2022-09-08T06:00", kotri
+    assert "2022-09-05T06:00" <= kotri["predicted_time"] <= "2022-09-08T06:00", kotri
+    assert kotri["error_hours"] == 0.0 and kotri["in_sample"] is True
+    assert "584,000" in kotri["note"] and "2022-09-05T06:00" in kotri["note"]
+    assert "600,018" in kotri["note"]
+    # Every crest reaches.json was calibrated on is scored and marked in-sample;
+    # minor rises are not in-sample.
+    for (name, label), r in rows.items():
+        assert r["in_sample"] is (label is not None), r
+    # reaches.json events_used: 2 crests at each of Kalabagh..Sukkur, Kotri wave 2.
+    assert sum(1 for r in rows.values() if r["in_sample"]) == 11
+
+
+def test_leave_one_wave_out_matches_calibrate_reaches():
+    cal = _calibrate_module()
+    if cal is None:
+        return
+    if not (DATA_DIR / "flows_2022.csv").exists():
+        _skip("data/flows_2022.csv not present")
+        return
+    errors = cal.leave_one_wave_out_errors(cal.match_waves(cal.load_rows()))
+    assert errors == routing.LEAVE_ONE_WAVE_OUT_H, errors
+    note = routing.scorecard_note()
+    assert "Chashma +24 h" in note and "Taunsa -48 h" in note and "In-sample" in note
+
+
 def test_real_villages_sit_between_their_barrages():
     # Kashmore lies around Guddu and above Sukkur, Matiari and Hyderabad
     # between Sukkur and Kotri: their ETAs must fall inside those bounds.
@@ -748,12 +819,16 @@ if __name__ == "__main__":
         test_as_of_outside_data_raises,
         test_situation_matches_contract,
         test_replay_and_scorecard,
+        test_plateau_error_is_zero_inside_else_hours_to_nearest_edge,
+        test_scorecard_scores_a_plateau_crest,
         test_scorecard_uses_only_upstream_data_before_the_peak,
         test_real_flows_2022,
         test_real_31_aug_lists_villages_ahead_of_the_second_wave,
         test_real_villages_sit_between_their_barrages,
         test_real_crests_agree_with_calibrate_reaches,
         test_real_wave_2_arrives_at_sukkur_and_labels_are_stable,
+        test_real_scorecard_wave_2_sukkur_and_kotri_plateau,
+        test_leave_one_wave_out_matches_calibrate_reaches,
     ]
 
     passed, failed = 0, 0

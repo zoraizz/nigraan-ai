@@ -35,8 +35,10 @@ reach and is not folded into lag_min_h / lag_max_h, which stay the observed lags
 
 Leave-one-wave-out: lags are taken from wave 1 only. Wave 2's peak at a
 barrage is predicted from the observed wave-2 peak at the barrage immediately
-upstream, plus that wave-1 lag. The error is predicted time minus observed
-wave-2 peak, in hours. Tarbela is the anchor and is not predicted.
+upstream, plus that wave-1 lag. The error is the observed wave-2 peak minus
+the predicted time, in hours (positive = later than predicted, the same
+sign as error_hours in the flood-tracker scorecard). Tarbela is the anchor
+and is not predicted.
 """
 
 from __future__ import annotations
@@ -253,12 +255,27 @@ def build_reaches(series: dict[str, list[dict]], peaks: dict[str, dict[int, dict
     return reaches
 
 
+def leave_one_wave_out_errors(peaks: dict[str, dict[int, dict]]) -> dict[str, int | float]:
+    """{barrage: observed minus predicted hours} for barrages with both waves."""
+    errors = {}
+    for upstream, downstream in PAIRS:
+        up1 = peaks[upstream].get(1)
+        down1 = peaks[downstream].get(1)
+        up2 = peaks[upstream].get(2)
+        down2 = peaks[downstream].get(2)
+        if up1 and down1 and up2 and down2:
+            predicted = up2["time"] + timedelta(hours=hours_between(up1["time"], down1["time"]))
+            errors[downstream] = as_hours(hours_between(predicted, down2["time"]))
+    return errors
+
+
 def leave_one_wave_out(peaks: dict[str, dict[int, dict]]) -> list[str]:
     """One-step: predict each barrage from its upstream neighbour using the wave-1 lag."""
     lines = [
         "Leave-one-wave-out: lags from wave 1 only. "
         "Wave 2 peak at each barrage is predicted from the observed wave-2 peak "
-        "at the barrage immediately upstream. Error = predicted minus observed, hours.",
+        "at the barrage immediately upstream. Error = observed minus predicted, hours "
+        "(positive = later than predicted, as in the flood-tracker scorecard).",
         "Tarbela: anchor, not predicted",
     ]
     for upstream, downstream in PAIRS:
@@ -275,7 +292,7 @@ def leave_one_wave_out(peaks: dict[str, dict[int, dict]]) -> list[str]:
             continue
         lag = hours_between(up1["time"], down1["time"])
         predicted = up2["time"] + timedelta(hours=lag)
-        error = hours_between(down2["time"], predicted)
+        error = hours_between(predicted, down2["time"])
         lines.append(
             f"{downstream}: predicted {stamp(predicted)} "
             f"observed {stamp(down2['time'])} "

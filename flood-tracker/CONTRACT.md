@@ -56,9 +56,13 @@ Thresholds in cusecs (Low/Medium/High/VeryHigh/ExceptionallyHigh), source FFD bu
 ```json
 {
   "steps": ["<flood-situation objects, one per day at 06:00>"],
-  "scorecard": [{ "barrage": "", "wave_id": "", "wave_label": "Wave 1|null", "actual_peak_time": "", "predicted_time": "", "predicted_low": "", "predicted_high": "", "error_hours": 0 }]
+  "scorecard_note": "",
+  "scorecard": [{ "barrage": "", "wave_id": "", "wave_label": "Wave 1|null", "in_sample": true, "note": "<string|null>", "actual_peak_time": "", "predicted_time": "", "predicted_low": "", "predicted_high": "", "error_hours": 0 }]
 }
 ```
+
+- `error_hours = actual - predicted`: positive means the crest came later than predicted. A plateau crest (same outflow on consecutive readings, e.g. Kotri 584000 on 5-8 Sep) scores 0 when the prediction falls inside it, else the hours to the nearest edge; `note` says so.
+- `in_sample` is true when reaches.json lags were calibrated on that crest. `scorecard_note` states this and gives the leave-one-wave-out errors.
 
 ## `POST /alert-drafts`
 

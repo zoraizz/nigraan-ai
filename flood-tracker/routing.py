@@ -174,17 +174,32 @@ hydraulic model) and data_provenance says so in every response.
 
 Replay scorecard
 ----------------
-For each barrage j and each wave with a passed peak at j over the whole
-series (actual_peak_time = T), the prediction is rebuilt from upstream
-readings strictly before T only (j's own readings are not used): events are
-re-detected on that truncated data, e's peak is matched to an upstream
+For each barrage j and each wave with a crest at j over the whole series,
+the crest is:
+    * the passed event's peak (actual_peak_time = T), or
+    * for an event still open when the data ends (Kotri 2022: 584000 held
+      5-8 Sep, then 600018 on 10 Sep from Manchhar Lake / an MNVD breach,
+      data/README.md), the crest reaches.json events_used records for the
+      reach into j, when it lies inside that event. That is the crest the
+      lags were calibrated on; without it the row would be dropped.
+A crest is a plateau when the readings next to T hold the same outflow:
+crest_start..crest_end is that run (T = crest_end, the last day, as for
+peak_time). The prediction is rebuilt from upstream readings strictly
+before crest_start only (j's own readings are not used): events are
+re-detected on that truncated data, the crest is matched to an upstream
 reported (forming or passed) peak with the same window rule, and
     predicted_time = f.peak + sum(lag_median_h), low/high from min/max
                      (widened to at least +/-12 h, as for every estimate).
-    error_hours    = actual_peak_time - predicted_time
+    error_hours    = 0                          if crest_start <= predicted <= crest_end
+                     crest_start - predicted    if predicted < crest_start
+                     crest_end - predicted      if predicted > crest_end
+For a one-reading crest that is actual_peak_time - predicted_time.
 Positive error = the crest came later than predicted. Barrages with no
 upstream peak to predict from (Tarbela, or a wave first seen at j) have no
-scorecard row.
+scorecard row. Each row carries note (the plateau, or null) and in_sample:
+true when its crest is one of reaches.json events_used, i.e. the lags were
+calibrated on it. replay_2022 adds scorecard_note with the leave-one-wave-
+out errors from scripts/flood/calibrate_reaches.py, the out-of-sample check.
 """
 
 from __future__ import annotations
@@ -930,6 +945,41 @@ def replay_steps(data: FloodData) -> list:
     return steps
 
 
+# Leave-one-wave-out errors (hours, actual - predicted) printed by
+# scripts/flood/calibrate_reaches.py and tabled in data/README.md; a test
+# checks they still match the script.
+LEAVE_ONE_WAVE_OUT_H = {"Kalabagh": 0, "Chashma": 24, "Taunsa": -48, "Guddu": 48, "Sukkur": -24}
+
+
+def _calibrated_crests(reach: dict) -> list:
+    """Downstream crest times reaches.json events_used calibrated this reach on."""
+    out = []
+    for ev in reach.get("events_used") or []:
+        try:
+            out.append(parse_time(ev["downstream_peak"]))
+        except (KeyError, TypeError, ValueError):
+            continue
+    return out
+
+
+def crest_plateau(readings: list, crest: datetime) -> tuple:
+    """(start, end) of the run of readings holding the crest's outflow."""
+    idx = next(i for i, r in enumerate(readings) if r.time == crest)
+    q = readings[idx].outflow
+    lo = hi = idx
+    while lo > 0 and readings[lo - 1].outflow == q:
+        lo -= 1
+    while hi + 1 < len(readings) and readings[hi + 1].outflow == q:
+        hi += 1
+    return readings[lo].time, readings[hi].time
+
+
+def _plateau_error(start: datetime, end: datetime, predicted: datetime) -> float:
+    if start <= predicted <= end:
+        return 0.0
+    return _hours((start if predicted < start else end) - predicted)
+
+
 def scorecard(data: FloodData) -> list:
     """Predicted vs actual crest time per barrage and wave (see docstring)."""
     _, end = data_range(data)
@@ -938,30 +988,74 @@ def scorecard(data: FloodData) -> list:
     for w in final_waves:
         for o in sorted(w.events):
             e = w.events[o]
-            if e.status != "passed" or o == 1:
+            if o == 1:
                 continue
-            before = e.peak_time - timedelta(minutes=1)
+            readings = data.readings[e.barrage]
+            calibrated = _calibrated_crests(data.reaches[o - 2])
+            note_tail = ""
+            if e.status == "passed":
+                crest = e.peak_time
+            else:
+                inside = [t for t in calibrated
+                          if e.start_time <= t <= end
+                          and any(r.time == t for r in readings)]
+                if not inside:
+                    continue
+                crest = max(inside, key=lambda t: next(
+                    r.outflow for r in readings if r.time == t))
+                note_tail = (
+                    f" Outflow later rose to {e.peak_outflow:,.0f} cusecs "
+                    f"({fmt_time(e.peak_time)}); reaches.json takes the plateau as "
+                    "the routed Indus crest (data/README.md)."
+                )
+            start, stop = crest_plateau(readings, crest)
+            before = start - timedelta(minutes=1)
             upstream = {
                 b["order"]: detect_events(data.readings.get(b["name"], []), b, before)
                 for b in data.barrages if b["order"] < o
             }
-            f = _best_upstream(upstream, data.reaches, o, e.peak_time, set(),
+            f = _best_upstream(upstream, data.reaches, o, crest, set(),
                                reported_only=True)
             if f is None:
                 continue
             eta, lo, hi = _eta_triplet(data.reaches, f, o)
+            note = None
+            if start != stop:
+                held = next(r.outflow for r in readings if r.time == crest)
+                note = (
+                    f"{e.barrage} held {held:,.0f} cusecs from {fmt_time(start)} to "
+                    f"{fmt_time(stop)}, so the crest is scored as that plateau: 0 h "
+                    "if the prediction falls inside it, else hours to the nearest "
+                    "edge." + note_tail
+                )
             rows.append({
                 "barrage": e.barrage,
                 "wave_id": w.wave_id,
                 "wave_label": w.label,
-                "actual_peak_time": fmt_time(e.peak_time),
+                "actual_peak_time": fmt_time(crest),
                 "predicted_time": fmt_time(eta),
                 "predicted_low": fmt_time(lo),
                 "predicted_high": fmt_time(hi),
-                "error_hours": _hours(e.peak_time - eta),
+                "error_hours": _plateau_error(start, stop, eta),
+                "in_sample": crest in calibrated,
+                "note": note,
             })
     rows.sort(key=lambda r: (r["actual_peak_time"], r["barrage"]))
     return rows
+
+
+def scorecard_note() -> str:
+    loo = ", ".join(f"{name} {h:+d} h" if h else f"{name} 0 h"
+                    for name, h in LEAVE_ONE_WAVE_OUT_H.items())
+    return (
+        "In-sample: rows with in_sample true score crests that reaches.json "
+        "lags were calibrated on (the same two 2022 waves), so they flatter "
+        "the model. Out-of-sample check, leave-one-wave-out (lags from wave 1 "
+        "only, each barrage's wave-2 crest predicted from the observed wave-2 "
+        f"crest one barrage up; actual minus predicted): {loo}; Kotri not "
+        "computed (no wave-1 crest). Errors are multiples of the daily 06:00 "
+        "sample (scripts/flood/calibrate_reaches.py, data/README.md)."
+    )
 
 
 def replay_2022(data: FloodData) -> dict:
@@ -969,6 +1063,7 @@ def replay_2022(data: FloodData) -> dict:
     return {
         "steps": [situation(data, t, mode="replay") for t in replay_steps(data)],
         "scorecard": scorecard(data),
+        "scorecard_note": scorecard_note(),
     }
 
 
