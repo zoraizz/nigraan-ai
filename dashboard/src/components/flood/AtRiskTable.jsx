@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { formatPeople, formatWall, uncertaintyHours } from './timeFormat.js'
 
 function byEta(a, b) {
@@ -21,11 +22,13 @@ function etaCell(village) {
 }
 
 export default function AtRiskTable({ villages, selectedId, onSelect }) {
+  const [showAll, setShowAll] = useState(false)
   const rows = (Array.isArray(villages) ? villages : []).slice().sort(byEta)
+  const visibleRows = showAll ? rows : rows.slice(0, 25)
   const total = rows.reduce((sum, village) => sum + (Number(village.population) || 0), 0)
 
   return (
-    <section className="flex min-h-[240px] flex-1 flex-col overflow-hidden rounded-xl border border-[#1b4a33]/80 bg-[#071a0e]">
+    <section className="flex min-h-[240px] flex-col rounded-xl border border-[#1b4a33]/80 bg-[#071a0e]">
       <header className="shrink-0 border-b border-[#1b4a33]/70 px-3 py-2">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-[#8aa898]">At risk this step</p>
         <p className="font-mono text-base text-slate-100">
@@ -33,7 +36,7 @@ export default function AtRiskTable({ villages, selectedId, onSelect }) {
         </p>
         <p className="text-[11px] text-[#9dbdac]">Estimated population, sorted by ETA. Not a census extract. A row opens the alert draft and rings the village.</p>
       </header>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="overflow-x-auto">
         <table className="w-full border-collapse text-left text-sm">
           <thead className="sticky top-0 bg-[#0a2416] text-[11px] uppercase tracking-wide text-[#8aa898]">
             <tr>
@@ -48,7 +51,7 @@ export default function AtRiskTable({ villages, selectedId, onSelect }) {
               <tr>
                 <td colSpan={4} className="px-3 py-4 text-[#9dbdac]">No villages in this step.</td>
               </tr>
-            ) : rows.map((village) => {
+            ) : visibleRows.map((village) => {
               const selected = village.id === selectedId
               const cell = etaCell(village)
               return (
@@ -86,6 +89,12 @@ export default function AtRiskTable({ villages, selectedId, onSelect }) {
           </tbody>
         </table>
       </div>
+      {rows.length > 25 && (
+        <button type="button" aria-expanded={showAll} onClick={() => setShowAll(!showAll)}
+          className="border-t border-[#1b4a33]/70 px-3 py-2 text-left text-xs font-semibold text-emerald-300 hover:bg-[#0c2918]">
+          {showAll ? 'Show first 25' : `Show all ${rows.length}`}
+        </button>
+      )}
     </section>
   )
 }

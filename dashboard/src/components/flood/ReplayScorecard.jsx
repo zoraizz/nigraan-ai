@@ -3,6 +3,7 @@ import { formatSignedHours, formatWall } from './timeFormat.js'
 
 export default function ReplayScorecard({ rows, note, usingFixtures }) {
   const list = Array.isArray(rows) ? rows : []
+  const within24 = list.filter((row) => row.error_hours != null && Number.isFinite(Number(row.error_hours)) && Math.abs(Number(row.error_hours)) <= 24).length
   return (
     <div>
       <p className="mb-2 text-[11px] text-[#9dbdac]">
@@ -11,7 +12,15 @@ export default function ReplayScorecard({ rows, note, usingFixtures }) {
           : 'Predicted times are modelled. Actual times are recorded barrage peaks.'}
         {' '}Error is actual minus predicted: positive means the actual time is later than the prediction. Hours are Asia/Karachi.
       </p>
-      {note && <p className="mb-2 text-[11px] leading-snug text-[#8aa898]">{note}</p>}
+      {note && (
+        <details className="mb-2 text-[11px] text-[#8aa898]">
+          <summary className="cursor-pointer font-medium text-[#c5d9cc]">How this is scored</summary>
+          <p className="mt-2 leading-relaxed">{note}</p>
+        </details>
+      )}
+      <p className="mb-2 text-sm font-semibold text-slate-100">
+        Wave 1 and Wave 2: {within24} of {list.length} crests within ±24 h
+      </p>
       {list.length === 0 ? (
         <p className="text-sm text-[#9dbdac]">No scorecard for this replay.</p>
       ) : (

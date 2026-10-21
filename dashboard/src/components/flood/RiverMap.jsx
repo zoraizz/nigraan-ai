@@ -156,7 +156,7 @@ export default function RiverMap({ situation, selectedVillageId, onSelectVillage
   }), [])
 
   return (
-    <div className={`flood-map${BASEMAP.fallback ? ' is-osm-fallback' : ''} relative h-full min-h-[460px] overflow-hidden lg:min-h-0 rounded-xl border border-[#1b4a33]/80`}>
+    <div className={`flood-map${BASEMAP.fallback ? ' is-osm-fallback' : ''} relative h-full min-h-0 overflow-hidden rounded-xl border border-[#1b4a33]/80`}>
       <MapContainer
         center={[29.7, 70.4]}
         zoom={6}

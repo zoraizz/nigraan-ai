@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { waveName } from '../../api/floodTracker.js'
 import { formatPeakLine, formatWall } from './timeFormat.js'
 
@@ -35,9 +36,18 @@ function EtaRow({ eta }) {
 }
 
 export default function EtaPanel({ etas }) {
-  const rows = Array.isArray(etas) ? etas : []
+  const [showAll, setShowAll] = useState(false)
+  const rows = (Array.isArray(etas) ? etas : []).slice().sort((a, b) => {
+    const aArrived = a.status === 'arrived'
+    const bArrived = b.status === 'arrived'
+    if (aArrived !== bArrived) return aArrived ? 1 : -1
+    const left = aArrived ? (a.observed_time || a.eta || '') : (a.eta || '9999')
+    const right = bArrived ? (b.observed_time || b.eta || '') : (b.eta || '9999')
+    return aArrived ? right.localeCompare(left) : left.localeCompare(right)
+  })
+  const visibleRows = showAll ? rows : rows.slice(0, 4)
   return (
-    <section className="shrink-0 overflow-hidden rounded-xl border border-[#1b4a33]/80 bg-[#071a0e] lg:max-h-[46%] lg:overflow-auto">
+    <section className="shrink-0 overflow-hidden rounded-xl border border-[#1b4a33]/80 bg-[#071a0e]">
       <header className="px-3 py-2">
         <h2 className="text-sm font-semibold text-slate-100">Downstream peaks</h2>
         <p className="text-[11px] text-[#9dbdac]">Estimates with a range. Arrived rows use the observed time.</p>
@@ -46,10 +56,16 @@ export default function EtaPanel({ etas }) {
         <p className="border-t border-[#1b4a33]/70 px-3 py-3 text-sm text-[#9dbdac]">No downstream peak in this step.</p>
       ) : (
         <ul>
-          {rows.map((eta) => (
+          {visibleRows.map((eta) => (
             <EtaRow key={`${eta.wave_id || 'wave'}-${eta.barrage}`} eta={eta} />
           ))}
         </ul>
+      )}
+      {rows.length > 4 && (
+        <button type="button" aria-expanded={showAll} onClick={() => setShowAll(!showAll)}
+          className="w-full border-t border-[#1b4a33]/70 px-3 py-2 text-left text-xs font-semibold text-emerald-300 hover:bg-[#0c2918]">
+          {showAll ? 'Show less' : 'Show all'}
+        </button>
       )}
     </section>
   )

@@ -36,13 +36,18 @@ function Provenance({ situation, usingFixtures }) {
           </span>
         )}
       </div>
+      <p className="mt-1 text-[11px] leading-relaxed text-[#9dbdac]">
+        Gauge readings: FFC Daily Flood Situation Reports, 2022 · ETAs: modelled from 2022 peak-to-peak lags · Population: WorldPop 2020
+      </p>
       {labels && (
-        <p className="mt-1 text-[11px] leading-snug text-[#8aa898]">
-          <span className="mr-3"><span className="uppercase tracking-wide">Flows</span> {labels.flows}</span>
-          <span className="mr-3"><span className="uppercase tracking-wide">ETAs</span> {labels.etas}</span>
-          <span className="mr-3"><span className="uppercase tracking-wide">Villages</span> {labels.villages}</span>
-          <span><span className="uppercase tracking-wide">Population</span> {labels.population}</span>
-        </p>
+        <details className="mt-2 text-[11px] text-[#8aa898]">
+          <summary className="cursor-pointer font-medium text-[#c5d9cc]">Data sources and method</summary>
+          <div className="mt-2 space-y-1 leading-relaxed">
+            {Object.entries(labels).map(([name, text]) => (
+              <p key={name}><span className="capitalize font-semibold">{name}</span>: {text}</p>
+            ))}
+          </div>
+        </details>
       )}
     </div>
   )
@@ -83,11 +88,11 @@ export default function FloodTracker() {
   }
 
   return (
-    <div className="flex flex-col gap-3 lg:h-[calc(100vh-6.5rem)] lg:overflow-hidden">
+    <div className="flex flex-col gap-3">
       <Provenance situation={situation} usingFixtures={replay.usingFixtures} />
 
-      <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 lg:grid-cols-3">
-        <div className="h-full min-h-[460px] lg:col-span-2 lg:min-h-0">
+      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-3">
+        <div className="h-[380px] lg:col-span-2 lg:h-[520px]">
           <RiverMap
             situation={situation}
             selectedVillageId={selectedId}
@@ -114,7 +119,7 @@ export default function FloodTracker() {
         />
         <details open className="mt-2 border-t border-[#1b4a33]/70 pt-2">
           <summary className="cursor-pointer text-xs font-semibold text-slate-200">Predicted vs actual</summary>
-          <div className="max-h-48 overflow-auto pt-2">
+          <div className="pt-2">
             <ReplayScorecard rows={replay.scorecard} note={replay.scorecardNote} usingFixtures={replay.usingFixtures} />
           </div>
         </details>
