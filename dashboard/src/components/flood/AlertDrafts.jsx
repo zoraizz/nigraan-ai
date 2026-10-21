@@ -87,9 +87,11 @@ function DraftCard({ draft }) {
   )
 }
 
-export default function AlertDrafts({ village, asOf, usingFixtures, onClose }) {
+// context: optional { mode, scenario } so live and what-if drafts resolve
+// villages against the same situation the page shows.
+export default function AlertDrafts({ village, asOf, usingFixtures, onClose, context }) {
   const request = village
-    ? { village_ids: [village.id], as_of: asOf || '' }
+    ? { village_ids: [village.id], as_of: asOf || '', ...(context || {}) }
     : null
   const { drafts, loading, error } = useAlertDrafts(request)
 

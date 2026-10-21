@@ -9,7 +9,7 @@
 // examples of the contract shape. They are not gauge readings and not model output.
 
 import { ENDPOINTS } from '../config/endpoints.js'
-import { getJson, postJson } from './client.js'
+import { ApiError, getJson, postJson } from './client.js'
 
 export const FLOOD_USE_FIXTURES = String(import.meta.env.VITE_FLOOD_USE_FIXTURES || '').trim() === 'true'
 
@@ -61,6 +61,24 @@ export async function getReplay2022() {
   return getJson(ENDPOINTS.floodApi, '/replay/2022')
 }
 
+// Today's modelled situation: bias-scaled GloFAS discharge, plus forecast and
+// outlook blocks. There is no fixture for it, so fixture mode reports the
+// live forecast as unavailable (503) instead of inventing one.
+export async function getLiveSituation() {
+  if (FLOOD_USE_FIXTURES) {
+    throw new ApiError('Live forecast is not available in fixture mode', 503, null)
+  }
+  return getJson(ENDPOINTS.floodApi, '/flood-situation?mode=live')
+}
+
+// body: { barrage, peak_cusecs, peak_time? } -> situation + scenario block.
+export async function postWhatIf(body) {
+  if (FLOOD_USE_FIXTURES) {
+    throw new ApiError('What-if routing is not available in fixture mode', 503, null)
+  }
+  return postJson(ENDPOINTS.floodApi, '/what-if', body ?? {})
+}
+
 function filterDrafts(drafts, body) {
   const ids = Array.isArray(body?.village_ids) ? body.village_ids.filter(Boolean) : []
   const district = typeof body?.district === 'string' ? body.district.trim() : ''
@@ -72,7 +90,8 @@ function filterDrafts(drafts, body) {
   return drafts
 }
 
-// body: { village_ids?: string[], district?: string, as_of?: string }
+// body: { village_ids?: string[], district?: string, as_of?: string,
+//        mode?: 'replay'|'live'|'what_if', scenario?: what-if body }
 export async function postAlertDrafts(body) {
   if (FLOOD_USE_FIXTURES) {
     const { drafts } = await loadFixtures()

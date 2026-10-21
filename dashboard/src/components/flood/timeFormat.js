@@ -41,6 +41,14 @@ export function formatReplayStamp(iso) {
   return `${wall.weekday} ${wall.day} ${MONTHS[wall.monthIndex]} ${wall.year} ${wall.hour}:${wall.minute}`
 }
 
+// "Fri 24 Oct" from a YYYY-MM-DD date or a wall time
+export function formatDay(iso) {
+  const value = String(iso || '')
+  const wall = parts(value.length === 10 ? `${value}T06:00` : value)
+  if (!wall) return '—'
+  return `${wall.weekday} ${wall.day} ${MONTHS[wall.monthIndex]}`
+}
+
 // "29 Aug"
 export function formatShortDate(iso) {
   const wall = parts(iso)

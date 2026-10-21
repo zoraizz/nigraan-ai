@@ -5,7 +5,13 @@ import EtaPanel from '../components/flood/EtaPanel.jsx'
 import ReplayControls from '../components/flood/ReplayControls.jsx'
 import ReplayScorecard from '../components/flood/ReplayScorecard.jsx'
 import RiverMap from '../components/flood/RiverMap.jsx'
+import ForecastTable from '../components/flood/ForecastTable.jsx'
+import OutlookCard from '../components/flood/OutlookCard.jsx'
+import WhatIfForm from '../components/flood/WhatIfForm.jsx'
+import { formatDay, formatPeople } from '../components/flood/timeFormat.js'
 import { useFloodReplay } from '../hooks/useFloodReplay.js'
+import { useLiveSituation } from '../hooks/useLiveSituation.js'
+import { useWhatIf } from '../hooks/useWhatIf.js'
 import '../components/flood/flood.css'
 
 const FONT_HREF = 'https://fonts.googleapis.com/css2?family=Noto+Naskh+Arabic:wght@400;500;600;700&family=Noto+Nastaliq+Urdu:wght@400;500;600;700&display=swap'
@@ -53,8 +59,7 @@ function Provenance({ situation, usingFixtures }) {
   )
 }
 
-export default function FloodTracker() {
-  useFloodFonts()
+function ReplayView() {
   const replay = useFloodReplay()
   const [selectedId, setSelectedId] = useState(null)
   const situation = replay.situation
@@ -144,6 +149,212 @@ export default function FloodTracker() {
         usingFixtures={replay.usingFixtures}
         onClose={() => setSelectedId(null)}
       />
+    </div>
+  )
+}
+
+// flood: Today (live forecast) | 2022 replay | What-if. The replay stays the
+// default for the demo; the last choice is remembered per browser.
+const MODES = [
+  { key: 'live', label: 'Today (live forecast)' },
+  { key: 'replay', label: '2022 replay' },
+  { key: 'what_if', label: 'What-if' },
+]
+const MODE_KEY = 'nigraan.flood.mode'
+
+function readMode() {
+  try {
+    const saved = window.localStorage.getItem(MODE_KEY)
+    return MODES.some((mode) => mode.key === saved) ? saved : 'replay'
+  } catch {
+    return 'replay'
+  }
+}
+
+function saveMode(mode) {
+  try {
+    window.localStorage.setItem(MODE_KEY, mode)
+  } catch {
+    // Storage disabled: the toggle still works for this visit.
+  }
+}
+
+function ModeToggle({ mode, onChange }) {
+  return (
+    <div role="group" aria-label="Flood tracker view" className="inline-flex w-fit flex-wrap rounded-lg border border-[#1b4a33] bg-[#04140c] p-0.5 text-xs">
+      {MODES.map((item) => (
+        <button key={item.key} type="button" aria-pressed={mode === item.key} onClick={() => onChange(item.key)}
+          className={`rounded-md px-3 py-1.5 font-semibold ${mode === item.key
+            ? 'bg-emerald-600 text-white'
+            : 'text-[#c5d9cc] hover:bg-[#0c2918]'}`}>
+          {item.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function Panel({ children }) {
+  return (
+    <div className="rounded-xl border border-[#1b4a33]/80 bg-[#071a0e] px-4 py-6 text-sm text-[#c5d9cc]">{children}</div>
+  )
+}
+
+function ModeHeader({ title, subtitle, situation, children }) {
+  const labels = situation?.data_provenance
+  return (
+    <div className="rounded-xl border border-[#1b4a33]/80 bg-[#071a0e] px-3 py-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <h1 className="text-sm font-semibold text-slate-100">{title}</h1>
+        <p className="text-xs text-slate-200">{subtitle}</p>
+      </div>
+      {children}
+      {labels && (
+        <details className="mt-2 text-[11px] text-[#8aa898]">
+          <summary className="cursor-pointer font-medium text-[#c5d9cc]">Data sources and method</summary>
+          <div className="mt-2 space-y-1 leading-relaxed">
+            {Object.entries(labels).map(([name, text]) => (
+              <p key={name}><span className="capitalize font-semibold">{name}</span>: {text}</p>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  )
+}
+
+// Map, downstream peaks, villages and the alert-draft drawer for one
+// situation. `side` renders above the peaks; `below` under the map.
+function SituationView({ situation, side, below, draftContext }) {
+  const [selectedId, setSelectedId] = useState(null)
+  const villages = situation?.at_risk_villages ?? []
+  const selected = villages.find((village) => village.id === selectedId) ?? null
+
+  return (
+    <>
+      <div className="flex flex-col gap-3 lg:grid lg:grid-cols-3 lg:items-start">
+        <div className="flex min-w-0 flex-col gap-3 lg:col-span-2">
+          <div className="h-[380px] lg:h-[520px]">
+            <RiverMap situation={situation} selectedVillageId={selectedId} onSelectVillage={setSelectedId} />
+          </div>
+          {below}
+        </div>
+        <div className="flex min-w-0 flex-col gap-3 lg:col-span-1">
+          {side}
+          <EtaPanel etas={situation?.etas} />
+          <AtRiskTable villages={villages} selectedId={selectedId} onSelect={setSelectedId} />
+        </div>
+      </div>
+      <AlertDrafts
+        village={selected}
+        asOf={situation?.as_of}
+        context={draftContext}
+        onClose={() => setSelectedId(null)}
+      />
+    </>
+  )
+}
+
+function LiveView({ onReplay, onRoute }) {
+  const live = useLiveSituation(true)
+  const situation = live.situation
+
+  if (live.loading || (!situation && !live.error)) return <Panel>Loading today’s river forecast…</Panel>
+  if (live.error) {
+    return (
+      <Panel>
+        <p className="font-semibold text-slate-200">
+          {live.unavailable ? 'Live forecast unavailable right now' : 'Could not load the live forecast.'}
+        </p>
+        <p className="mt-1 text-[12px] text-[#9dbdac]">{live.error.message}</p>
+        <button type="button" onClick={onReplay} className="mt-2 text-sm font-semibold text-emerald-300 underline hover:text-emerald-200">
+          Switch to the 2022 replay
+        </button>
+      </Panel>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <ModeHeader
+        title="River Flood Tracker"
+        subtitle={`As of ${formatDay(situation.as_of)} · modelled river forecast (GloFAS), not gauge readings`}
+        situation={situation}
+      />
+      <SituationView
+        situation={situation}
+        draftContext={{ mode: 'live' }}
+        side={<OutlookCard outlook={situation.outlook} forecastDays={situation.forecast_days} onRoute={onRoute} />}
+        below={<ForecastTable rows={situation.forecast} warnings={situation.calibration_warnings} />}
+      />
+    </div>
+  )
+}
+
+function WhatIfView({ prefill }) {
+  const [body, setBody] = useState(null)
+  const result = useWhatIf(body)
+  const situation = result.situation
+  const scenario = situation?.scenario
+  const people = (situation?.at_risk_villages ?? []).reduce((sum, v) => sum + (Number(v.population) || 0), 0)
+
+  return (
+    <div className="flex flex-col gap-3">
+      <ModeHeader
+        title="What-if scenario"
+        subtitle="Synthetic peak routed with the 2022 lags. Not a forecast."
+        situation={situation}
+      >
+        {scenario && (
+          <>
+            <p className="mt-1 text-xs text-slate-200">
+              {scenario.barrage} peak {formatPeople(Math.round(scenario.peak_cusecs))} cusecs ({scenario.peak_category}) on {formatDay(scenario.peak_time)}
+              {situation.note ? '' : ` · est. ${formatPeople(people)} people in 2022-flooded villages downstream`}
+            </p>
+            <p className="mt-0.5 text-[11px] text-[#9dbdac]">Assumption: {scenario.assumption}</p>
+            {situation.note && <p className="mt-0.5 text-[11px] text-amber-300">{situation.note}</p>}
+          </>
+        )}
+      </ModeHeader>
+      <WhatIfForm initial={prefill} onRun={setBody} running={result.loading} />
+      {result.error && <Panel><span className="text-red-300">{result.error.message}</span></Panel>}
+      {!body && !result.error && <Panel>Pick a barrage and a peak, then Run.</Panel>}
+      {situation && (
+        <SituationView
+          situation={situation}
+          draftContext={{ mode: 'what_if', scenario: body }}
+        />
+      )}
+    </div>
+  )
+}
+
+export default function FloodTracker() {
+  useFloodFonts()
+  const [mode, setMode] = useState(readMode)
+  const [prefill, setPrefill] = useState(null)
+
+  function choose(next) {
+    setMode(next)
+    saveMode(next)
+  }
+
+  function routeForecast(row) {
+    setPrefill({
+      barrage: row.name,
+      peak_cusecs: row.forecast_peak_cusecs,
+      date: row.forecast_peak_date,
+      key: `${row.name}-${row.forecast_peak_date}-${Date.now()}`,
+    })
+    choose('what_if')
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <ModeToggle mode={mode} onChange={choose} />
+      {mode === 'live' && <LiveView onReplay={() => choose('replay')} onRoute={routeForecast} />}
+      {mode === 'replay' && <ReplayView />}
+      {mode === 'what_if' && <WhatIfView key={prefill?.key || 'blank'} prefill={prefill} />}
     </div>
   )
 }
