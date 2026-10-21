@@ -27,6 +27,9 @@ Environment variables (loaded from aid-priority/.env, see .env.example):
     <signal weight_env>     -- one weight per registered optional signal
                        (scoring.OPTIONAL_SIGNALS), validated like
                        PRIORITY_RISK_WEIGHT
+    PRIORITY_FLOOD_WEIGHT -- River Flood Tracker hours-to-peak weight
+                       (default 0.3). Read once at import from the flood
+                       signal registered in scoring.py.
 
 Error responses use a unified structure:
     { "error": { "code": "<machine-readable>", "message": "<human-readable>" } }
@@ -183,8 +186,8 @@ class DamageBreakdown(BaseModel):
 class DistrictAssessment(BaseModel):
     """One district's inputs, sourced from Risk Flag + Damage Checker."""
 
-    # Optional-signal values arrive under each signal's request_field, which
-    # this model does not declare; unregistered extra keys are never scored.
+    # Declared optional-signal fields are validated below. Unregistered
+    # extra keys are accepted and never scored.
     model_config = ConfigDict(extra="allow")
 
     district: str = Field(..., min_length=1)
@@ -201,6 +204,11 @@ class DistrictAssessment(BaseModel):
     # that failed classification. Must be >= classified tile count.
     # NEVER enters the score -- echoed for situational awareness only.
     tile_count: Optional[int] = Field(None, ge=1)
+
+    # --- flood signal (River Flood Tracker) ---
+    # Hours until the river flood peak reaches the district (estimate, not
+    # a gauge reading). Null or omitted means no ETA.
+    flood_eta_hours: Optional[float] = Field(None, ge=0)
 
     @field_validator("district")
     @classmethod

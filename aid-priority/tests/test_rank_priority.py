@@ -190,7 +190,7 @@ def test_tie_break_is_deterministic():
 
 
 # ---------------------------------------------------------------------------
-# Optional signal registry (dummy signals; the real registry stays empty)
+# Optional signal registry (dummy signals in a private registry)
 # ---------------------------------------------------------------------------
 
 def _dummy_registry():
@@ -423,6 +423,177 @@ def _run_endpoint_signals_in_process(scoring, main):
     assert b"invalid_signal_value" in resp.body
 
 
+# ---------------------------------------------------------------------------
+# Flood signal (River Flood Tracker) -- the real OPTIONAL_SIGNALS entry
+# ---------------------------------------------------------------------------
+
+def test_flood_12h_outranks_96h_all_else_equal():
+    """A peak 12 h out is more urgent than one 96 h out when risk, damage
+    and every other input match. 96 h sits on the linear segment:
+    (120 - 96) / 108 = 24/108."""
+    from scoring import flood_urgency_score
+
+    assert flood_urgency_score(12) == 1.0
+    assert abs(flood_urgency_score(96) - (24 / 108)) < 1e-12
+
+    entries = [
+        _entry("Far", "flood", "high", 0.5, flood_eta_hours=96),
+        _entry("Near", "flood", "high", 0.5, flood_eta_hours=12),
+    ]
+    ranked = rank_districts(entries)
+    assert [r["district"] for r in ranked] == ["Near", "Far"]
+    assert ranked[0]["priority_score"] > ranked[1]["priority_score"]
+    assert ranked[0]["signals"]["flood"] == {"value": 12, "score": 1.0}
+    assert ranked[1]["signals"]["flood"]["score"] == round(24 / 108, 4)
+
+    weight = 0.3
+    near = (0.4 * 1.0 + 0.6 * 0.5 + weight * 1.0) / (0.4 + 0.6 + weight)
+    far = (0.4 * 1.0 + 0.6 * 0.5 + weight * (24 / 108)) / (0.4 + 0.6 + weight)
+    assert ranked[0]["priority_score"] == round(near, 4)
+    assert ranked[1]["priority_score"] == round(far, 4)
+
+
+def test_flood_urgency_boundaries_at_12_and_120():
+    """Plateau through 12 h, zero at and beyond 120 h, line strictly between.
+    The line meets both kinks: (120 - 12) / 108 == 1 and (120 - 120) / 108 == 0."""
+    from scoring import SignalValueError, flood_urgency_score
+
+    assert flood_urgency_score(12) == 1.0
+    assert flood_urgency_score(0) == 1.0
+    assert flood_urgency_score(11.9) == 1.0
+    just_over_12 = 12.0 + 1e-6
+    assert abs(flood_urgency_score(just_over_12) - (120.0 - just_over_12) / 108.0) < 1e-12
+    assert flood_urgency_score(just_over_12) < 1.0
+
+    assert flood_urgency_score(120) == 0.0
+    assert flood_urgency_score(120.1) == 0.0
+    assert flood_urgency_score(1000) == 0.0
+    just_under_120 = 119.999
+    assert abs(flood_urgency_score(just_under_120) - (120.0 - just_under_120) / 108.0) < 1e-12
+    assert flood_urgency_score(just_under_120) > 0.0
+    assert flood_urgency_score(None) == 0.0
+    assert abs((120 - 12) / 108 - 1.0) < 1e-12
+
+    ranked = rank_districts([
+        _entry("At120", "flood", "medium", 0.4, flood_eta_hours=120),
+        _entry("At12", "flood", "medium", 0.4, flood_eta_hours=12),
+    ])
+    by_name = {r["district"]: r for r in ranked}
+    assert by_name["At12"]["signals"]["flood"]["score"] == 1.0
+    assert by_name["At120"]["signals"]["flood"]["score"] == 0.0
+    assert by_name["At12"]["rank"] < by_name["At120"]["rank"]
+
+    try:
+        rank_districts([_entry("Bad", "flood", "low", 0.1, flood_eta_hours=-1)])
+    except SignalValueError as exc:
+        assert "flood_eta_hours" in str(exc)
+    else:
+        raise AssertionError("negative flood_eta_hours accepted")
+
+
+def test_flood_request_without_field_is_unchanged():
+    """Omitting flood_eta_hours (or sending null on every district) leaves
+    scores, ranks and the base formula identical to a registry with no
+    signals. The flood entry is listed inactive; it does not enter the math."""
+    from scoring import OPTIONAL_SIGNALS, active_signals, formula_text
+
+    spec = OPTIONAL_SIGNALS["flood"]
+    assert spec["request_field"] == "flood_eta_hours"
+    assert spec["weight_env"] == "PRIORITY_FLOOD_WEIGHT"
+    assert spec["default_weight"] == 0.3
+    assert spec["missing_policy"] == "zero"
+    assert spec["curve"] == "1.0 up to 12 h, falling linearly to 0 at 120 h"
+    assert "River Flood Tracker estimate" in spec["note"]
+
+    entries = [
+        _entry("Sukkur", "flood", "low", 0.10),
+        _entry("Swat", "flood", "high", 0.70),
+        _entry("Dadu", "flood", "medium", 0.35, flood_eta_hours=None),
+    ]
+    base = rank_districts(entries, signals={})
+    with_flood = rank_districts(entries)
+    assert [(r["district"], r["priority_score"], r["rank"]) for r in base] == [
+        (r["district"], r["priority_score"], r["rank"]) for r in with_flood
+    ]
+    assert all(r["signals"] == {} for r in with_flood)
+    assert formula_text([]) == formula_text(active_signals(entries))
+
+    import main
+
+    payload = [
+        {"district": "Dadu", "hazard_type": "flood", "risk_level": "high",
+         "damage_breakdown": {"none": 5, "partial": 3, "destroyed": 2}},
+        {"district": "Swat", "hazard_type": "flood", "risk_level": "medium",
+         "overall_damage_level": "partial"},
+    ]
+    body = main.rank_priority(main.RankPriorityRequest(districts=payload))
+    info = {s.name: s for s in body.scoring.signals}
+    assert info["flood"].active is False
+    assert info["flood"].weight == 0.3
+    assert info["flood"].request_field == "flood_eta_hours"
+    assert body.scoring.formula == formula_text([])
+    rw, dw = main.RISK_WEIGHT, main.DAMAGE_WEIGHT
+    by_name = {d.district: d for d in body.ranked_districts}
+    dadu_damage = (0.5 * 3 + 1.0 * 2) / 10
+    assert by_name["Dadu"].priority_score == round(
+        (rw * 1.0 + dw * dadu_damage) / (rw + dw), 4
+    )
+    assert by_name["Swat"].priority_score == round(
+        (rw * 0.5 + dw * 0.5) / (rw + dw), 4
+    )
+    assert all(d.signals == {} for d in body.ranked_districts)
+
+    nulled = [dict(row, flood_eta_hours=None) for row in payload]
+    nulled_body = main.rank_priority(main.RankPriorityRequest(districts=nulled))
+    assert [d.priority_score for d in nulled_body.ranked_districts] == [
+        d.priority_score for d in body.ranked_districts
+    ]
+
+    from pydantic import ValidationError
+    try:
+        main.DistrictAssessment(
+            district="X", hazard_type="flood", risk_level="low",
+            overall_damage_level="none", flood_eta_hours=-0.1,
+        )
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError("negative flood_eta_hours passed validation")
+
+
+def test_flood_signal_through_rank_priority():
+    """The declared field is what the endpoint scores, and 12 h still
+    outranks 96 h there. A district with no ETA scores 0 once the signal
+    is active (missing_policy zero)."""
+    import main
+    from scoring import OPTIONAL_SIGNALS
+
+    assert "flood" in OPTIONAL_SIGNALS
+    assert main.SIGNAL_WEIGHTS["flood"] == 0.3
+
+    payload = [
+        {"district": "Far", "hazard_type": "flood", "risk_level": "high",
+         "overall_damage_level": "partial", "flood_eta_hours": 96},
+        {"district": "Near", "hazard_type": "flood", "risk_level": "high",
+         "overall_damage_level": "partial", "flood_eta_hours": 12},
+        {"district": "NoEta", "hazard_type": "flood", "risk_level": "high",
+         "overall_damage_level": "partial"},
+    ]
+    body = main.rank_priority(main.RankPriorityRequest(districts=payload))
+    by_name = {d.district: d for d in body.ranked_districts}
+    assert [d.district for d in body.ranked_districts][:2] == ["Near", "Far"]
+    assert by_name["Near"].rank < by_name["Far"].rank < by_name["NoEta"].rank
+    assert by_name["Near"].signals["flood"].value == 12
+    assert by_name["Near"].signals["flood"].score == 1.0
+    assert by_name["Far"].signals["flood"].score == round(24 / 108, 4)
+    assert by_name["NoEta"].signals["flood"].value is None
+    assert by_name["NoEta"].signals["flood"].score == 0.0
+    info = {s.name: s for s in body.scoring.signals}
+    assert info["flood"].active is True
+    assert info["flood"].missing_policy == "zero"
+    assert "sum_k" in body.scoring.formula
+
+
 def test_signal_weights_loaded_from_env():
     import os
     import main
@@ -653,6 +824,10 @@ if __name__ == "__main__":
         test_skip_signal_leaves_missing_district_unchanged,
         test_signal_invalid_value_and_bad_score_fn,
         test_endpoint_signals_in_process,
+        test_flood_12h_outranks_96h_all_else_equal,
+        test_flood_urgency_boundaries_at_12_and_120,
+        test_flood_request_without_field_is_unchanged,
+        test_flood_signal_through_rank_priority,
         test_signal_weights_loaded_from_env,
     ]
     if not unit_only:

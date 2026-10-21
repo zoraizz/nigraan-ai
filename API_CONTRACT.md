@@ -203,8 +203,13 @@ Request: JSON body
       "tile_count": 0,
       // Optional (single-tile mode only): /classify-damage confidence
       "confidence": 0.0,
-      // Optional signals: one key per registered signal's request_field
-      // (none registered yet). Omit or send null when the district has no value.
+      // --- flood signal (River Flood Tracker) ---
+      // Optional hours until the modelled river-flood peak reaches this
+      // district. Estimate, not a gauge reading. Number >= 0, or null.
+      // Omit or null when the district has no ETA.
+      "flood_eta_hours": 0.0,
+      // Further optional signals use the same pattern: one key per
+      // registered signal's request_field. Omit or null when absent.
       "<request_field>": "any"
     }
   ]
@@ -237,7 +242,8 @@ Response:
     "tie_breaker": "equal scores ordered by district name (ascending)",
     "photo_count_note": "damage_score is a per-tile average, never a sum",
     "low_coverage_note": "transparency signal only; never a scoring input",
-    // Every registered signal, active or not ([] while none are registered)
+    // Every registered signal, active or not. "flood" is registered
+    // (request_field flood_eta_hours).
     "signals": [
       { "name": "string", "request_field": "string", "weight": 0.0,
         "missing_policy": "zero|skip", "curve": "string", "note": "string",
@@ -279,3 +285,14 @@ Scoring notes:
   weight from both sums for that district, so it keeps exactly its
   no-signal score (e.g. no ground photos = no evidence, not zero damage).
   Unregistered extra keys on a district are accepted and ignored.
+- --- flood signal (River Flood Tracker) --- `flood_eta_hours` (number >= 0
+  or null) is hours until the river flood peak reaches the district, a
+  River Flood Tracker estimate, not a gauge reading. Score is 1.0 when
+  h <= 12, (120 - h) / 108 when 12 < h < 120, and 0.0 when h >= 120.
+  Weight comes from PRIORITY_FLOOD_WEIGHT (default 0.3). missing_policy
+  is "zero": when any district in the request sends an ETA, a district
+  without one scores 0 for this signal and the weight still counts.
+  A request that omits the field on every district does not activate the
+  signal, so its priority scores stay on the risk-and-damage formula.
+  The value is echoed under ranked_districts[].signals.flood when active,
+  and scoring.signals lists the curve and note whether or not it is active.

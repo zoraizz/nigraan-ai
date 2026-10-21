@@ -93,6 +93,30 @@ OPTIONAL SIGNALS -- extra, auditable ranking terms:
     signal with its weight, curve, note and whether it was active, so the
     extra terms are as auditable as risk and damage.
 
+FLOOD SIGNAL ("flood") -- hours until a river flood peak:
+    Registered at import (see the bottom of this module) so the serving
+    layer reads PRIORITY_FLOOD_WEIGHT during startup. A later registration
+    would miss that one-time env read and silently keep default_weight.
+
+    flood_eta_hours is an estimate from the River Flood Tracker, not a
+    gauge reading. flood_urgency_score(h) maps hours-until-peak onto [0, 1]:
+
+        1.0                 if h <= 12
+        (120 - h) / 108     if 12 < h < 120
+        0.0                 if h >= 120 or h is None
+
+    The plateau through 12 hours treats an imminent peak as maximum
+    urgency. The line is continuous with that plateau: (120 - 12) / 108
+    is 1, and it reaches 0 at 120 hours (five days). Beyond that the ETA
+    does not raise priority. Negative hours and non-numeric values raise
+    ValueError so the request is rejected instead of clamped.
+
+    missing_policy is "zero": once any district in the request carries an
+    ETA, a district with no ETA scores 0 and the weight still counts
+    (no ETA means no water coming). A request that omits the field on
+    every district does not activate the signal, so its scores stay on
+    the two-term formula. Default weight is 0.3 (PRIORITY_FLOOD_WEIGHT).
+
 TIE-BREAKING: equal scores are ordered by district name (ascending) so
     rankings are deterministic across runs.
 """
@@ -397,3 +421,60 @@ def low_coverage_warning(tile_count: int, threshold: int = 5) -> Optional[str]:
         plural = "tile" if tile_count == 1 else "tiles"
         return f"low coverage — based on {tile_count} {plural}"
     return None
+
+
+# --- flood signal (River Flood Tracker) ---
+
+def flood_urgency_score(h):
+    """Urgency in [0, 1] from hours until the river flood peak arrives.
+
+    1.0 up to 12 h, then a straight line down to 0 at 120 h:
+
+        1.0                 if h <= 12
+        (120 - h) / 108     if 12 < h < 120
+        0.0                 if h >= 120 or h is None
+
+    None scores 0 here for callers that invoke the curve directly. The
+    ranker does not call this for a missing value; missing_policy "zero"
+    supplies that 0 and still counts the weight, and only after the signal
+    is active. h < 0 and non-numeric h raise ValueError (a bad ETA is a
+    caller error, not "already here").
+    """
+    if h is None:
+        return 0.0
+    if isinstance(h, bool):
+        raise ValueError(
+            f"flood_eta_hours must be a number >= 0 or null, got {h!r}"
+        )
+    try:
+        hours = float(h)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"flood_eta_hours must be a number >= 0 or null, got {h!r}"
+        ) from exc
+    # NaN compares false against every bound and would slip through as a
+    # non-score; reject it with the same error as a negative ETA.
+    if hours != hours or hours < 0:
+        raise ValueError(
+            f"flood_eta_hours must be a number >= 0 or null, got {h!r}"
+        )
+    if hours <= 12:
+        return 1.0
+    if hours >= 120:
+        return 0.0
+    return (120.0 - hours) / 108.0
+
+
+register_signal(
+    "flood",
+    request_field="flood_eta_hours",
+    weight_env="PRIORITY_FLOOD_WEIGHT",
+    default_weight=0.3,
+    score_fn=flood_urgency_score,
+    missing_policy="zero",
+    curve="1.0 up to 12 h, falling linearly to 0 at 120 h",
+    note=(
+        "Hours until the river flood peak reaches the district "
+        "(River Flood Tracker estimate)."
+    ),
+)
