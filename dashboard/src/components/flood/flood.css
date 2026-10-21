@@ -1,0 +1,136 @@
+/* River Flood Tracker. Leaflet's img rule must win over Tailwind's preflight,
+   or tiles and markers collapse. Fonts for the alert drawer are injected
+   from FloodTracker (Noto Nastaliq Urdu, Noto Naskh Arabic). */
+
+.flood-map .leaflet-container {
+  height: 100%;
+  width: 100%;
+  background: #07140c;
+  font-family: "Plus Jakarta Sans", system-ui, sans-serif;
+}
+
+.flood-map .leaflet-container img,
+.flood-map .leaflet-container canvas {
+  max-width: none !important;
+  max-height: none !important;
+}
+
+.flood-map .leaflet-control-attribution {
+  background: rgba(7, 26, 14, 0.88) !important;
+  color: #9dbdac !important;
+  font-size: 10px !important;
+  max-width: 70%;
+}
+
+.flood-map .leaflet-control-attribution a {
+  color: #3ddc84 !important;
+}
+
+.flood-map .leaflet-bar a {
+  background: #071a0e;
+  color: #e7f5ec;
+  border-bottom-color: #1b4a33;
+}
+
+.flood-map .leaflet-bar a:hover {
+  background: #0e3a28;
+}
+
+.flood-map .leaflet-popup-content-wrapper,
+.flood-map .leaflet-popup-tip {
+  background: #071a0e;
+  color: #f6faf7;
+  box-shadow: none;
+}
+
+.flood-map .leaflet-popup-content-wrapper {
+  border: 1px solid #1b4a33;
+  border-radius: 8px;
+}
+
+.flood-map .leaflet-popup-content {
+  margin: 10px 12px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.flood-map .leaflet-popup-close-button {
+  color: #9dbdac !important;
+}
+
+.flood-map .leaflet-tooltip.flood-name-tip {
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  color: #f6faf7;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 0;
+  text-shadow:
+    0 1px 2px #030b06,
+    0 0 6px #030b06;
+}
+
+.flood-map .leaflet-tooltip.flood-name-tip::before {
+  display: none;
+}
+
+.flood-peak-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.flood-peak-dot {
+  position: relative;
+  display: block;
+  width: 12px;
+  height: 12px;
+  margin: 3px;
+  border-radius: 9999px;
+  background: #f7fbf8;
+  box-shadow: 0 0 0 2px #030b06;
+}
+
+.flood-peak-dot::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 12px;
+  height: 12px;
+  margin: -6px 0 0 -6px;
+  border-radius: inherit;
+  border: 2px solid #f5b942;
+  animation: flood-peak-pulse 1.5s ease-out infinite;
+}
+
+.flood-peak-dot.is-passed::after {
+  border-color: #3ddc84;
+  animation-duration: 2.2s;
+}
+
+@keyframes flood-peak-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(3);
+    opacity: 0;
+  }
+}
+
+.flood-urdu {
+  font-family: "Noto Nastaliq Urdu", "Noto Naskh Arabic", serif;
+  line-height: 2.5;
+}
+
+.flood-sindhi {
+  font-family: "Noto Naskh Arabic", "Noto Nastaliq Urdu", serif;
+  line-height: 2;
+}
+
+.flood-slider {
+  accent-color: #3ddc84;
+  height: 1.25rem;
+}
