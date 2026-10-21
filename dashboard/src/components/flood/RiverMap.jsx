@@ -150,6 +150,8 @@ export default function RiverMap({ situation, selectedVillageId, onSelectVillage
   })
 
   const barrageByName = new Map(barrages.map((barrage) => [barrage.name, barrage]))
+  const scenario = situation?.mode === 'what_if' ? situation?.scenario : null
+  const scenarioOrder = scenario ? Number(barrageByName.get(scenario.barrage)?.order) : null
   const icons = useMemo(() => ({
     forming: peakIcon('forming'),
     passed: peakIcon('passed'),
@@ -236,13 +238,23 @@ export default function RiverMap({ situation, selectedVillageId, onSelectVillage
 
         {barrages.map((barrage) => {
           if (!pointOk(barrage.lat, barrage.lon)) return null
-          const color = floodCategory(barrage.category).color
+          // What-if: barrages below the scenario barrage show the projected
+          // category (dashed), not their synthetic sub-Low baseline.
+          const projected = scenarioOrder != null && Number(barrage.order) > scenarioOrder
+          const category = projected ? scenario.peak_category : barrage.category
+          const color = floodCategory(category).color
           return (
             <CircleMarker
               key={barrage.name}
               center={[barrage.lat, barrage.lon]}
               radius={radiusForFlow(barrage.outflow_cusecs)}
-              pathOptions={{
+              pathOptions={projected ? {
+                color,
+                weight: 2,
+                dashArray: '3 3',
+                fillColor: color,
+                fillOpacity: 0.55,
+              } : {
                 color: '#04140c',
                 weight: 1,
                 fillColor: color,
@@ -250,11 +262,16 @@ export default function RiverMap({ situation, selectedVillageId, onSelectVillage
               }}
             >
               <Tooltip permanent direction="right" offset={[8, 0]} className="flood-name-tip">
-                {barrage.name}
+                {barrage.name}{projected ? ' · projected (what-if)' : ''}
               </Tooltip>
               <Popup>
                 <p className="font-semibold">{barrage.name}</p>
-                <p className="mt-1"><CategoryBadge category={barrage.category} /></p>
+                <p className="mt-1"><CategoryBadge category={category} /></p>
+                {projected && (
+                  <p className="mt-1 text-[11px] text-amber-300">
+                    projected (what-if): {scenario.barrage} peak carried downstream unchanged
+                  </p>
+                )}
                 <p className="mt-1 font-mono text-[12px]">Outflow {formatCusecs(barrage.outflow_cusecs)}</p>
                 <p className="font-mono text-[12px] text-[#c5d9cc]">Inflow {formatCusecs(barrage.inflow_cusecs)}</p>
                 <p className="mt-1 text-[11px] capitalize text-[#9dbdac]">{barrage.trend || 'trend not reported'}. Category follows outflow.</p>

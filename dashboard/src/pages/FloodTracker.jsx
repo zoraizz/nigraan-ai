@@ -241,7 +241,7 @@ function SituationView({ situation, side, below, draftContext }) {
         </div>
         <div className="flex min-w-0 flex-col gap-3 lg:col-span-1">
           {side}
-          <EtaPanel etas={situation?.etas} />
+          <EtaPanel etas={situation?.etas} scenario={situation?.mode === 'what_if' ? situation?.scenario : null} />
           <AtRiskTable villages={villages} selectedId={selectedId} onSelect={setSelectedId} />
         </div>
       </div>

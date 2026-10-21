@@ -10,7 +10,7 @@ function hoursLabel(hours) {
   return `${value} h from this step`
 }
 
-function EtaRow({ eta }) {
+function EtaRow({ eta, scenario }) {
   const arrived = eta.status === 'arrived'
   const relative = hoursLabel(eta.hours_from_now)
   return (
@@ -18,7 +18,7 @@ function EtaRow({ eta }) {
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium leading-snug text-slate-100">{formatPeakLine(eta)}</p>
         <span className="shrink-0 rounded bg-[#0e3a28] px-1.5 py-0.5 text-[10px] font-semibold text-[#c5d9cc]">
-          {waveName(eta)}
+          {scenario ? `Scenario · ${scenario.peak_category}` : waveName(eta)}
         </span>
       </div>
       <p className="mt-1 text-[11px] text-[#9dbdac]">
@@ -33,7 +33,9 @@ function EtaRow({ eta }) {
   )
 }
 
-export default function EtaPanel({ etas }) {
+// scenario: the what-if block; its rows are badged with the scenario category
+// instead of a wave label (a synthetic peak is never "Wave n").
+export default function EtaPanel({ etas, scenario }) {
   const [showAll, setShowAll] = useState(false)
   const rows = (Array.isArray(etas) ? etas : []).slice().sort((a, b) => {
     const aArrived = a.status === 'arrived'
@@ -55,7 +57,7 @@ export default function EtaPanel({ etas }) {
       ) : (
         <ul>
           {visibleRows.map((eta) => (
-            <EtaRow key={`${eta.wave_id || 'wave'}-${eta.barrage}`} eta={eta} />
+            <EtaRow key={`${eta.wave_id || 'wave'}-${eta.barrage}`} eta={eta} scenario={scenario} />
           ))}
         </ul>
       )}
