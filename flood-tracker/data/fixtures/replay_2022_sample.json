@@ -1,0 +1,216 @@
+{
+  "fixture": true,
+  "note": "Hand-made fixture for the parallel build. Five daily 06:00 steps and a scorecard. Not a 2022 FFD replay and not model output.",
+  "steps": [
+    {
+      "as_of": "2022-08-27T06:00",
+      "mode": "replay",
+      "barrages": [
+        {"name": "Tarbela", "order": 1, "lat": 34.088, "lon": 72.699, "inflow_cusecs": 260000, "outflow_cusecs": 255000, "category": "Low Flood", "trend": "rising"},
+        {"name": "Kalabagh", "order": 2, "lat": 32.961, "lon": 71.546, "inflow_cusecs": 220000, "outflow_cusecs": 210000, "category": "Normal", "trend": "rising"},
+        {"name": "Chashma", "order": 3, "lat": 32.45, "lon": 71.39, "inflow_cusecs": 190000, "outflow_cusecs": 185000, "category": "Normal", "trend": "stable"},
+        {"name": "Taunsa", "order": 4, "lat": 30.703, "lon": 70.746, "inflow_cusecs": 160000, "outflow_cusecs": 155000, "category": "Normal", "trend": "stable"},
+        {"name": "Guddu", "order": 5, "lat": 28.42, "lon": 69.715, "inflow_cusecs": 140000, "outflow_cusecs": 135000, "category": "Normal", "trend": "stable"},
+        {"name": "Sukkur", "order": 6, "lat": 27.699, "lon": 68.859, "inflow_cusecs": 125000, "outflow_cusecs": 120000, "category": "Normal", "trend": "stable"},
+        {"name": "Kotri", "order": 7, "lat": 25.367, "lon": 68.308, "inflow_cusecs": 110000, "outflow_cusecs": 108000, "category": "Normal", "trend": "stable"}
+      ],
+      "reaches": [
+        {"from": "Tarbela", "to": "Kalabagh", "category": "Low Flood", "coords": [[34.088, 72.699], [32.961, 71.546]]},
+        {"from": "Kalabagh", "to": "Chashma", "category": "Normal", "coords": [[32.961, 71.546], [32.45, 71.39]]},
+        {"from": "Chashma", "to": "Taunsa", "category": "Normal", "coords": [[32.45, 71.39], [30.703, 70.746]]},
+        {"from": "Taunsa", "to": "Guddu", "category": "Normal", "coords": [[30.703, 70.746], [28.42, 69.715]]},
+        {"from": "Guddu", "to": "Sukkur", "category": "Normal", "coords": [[28.42, 69.715], [27.699, 68.859]]},
+        {"from": "Sukkur", "to": "Kotri", "category": "Normal", "coords": [[27.699, 68.859], [25.367, 68.308]]}
+      ],
+      "peaks": [
+        {"barrage": "Tarbela", "wave_id": "indus-2022-w1", "status": "forming", "peak_time": "2022-08-27T18:00", "peak_outflow_cusecs": 270000}
+      ],
+      "etas": [
+        {"wave_id": "indus-2022-w1", "from_barrage": "Tarbela", "barrage": "Taunsa", "status": "estimated", "eta": "2022-08-30T18:00", "eta_low": "2022-08-30T06:00", "eta_high": "2022-08-31T06:00", "hours_from_now": 84, "observed_time": null}
+      ],
+      "at_risk_villages": [],
+      "district_eta_hours": {},
+      "data_provenance": {
+        "flows": "fixture: hand-made step for 2022-08-27T06:00",
+        "etas": "fixture: not a calibrated routing model",
+        "villages": "fixture: no villages in this early step",
+        "population": "fixture: none"
+      }
+    },
+    {
+      "as_of": "2022-08-28T06:00",
+      "mode": "replay",
+      "barrages": [
+        {"name": "Tarbela", "order": 1, "lat": 34.088, "lon": 72.699, "inflow_cusecs": 240000, "outflow_cusecs": 230000, "category": "Normal", "trend": "falling"},
+        {"name": "Kalabagh", "order": 2, "lat": 32.961, "lon": 71.546, "inflow_cusecs": 390000, "outflow_cusecs": 370000, "category": "Low Flood", "trend": "rising"},
+        {"name": "Chashma", "order": 3, "lat": 32.45, "lon": 71.39, "inflow_cusecs": 280000, "outflow_cusecs": 260000, "category": "Low Flood", "trend": "rising"},
+        {"name": "Taunsa", "order": 4, "lat": 30.703, "lon": 70.746, "inflow_cusecs": 200000, "outflow_cusecs": 190000, "category": "Normal", "trend": "rising"},
+        {"name": "Guddu", "order": 5, "lat": 28.42, "lon": 69.715, "inflow_cusecs": 150000, "outflow_cusecs": 145000, "category": "Normal", "trend": "stable"},
+        {"name": "Sukkur", "order": 6, "lat": 27.699, "lon": 68.859, "inflow_cusecs": 130000, "outflow_cusecs": 128000, "category": "Normal", "trend": "stable"},
+        {"name": "Kotri", "order": 7, "lat": 25.367, "lon": 68.308, "inflow_cusecs": 115000, "outflow_cusecs": 112000, "category": "Normal", "trend": "stable"}
+      ],
+      "reaches": [
+        {"from": "Tarbela", "to": "Kalabagh", "category": "Low Flood", "coords": [[34.088, 72.699], [32.961, 71.546]]},
+        {"from": "Kalabagh", "to": "Chashma", "category": "Low Flood", "coords": [[32.961, 71.546], [32.45, 71.39]]},
+        {"from": "Chashma", "to": "Taunsa", "category": "Normal", "coords": [[32.45, 71.39], [30.703, 70.746]]},
+        {"from": "Taunsa", "to": "Guddu", "category": "Normal", "coords": [[30.703, 70.746], [28.42, 69.715]]},
+        {"from": "Guddu", "to": "Sukkur", "category": "Normal", "coords": [[28.42, 69.715], [27.699, 68.859]]},
+        {"from": "Sukkur", "to": "Kotri", "category": "Normal", "coords": [[27.699, 68.859], [25.367, 68.308]]}
+      ],
+      "peaks": [
+        {"barrage": "Kalabagh", "wave_id": "indus-2022-w1", "status": "forming", "peak_time": "2022-08-28T18:00", "peak_outflow_cusecs": 410000}
+      ],
+      "etas": [
+        {"wave_id": "indus-2022-w1", "from_barrage": "Kalabagh", "barrage": "Taunsa", "status": "estimated", "eta": "2022-08-30T18:00", "eta_low": "2022-08-30T06:00", "eta_high": "2022-08-31T06:00", "hours_from_now": 60, "observed_time": null}
+      ],
+      "at_risk_villages": [],
+      "district_eta_hours": {},
+      "data_provenance": {
+        "flows": "fixture: hand-made step for 2022-08-28T06:00",
+        "etas": "fixture: not a calibrated routing model",
+        "villages": "fixture: no villages in this step",
+        "population": "fixture: none"
+      }
+    },
+    {
+      "as_of": "2022-08-29T06:00",
+      "mode": "replay",
+      "barrages": [
+        {"name": "Tarbela", "order": 1, "lat": 34.088, "lon": 72.699, "inflow_cusecs": 200000, "outflow_cusecs": 195000, "category": "Normal", "trend": "falling"},
+        {"name": "Kalabagh", "order": 2, "lat": 32.961, "lon": 71.546, "inflow_cusecs": 430000, "outflow_cusecs": 410000, "category": "Medium Flood", "trend": "falling"},
+        {"name": "Chashma", "order": 3, "lat": 32.45, "lon": 71.39, "inflow_cusecs": 480000, "outflow_cusecs": 460000, "category": "Medium Flood", "trend": "rising"},
+        {"name": "Taunsa", "order": 4, "lat": 30.703, "lon": 70.746, "inflow_cusecs": 340000, "outflow_cusecs": 320000, "category": "Low Flood", "trend": "rising"},
+        {"name": "Guddu", "order": 5, "lat": 28.42, "lon": 69.715, "inflow_cusecs": 165000, "outflow_cusecs": 160000, "category": "Normal", "trend": "rising"},
+        {"name": "Sukkur", "order": 6, "lat": 27.699, "lon": 68.859, "inflow_cusecs": 140000, "outflow_cusecs": 136000, "category": "Normal", "trend": "stable"},
+        {"name": "Kotri", "order": 7, "lat": 25.367, "lon": 68.308, "inflow_cusecs": 118000, "outflow_cusecs": 115000, "category": "Normal", "trend": "stable"}
+      ],
+      "reaches": [
+        {"from": "Tarbela", "to": "Kalabagh", "category": "Medium Flood", "coords": [[34.088, 72.699], [32.961, 71.546]]},
+        {"from": "Kalabagh", "to": "Chashma", "category": "Medium Flood", "coords": [[32.961, 71.546], [32.45, 71.39]]},
+        {"from": "Chashma", "to": "Taunsa", "category": "Low Flood", "coords": [[32.45, 71.39], [30.703, 70.746]]},
+        {"from": "Taunsa", "to": "Guddu", "category": "Normal", "coords": [[30.703, 70.746], [28.42, 69.715]]},
+        {"from": "Guddu", "to": "Sukkur", "category": "Normal", "coords": [[28.42, 69.715], [27.699, 68.859]]},
+        {"from": "Sukkur", "to": "Kotri", "category": "Normal", "coords": [[27.699, 68.859], [25.367, 68.308]]}
+      ],
+      "peaks": [
+        {"barrage": "Chashma", "wave_id": "indus-2022-w1", "status": "forming", "peak_time": "2022-08-29T18:00", "peak_outflow_cusecs": 510000}
+      ],
+      "etas": [
+        {"wave_id": "indus-2022-w1", "from_barrage": "Chashma", "barrage": "Taunsa", "status": "estimated", "eta": "2022-08-30T18:00", "eta_low": "2022-08-30T12:00", "eta_high": "2022-08-31T00:00", "hours_from_now": 36, "observed_time": null}
+      ],
+      "at_risk_villages": [
+        {"id": "rajanpur-fazilpur", "name": "Fazilpur", "district": "Rajanpur", "lat": 29.32, "lon": 70.43, "eta": "2022-08-30T12:00", "eta_low": "2022-08-30T06:00", "eta_high": "2022-08-30T20:00", "hours_to_arrival": 30, "population": 22000, "population_source": "fixture estimate, not a census extract"}
+      ],
+      "district_eta_hours": {"Rajanpur": 30},
+      "data_provenance": {
+        "flows": "fixture: hand-made step for 2022-08-29T06:00",
+        "etas": "fixture: not a calibrated routing model",
+        "villages": "fixture: Fazilpur only in this step",
+        "population": "fixture: rounded headcount, not a census extract"
+      }
+    },
+    {
+      "as_of": "2022-08-30T06:00",
+      "mode": "replay",
+      "barrages": [
+        {"name": "Tarbela", "order": 1, "lat": 34.088, "lon": 72.699, "inflow_cusecs": 185000, "outflow_cusecs": 180000, "category": "Normal", "trend": "falling"},
+        {"name": "Kalabagh", "order": 2, "lat": 32.961, "lon": 71.546, "inflow_cusecs": 360000, "outflow_cusecs": 340000, "category": "Low Flood", "trend": "falling"},
+        {"name": "Chashma", "order": 3, "lat": 32.45, "lon": 71.39, "inflow_cusecs": 520000, "outflow_cusecs": 500000, "category": "High Flood", "trend": "falling"},
+        {"name": "Taunsa", "order": 4, "lat": 30.703, "lon": 70.746, "inflow_cusecs": 560000, "outflow_cusecs": 540000, "category": "High Flood", "trend": "rising"},
+        {"name": "Guddu", "order": 5, "lat": 28.42, "lon": 69.715, "inflow_cusecs": 190000, "outflow_cusecs": 180000, "category": "Normal", "trend": "rising"},
+        {"name": "Sukkur", "order": 6, "lat": 27.699, "lon": 68.859, "inflow_cusecs": 155000, "outflow_cusecs": 150000, "category": "Normal", "trend": "rising"},
+        {"name": "Kotri", "order": 7, "lat": 25.367, "lon": 68.308, "inflow_cusecs": 125000, "outflow_cusecs": 122000, "category": "Normal", "trend": "stable"}
+      ],
+      "reaches": [
+        {"from": "Tarbela", "to": "Kalabagh", "category": "Low Flood", "coords": [[34.088, 72.699], [32.961, 71.546]]},
+        {"from": "Kalabagh", "to": "Chashma", "category": "High Flood", "coords": [[32.961, 71.546], [32.45, 71.39]]},
+        {"from": "Chashma", "to": "Taunsa", "category": "High Flood", "coords": [[32.45, 71.39], [30.703, 70.746]]},
+        {"from": "Taunsa", "to": "Guddu", "category": "Normal", "coords": [[30.703, 70.746], [28.42, 69.715]]},
+        {"from": "Guddu", "to": "Sukkur", "category": "Normal", "coords": [[28.42, 69.715], [27.699, 68.859]]},
+        {"from": "Sukkur", "to": "Kotri", "category": "Normal", "coords": [[27.699, 68.859], [25.367, 68.308]]}
+      ],
+      "peaks": [
+        {"barrage": "Taunsa", "wave_id": "indus-2022-w1", "status": "forming", "peak_time": "2022-08-30T18:00", "peak_outflow_cusecs": 580000}
+      ],
+      "etas": [
+        {"wave_id": "indus-2022-w1", "from_barrage": "Chashma", "barrage": "Guddu", "status": "estimated", "eta": "2022-09-01T18:00", "eta_low": "2022-09-01T06:00", "eta_high": "2022-09-02T06:00", "hours_from_now": 60, "observed_time": null},
+        {"wave_id": "indus-2022-w1", "from_barrage": "Chashma", "barrage": "Sukkur", "status": "estimated", "eta": "2022-09-02T12:00", "eta_low": "2022-09-02T00:00", "eta_high": "2022-09-03T00:00", "hours_from_now": 78, "observed_time": null},
+        {"wave_id": "indus-2022-w1", "from_barrage": "Chashma", "barrage": "Kotri", "status": "estimated", "eta": "2022-09-03T18:00", "eta_low": "2022-09-03T06:00", "eta_high": "2022-09-04T12:00", "hours_from_now": 108, "observed_time": null}
+      ],
+      "at_risk_villages": [
+        {"id": "rajanpur-rojhan", "name": "Rojhan", "district": "Rajanpur", "lat": 28.69, "lon": 69.95, "eta": "2022-08-31T06:00", "eta_low": "2022-08-30T22:00", "eta_high": "2022-08-31T14:00", "hours_to_arrival": 24, "population": 28000, "population_source": "fixture estimate, not a census extract"},
+        {"id": "rajanpur-fazilpur", "name": "Fazilpur", "district": "Rajanpur", "lat": 29.32, "lon": 70.43, "eta": "2022-08-30T18:00", "eta_low": "2022-08-30T12:00", "eta_high": "2022-08-31T00:00", "hours_to_arrival": 12, "population": 22000, "population_source": "fixture estimate, not a census extract"}
+      ],
+      "district_eta_hours": {"Rajanpur": 12},
+      "data_provenance": {
+        "flows": "fixture: hand-made step for 2022-08-30T06:00",
+        "etas": "fixture: not a calibrated routing model",
+        "villages": "fixture: Rajanpur settlements only in this step",
+        "population": "fixture: rounded headcounts, not a census extract"
+      }
+    },
+    {
+      "as_of": "2022-08-31T06:00",
+      "mode": "replay",
+      "barrages": [
+        {"name": "Tarbela", "order": 1, "lat": 34.088, "lon": 72.699, "inflow_cusecs": 175000, "outflow_cusecs": 168000, "category": "Normal", "trend": "falling"},
+        {"name": "Kalabagh", "order": 2, "lat": 32.961, "lon": 71.546, "inflow_cusecs": 310000, "outflow_cusecs": 295000, "category": "Low Flood", "trend": "falling"},
+        {"name": "Chashma", "order": 3, "lat": 32.45, "lon": 71.39, "inflow_cusecs": 420000, "outflow_cusecs": 405000, "category": "Medium Flood", "trend": "falling"},
+        {"name": "Taunsa", "order": 4, "lat": 30.703, "lon": 70.746, "inflow_cusecs": 545000, "outflow_cusecs": 520000, "category": "High Flood", "trend": "falling"},
+        {"name": "Guddu", "order": 5, "lat": 28.42, "lon": 69.715, "inflow_cusecs": 265000, "outflow_cusecs": 240000, "category": "Low Flood", "trend": "rising"},
+        {"name": "Sukkur", "order": 6, "lat": 27.699, "lon": 68.859, "inflow_cusecs": 185000, "outflow_cusecs": 178000, "category": "Normal", "trend": "rising"},
+        {"name": "Kotri", "order": 7, "lat": 25.367, "lon": 68.308, "inflow_cusecs": 142000, "outflow_cusecs": 138000, "category": "Normal", "trend": "stable"}
+      ],
+      "reaches": [
+        {"from": "Tarbela", "to": "Kalabagh", "category": "Low Flood", "coords": [[34.088, 72.699], [33.5, 72.1], [32.961, 71.546]]},
+        {"from": "Kalabagh", "to": "Chashma", "category": "Medium Flood", "coords": [[32.961, 71.546], [32.7, 71.46], [32.45, 71.39]]},
+        {"from": "Chashma", "to": "Taunsa", "category": "High Flood", "coords": [[32.45, 71.39], [31.6, 71.05], [30.703, 70.746]]},
+        {"from": "Taunsa", "to": "Guddu", "category": "High Flood", "coords": [[30.703, 70.746], [29.55, 70.3], [28.42, 69.715]]},
+        {"from": "Guddu", "to": "Sukkur", "category": "Low Flood", "coords": [[28.42, 69.715], [28.05, 69.25], [27.699, 68.859]]},
+        {"from": "Sukkur", "to": "Kotri", "category": "Normal", "coords": [[27.699, 68.859], [26.5, 68.55], [25.367, 68.308]]}
+      ],
+      "peaks": [
+        {"barrage": "Taunsa", "wave_id": "indus-2022-w1", "status": "passed", "peak_time": "2022-08-30T18:00", "peak_outflow_cusecs": 580000}
+      ],
+      "etas": [
+        {"wave_id": "indus-2022-w1", "from_barrage": "Taunsa", "barrage": "Guddu", "status": "estimated", "eta": "2022-09-01T18:00", "eta_low": "2022-09-01T06:00", "eta_high": "2022-09-02T06:00", "hours_from_now": 36, "observed_time": null},
+        {"wave_id": "indus-2022-w1", "from_barrage": "Taunsa", "barrage": "Sukkur", "status": "estimated", "eta": "2022-09-02T12:00", "eta_low": "2022-09-02T00:00", "eta_high": "2022-09-03T00:00", "hours_from_now": 54, "observed_time": null},
+        {"wave_id": "indus-2022-w1", "from_barrage": "Taunsa", "barrage": "Kotri", "status": "estimated", "eta": "2022-09-03T18:00", "eta_low": "2022-09-03T06:00", "eta_high": "2022-09-04T12:00", "hours_from_now": 84, "observed_time": null}
+      ],
+      "at_risk_villages": [
+        {"id": "rajanpur-rojhan", "name": "Rojhan", "district": "Rajanpur", "lat": 28.69, "lon": 69.95, "eta": "2022-08-31T14:00", "eta_low": "2022-08-31T10:00", "eta_high": "2022-08-31T20:00", "hours_to_arrival": 8, "population": 28000, "population_source": "fixture estimate, not a census extract"},
+        {"id": "rajanpur-fazilpur", "name": "Fazilpur", "district": "Rajanpur", "lat": 29.32, "lon": 70.43, "eta": "2022-08-31T18:00", "eta_low": "2022-08-31T12:00", "eta_high": "2022-09-01T00:00", "hours_to_arrival": 12, "population": 22000, "population_source": "fixture estimate, not a census extract"},
+        {"id": "kashmore-kashmore", "name": "Kashmore", "district": "Kashmore", "lat": 28.43, "lon": 69.58, "eta": "2022-09-01T18:00", "eta_low": "2022-09-01T06:00", "eta_high": "2022-09-02T06:00", "hours_to_arrival": 36, "population": 45000, "population_source": "fixture estimate, not a census extract"},
+        {"id": "kashmore-kandhkot", "name": "Kandhkot", "district": "Kashmore", "lat": 28.24, "lon": 69.18, "eta": "2022-09-02T00:00", "eta_low": "2022-09-01T12:00", "eta_high": "2022-09-02T12:00", "hours_to_arrival": 42, "population": 32000, "population_source": "fixture estimate, not a census extract"},
+        {"id": "ghotki-ghotki", "name": "Ghotki", "district": "Ghotki", "lat": 28.01, "lon": 69.32, "eta": "2022-09-02T06:00", "eta_low": "2022-09-01T18:00", "eta_high": "2022-09-02T18:00", "hours_to_arrival": 48, "population": 60000, "population_source": "fixture estimate, not a census extract"}
+      ],
+      "district_eta_hours": {"Rajanpur": 8, "Kashmore": 36, "Ghotki": 48},
+      "data_provenance": {
+        "flows": "fixture: same hand-made 2022-08-31T06:00 situation as situation_2022-08-31.json",
+        "etas": "fixture: lag windows from a passed Taunsa peak, not a calibrated routing model",
+        "villages": "fixture: five settlements in Rajanpur, Kashmore and Ghotki",
+        "population": "fixture: rounded headcounts, not a census extract"
+      }
+    }
+  ],
+  "scorecard": [
+    {
+      "barrage": "Taunsa",
+      "wave_id": "indus-2022-w1",
+      "actual_peak_time": "2022-08-30T18:00",
+      "predicted_time": "2022-08-30T12:00",
+      "predicted_low": "2022-08-30T06:00",
+      "predicted_high": "2022-08-31T00:00",
+      "error_hours": 6
+    },
+    {
+      "barrage": "Guddu",
+      "wave_id": "indus-2022-w1",
+      "actual_peak_time": "2022-09-01T12:00",
+      "predicted_time": "2022-09-01T18:00",
+      "predicted_low": "2022-09-01T06:00",
+      "predicted_high": "2022-09-02T06:00",
+      "error_hours": -6
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+---
+description: River Flood Tracker parallel-build rules for Nigraan AI
+alwaysApply: true
+---
+
+# Nigraan AI: River Flood Tracker rules
+Context: Nigraan AI is a disaster-response platform for Pakistan's NDMA/PDMAs (Alibaba Cloud x Bano Qabil AI Hackathon finals). We are adding a River Flood Tracker: where an Indus flood wave is, when its peak reaches each barrage and village downstream (with an uncertainty range), who is at risk, Urdu/Sindhi alert drafts, and hours-to-arrival as a term in Aid Priority. The 2022 replay is the demo centrepiece. The build runs as parallel agents: only edit the files your prompt says you own, and build against flood-tracker/CONTRACT.md.
+Indus barrages in order: Tarbela -> Kalabagh -> Chashma -> Taunsa -> Guddu -> Sukkur -> Kotri.
+Flood categories (applied to OUTFLOW): Normal, Low Flood, Medium Flood, High Flood, Very High Flood, Exceptionally High Flood.
+Thresholds in cusecs (Low/Medium/High/VeryHigh/ExceptionallyHigh), source FFD bulletin:
+- Tarbela, Kalabagh, Chashma, Taunsa: 250000/375000/500000/650000/800000
+- Guddu: 200000/350000/500000/700000/900000
+- Sukkur: 200000/350000/500000/700000/900000 (Exceptionally High not published; 900000 assumed, mark it as assumed)
+- Kotri: 200000/300000/450000/650000/800000
+Repo conventions:
+- Python services: main.py (FastAPI) plus a pure-function module with no IO, like aid-priority/scoring.py. Long module docstrings explaining every formula and design choice.
+- load_dotenv(Path(__file__).parent / ".env"); env vars parsed with a logged fallback to defaults; CORS from CORS_ORIGINS (comma-separated, default http://localhost:5173); logging format "%(asctime)s %(levelname)-8s [%(name)s] %(message)s".
+- Errors: {"error": {"code": "<machine>", "message": "<human>"}}. Pydantic v2 models and validators.
+- Tests: tests/test_*.py runnable as `python tests/test_x.py unit` and with pytest; endpoint tests skip when the server is not running.
+- Dashboard: React 18, Vite 6, Tailwind v4, hash routes. All HTTP through src/api/client.js (getJson/postJson); one file per service in src/api/; one hook per call in src/hooks/ using the `active` flag pattern from src/hooks/useAidPriority.js. Colours: bg #030b06, panels #071a0e, borders #1b4a33, emerald accents.
+- Honesty: every modelled or estimated number is labelled on screen and in the API (data_provenance). Never present model output as gauge data. Fixture files are labelled as fixtures.
+- Secrets: keys only in env (Render settings). Add names to .env.example with empty values. Never commit a key.
+- Do not modify risk-flag/ or damage-checker/. Ground Photo Intake is built in parallel and also touches aid-priority/scoring.py, aid-priority/main.py, dashboard App.jsx, Sidebar.jsx, config/endpoints.js, API_CONTRACT.md, STATUS.md: edits there are small, additive, appended at the end of lists, under a "flood" marker comment.
+- Commits: small, conventional (feat(flood-tracker): ..., test(flood-tracker): ..., docs: ...).
+- When done: list the files changed and run the check from your prompt.

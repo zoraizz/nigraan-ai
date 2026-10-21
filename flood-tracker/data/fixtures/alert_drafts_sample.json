@@ -1,0 +1,33 @@
+{
+  "fixture": true,
+  "note": "Hand-made fixture for the parallel build. Urdu and Sindhi text was written for the contract example. It is not a Gemini or Qwen response and not an official NDMA alert.",
+  "drafts": [
+    {
+      "village_id": "rajanpur-rojhan",
+      "name": "Rojhan",
+      "district": "Rajanpur",
+      "urdu": "رجحان: دریائے سندھ کی سیلابی لہر تقریباً 8 گھنٹے میں پہنچ سکتی ہے۔ نچلے علاقوں سے محفوظ مقام کی طرف جائیں۔ یہ ایک نمونہ مسودہ ہے، سرکاری انتباہ نہیں۔",
+      "sindhi": "روجهان: سنڌو درياءَ جي ٻوڏ جي لهر لڳ ڀڳ 8 ڪلاڪن ۾ پهچي سگهي ٿي. هيٺاهين علائقن مان محفوظ هنڌ ڏانهن وڃو. هي نمونو مسودو آهي، سرڪاري اطلاع نه آهي.",
+      "source": "template",
+      "model": "fixture-template"
+    },
+    {
+      "village_id": "kashmore-kashmore",
+      "name": "Kashmore",
+      "district": "Kashmore",
+      "urdu": "کشمور: گڈو کی طرف بڑھتی لہر کی متوقع آمد تقریباً 36 گھنٹے ہے۔ کشتی، خوراک اور دستاویزات تیار رکھیں۔ یہ ایک نمونہ مسودہ ہے، سرکاری انتباہ نہیں۔",
+      "sindhi": "ڪشمور: گڊو ڏانهن وڌندڙ لهر جي متوقع اچڻ جو وقت لڳ ڀڳ 36 ڪلاڪ آهي. ٻيڙي، کاڌو ۽ ڪاغذ تيار رکو. هي نمونو مسودو آهي، سرڪاري اطلاع نه آهي.",
+      "source": "template",
+      "model": "fixture-template"
+    },
+    {
+      "village_id": "ghotki-ghotki",
+      "name": "Ghotki",
+      "district": "Ghotki",
+      "urdu": "گھوٹکی: سیلابی لہر کی متوقع آمد تقریباً 48 گھنٹے ہے۔ دریائی کنارے خالی رکھیں اور مقامی انتظامیہ کی ہدایت پر عمل کریں۔ یہ ایک نمونہ مسودہ ہے، سرکاری انتباہ نہیں۔",
+      "sindhi": "گهوٽڪي: ٻوڏ جي لهر جي متوقع اچڻ جو وقت لڳ ڀڳ 48 ڪلاڪ آهي. درياءَ جي ڪناري کي خالي رکو ۽ مقامي انتظاميا جي هدايت تي عمل ڪريو. هي نمونو مسودو آهي، سرڪاري اطلاع نه آهي.",
+      "source": "template",
+      "model": "fixture-template"
+    }
+  ]
+}
