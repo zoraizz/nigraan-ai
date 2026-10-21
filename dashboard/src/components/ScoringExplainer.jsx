@@ -5,7 +5,10 @@
 export default function ScoringExplainer({ scoring = null }) {
   const riskWeight = scoring?.risk_weight ?? 0.4
   const damageWeight = scoring?.damage_weight ?? 0.6
-  const total = riskWeight + damageWeight
+  // flood: the River Flood Tracker term, present only when a district sent an ETA
+  const flood = (scoring?.signals ?? []).find((signal) => signal.name === 'flood' && signal.active)
+  const floodWeight = flood ? Number(flood.weight) || 0 : 0
+  const total = Math.round((riskWeight + damageWeight + floodWeight) * 1000) / 1000
 
   return (
     <div className="panel p-4 text-sm text-muted">
@@ -14,7 +17,8 @@ export default function ScoringExplainer({ scoring = null }) {
       </h3>
       <p className="mb-3">
         <code className="data well px-1.5 py-0.5 text-xs text-text">
-          priority = ({riskWeight} × risk + {damageWeight} × damage) / {total}
+          priority = ({riskWeight} × risk + {damageWeight} × damage
+          {flood ? ` + ${floodWeight} × flood` : ''}) / {total}
         </code>
         {scoring ? (
           <span className="ml-2 text-xs text-muted">(live weights from the service)</span>
@@ -25,6 +29,13 @@ export default function ScoringExplainer({ scoring = null }) {
         <li>damage: (0.5 × partial + 1.0 × destroyed) / classified tiles</li>
         <li>more photos never means more damage: damage is a per-tile rate</li>
         <li>low-coverage warnings are transparency signals, never scoring inputs</li>
+        {flood ? (
+          <li>
+            flood: hours until the river peak (River Flood Tracker estimate,
+            not a gauge), scored {flood.curve || '1.0 up to 12 h, falling linearly to 0 at 120 h'};
+            a district with no ETA scores 0
+          </li>
+        ) : null}
       </ul>
       {scoring ? (
         <p className="mt-2 text-xs text-muted">Tie-breaker: {scoring.tie_breaker}</p>

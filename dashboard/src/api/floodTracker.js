@@ -82,6 +82,44 @@ export async function postAlertDrafts(body) {
   return postJson(ENDPOINTS.floodApi, '/alert-drafts', body ?? {})
 }
 
+// The replay step last shown on the Flood Tracker page. Aid Priority reads
+// district ETAs for this step; 31 Aug 06:00 when the page was never opened.
+const LAST_AS_OF_KEY = 'nigraan.flood.lastAsOf'
+export const DEFAULT_FLOOD_AS_OF = '2022-08-31T06:00'
+
+export function rememberFloodAsOf(asOf) {
+  if (!asOf) return
+  try {
+    window.localStorage.setItem(LAST_AS_OF_KEY, asOf)
+  } catch {
+    // Private mode or storage disabled: Aid Priority falls back to the default.
+  }
+}
+
+export function lastFloodAsOf() {
+  try {
+    return window.localStorage.getItem(LAST_AS_OF_KEY) || DEFAULT_FLOOD_AS_OF
+  } catch {
+    return DEFAULT_FLOOD_AS_OF
+  }
+}
+
+// villages.json district names that differ from config/districts.js.
+const DISTRICT_ALIASES = { 'Dera Ghazi Khan': 'D.G. Khan' }
+
+// { "<dashboard district>": hours } from district_eta_hours at asOf.
+// Hours are modelled (earliest at-risk village in the district) and can be
+// negative while the arrival window is open; callers clamp for Aid Priority.
+export async function getDistrictFloodEtas(asOf) {
+  const situation = await getFloodSituation(asOf)
+  const etas = {}
+  Object.entries(situation?.district_eta_hours ?? {}).forEach(([district, hours]) => {
+    const value = Number(hours)
+    if (Number.isFinite(value)) etas[DISTRICT_ALIASES[district] ?? district] = value
+  })
+  return { asOf: situation?.as_of ?? asOf, etas }
+}
+
 // The UI shows wave_label, never the internal wave_id. A null label is a rise
 // that stayed under Medium Flood or reached it at fewer than 2 barrages.
 export function waveName(item) {

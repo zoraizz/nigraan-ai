@@ -60,6 +60,17 @@ export default function PriorityTable({ rows = [] }) {
             </div>
             <div role="cell" className="px-3 py-3 font-semibold text-text">
               {row.district}
+              {/* flood: echoed by /rank-priority when the flood signal is active */}
+              {Number.isFinite(row.signals?.flood?.value) ? (
+                <span
+                  className="block text-xs font-normal text-muted"
+                  title="Modelled by River Flood Tracker, not a gauge reading"
+                >
+                  {row.signals.flood.value < 1
+                    ? 'water due now'
+                    : `water in ~${Math.round(row.signals.flood.value)} h`}
+                </span>
+              ) : null}
             </div>
             <div role="cell" className="px-3 py-3">
               <HazardIcon hazard={row.hazard_type} />

@@ -2,7 +2,9 @@ import PageContainer from '../components/layout/PageContainer.jsx'
 import PriorityTable from '../components/PriorityTable.jsx'
 import ScoringExplainer from '../components/ScoringExplainer.jsx'
 import { useAidPriority } from '../hooks/useAidPriority.js'
+import { useFloodEtas } from '../hooks/useFloodEtas.js'
 import { useLiveAssessment } from '../hooks/useLiveAssessment.js'
+import { formatReplayStamp } from '../components/flood/timeFormat.js'
 import { SAMPLE_PAIRING, hazardTypeFor } from '../config/samplePairing.js'
 import { useSceneDamage } from '../scene/SceneDamageProvider.jsx'
 
@@ -19,11 +21,27 @@ function sceneLabel(sceneDamage) {
     : 'damage from uploaded scene'
 }
 
+// flood: flood_eta_hours only for districts with a River Flood Tracker ETA.
+// A negative ETA means the arrival window is already open; aid-priority
+// takes hours >= 0, so it is sent as 0.
+function withFloodEtas(payload, etas) {
+  if (!payload) return null
+  return payload.map((entry) => {
+    const hours = etas[entry.district]
+    if (!Number.isFinite(hours)) return entry
+    return { ...entry, flood_eta_hours: Math.max(0, Math.round(hours * 10) / 10) }
+  })
+}
+
 export default function AidPriority() {
   const { sceneDamage, clearSceneDamage } = useSceneDamage()
   const live = useLiveAssessment(sceneDamage)
+  // flood: wait for the ETA request (5 s cap) so the ranking posts once.
+  const flood = useFloodEtas()
+  const payload = flood.settled ? withFloodEtas(live.payload, flood.etas) : null
+  const floodCount = payload ? payload.filter((entry) => 'flood_eta_hours' in entry).length : 0
   const { ranking, scoring, loading, error, refetch } = useAidPriority(
-    live.payload ?? [],
+    payload ?? [],
   )
 
   const handleClearScene = () => {
@@ -62,9 +80,9 @@ export default function AidPriority() {
           <summary className="cursor-pointer text-muted hover:text-text">
             Request payload (assembled live)
           </summary>
-          {live.payload ? (
+          {payload ? (
             <pre className="data well mt-2 max-h-72 overflow-auto p-3 text-xs leading-relaxed text-text">
-              {JSON.stringify({ districts: live.payload }, null, 2)}
+              {JSON.stringify({ districts: payload }, null, 2)}
             </pre>
           ) : (
             <p className="mt-2 leading-relaxed text-muted">
@@ -98,6 +116,17 @@ export default function AidPriority() {
         live Risk Flag assessments and the ranking is computed live by the
         Aid Priority service.
       </p>
+
+      {/* flood: shown only when the River Flood Tracker answered */}
+      {flood.settled && !flood.error && Object.keys(flood.etas).length > 0 ? (
+        <p className="-mt-2 mb-4 max-w-3xl text-xs leading-relaxed text-muted">
+          Flood ETAs: River Flood Tracker 2022 replay at{' '}
+          <span className="data text-text">{formatReplayStamp(flood.asOf)}</span>{' '}
+          (the step last viewed on Flood Tracker). Modelled hours until the
+          river peak reaches the district; districts with no ETA send none.
+          {payload ? ` ${floodCount} of ${payload.length} ranked districts have water due.` : ''}
+        </p>
+      ) : null}
 
       <details className="mb-5 max-w-3xl text-xs">
         <summary className="cursor-pointer text-muted hover:text-text">

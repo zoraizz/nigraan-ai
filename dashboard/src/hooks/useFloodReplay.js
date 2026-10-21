@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { FLOOD_USE_FIXTURES, getReplay2022 } from '../api/floodTracker.js'
+import { FLOOD_USE_FIXTURES, getReplay2022, rememberFloodAsOf } from '../api/floodTracker.js'
 
 // The 2022 demo opens on the morning the wave is in the upper-middle Indus.
 const OPEN_ON = '2022-08-29'
@@ -47,6 +47,13 @@ export function useFloodReplay() {
   }, [])
 
   const stepCount = replay?.steps?.length ?? 0
+  const viewedAsOf = replay?.steps?.[index]?.as_of
+
+  // Aid Priority uses the district ETAs of the step shown here. Fixture steps
+  // are not stored: they are not model output.
+  useEffect(() => {
+    if (viewedAsOf && !FLOOD_USE_FIXTURES && replay?.fixture !== true) rememberFloodAsOf(viewedAsOf)
+  }, [viewedAsOf, replay])
 
   useEffect(() => {
     if (!playing || stepCount === 0) return undefined
