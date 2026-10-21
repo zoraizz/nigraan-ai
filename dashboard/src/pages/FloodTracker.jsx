@@ -91,15 +91,34 @@ export default function FloodTracker() {
     <div className="flex flex-col gap-3">
       <Provenance situation={situation} usingFixtures={replay.usingFixtures} />
 
-      <div className="grid grid-cols-1 items-start gap-3 lg:grid-cols-3">
-        <div className="h-[380px] lg:col-span-2 lg:h-[520px]">
-          <RiverMap
-            situation={situation}
-            selectedVillageId={selectedId}
-            onSelectVillage={setSelectedId}
-          />
+      <div className="flex flex-col gap-3 lg:grid lg:grid-cols-3 lg:items-start">
+        <div className="contents lg:col-span-2 lg:flex lg:min-w-0 lg:flex-col lg:gap-3">
+          <div className="order-1 h-[380px] lg:h-[520px]">
+            <RiverMap
+              situation={situation}
+              selectedVillageId={selectedId}
+              onSelectVillage={setSelectedId}
+            />
+          </div>
+          <section className="contents lg:order-2 lg:block lg:rounded-xl lg:border lg:border-[#1b4a33]/80 lg:bg-[#071a0e] lg:px-3 lg:py-2.5">
+            <div className="order-2 rounded-xl border border-[#1b4a33]/80 bg-[#071a0e] px-3 py-2.5 lg:border-0 lg:p-0">
+              <ReplayControls
+                steps={replay.steps}
+                index={replay.index}
+                playing={replay.playing}
+                onScrub={replay.scrub}
+                onTogglePlay={replay.togglePlay}
+              />
+            </div>
+            <details open className="order-4 min-w-0 rounded-xl border border-[#1b4a33]/80 bg-[#071a0e] px-3 py-2.5 lg:mt-2 lg:rounded-none lg:border-0 lg:border-t lg:px-0 lg:pb-0 lg:pt-2">
+              <summary className="cursor-pointer text-xs font-semibold text-slate-200">Predicted vs actual</summary>
+              <div className="pt-2">
+                <ReplayScorecard rows={replay.scorecard} note={replay.scorecardNote} usingFixtures={replay.usingFixtures} />
+              </div>
+            </details>
+          </section>
         </div>
-        <div className="flex min-h-0 flex-col gap-3 lg:col-span-1">
+        <div className="order-3 flex min-w-0 flex-col gap-3 lg:col-span-1">
           <EtaPanel etas={situation?.etas} />
           <AtRiskTable
             villages={villages}
@@ -108,22 +127,6 @@ export default function FloodTracker() {
           />
         </div>
       </div>
-
-      <section className="shrink-0 rounded-xl border border-[#1b4a33]/80 bg-[#071a0e] px-3 py-2.5">
-        <ReplayControls
-          steps={replay.steps}
-          index={replay.index}
-          playing={replay.playing}
-          onScrub={replay.scrub}
-          onTogglePlay={replay.togglePlay}
-        />
-        <details open className="mt-2 border-t border-[#1b4a33]/70 pt-2">
-          <summary className="cursor-pointer text-xs font-semibold text-slate-200">Predicted vs actual</summary>
-          <div className="pt-2">
-            <ReplayScorecard rows={replay.scorecard} note={replay.scorecardNote} usingFixtures={replay.usingFixtures} />
-          </div>
-        </details>
-      </section>
 
       <details className="shrink-0 rounded-xl border border-[#1b4a33]/80 bg-[#071a0e] px-3 py-2 text-xs text-[#c5d9cc]">
         <summary className="cursor-pointer font-semibold text-slate-200">Limitations</summary>

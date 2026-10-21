@@ -14,7 +14,7 @@ function EtaRow({ eta }) {
   const arrived = eta.status === 'arrived'
   const relative = hoursLabel(eta.hours_from_now)
   return (
-    <li className="border-t border-[#1b4a33]/70 px-3 py-2.5 first:border-t-0">
+    <li className="border-t border-[#1b4a33]/70 px-3 py-2 first:border-t-0">
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium leading-snug text-slate-100">{formatPeakLine(eta)}</p>
         <span className="shrink-0 rounded bg-[#0e3a28] px-1.5 py-0.5 text-[10px] font-semibold text-[#c5d9cc]">
@@ -25,12 +25,10 @@ function EtaRow({ eta }) {
         {arrived ? 'Observed peak' : 'Estimate'}
         {eta.from_barrage ? ` · from ${eta.from_barrage}` : ''}
         {relative ? ` · ${relative}` : ''}
+        {!arrived && eta.eta_low && eta.eta_high && (
+          <span className="text-[#7f9c8c]"> · Window {formatWall(eta.eta_low)} – {formatWall(eta.eta_high)}</span>
+        )}
       </p>
-      {!arrived && eta.eta_low && eta.eta_high && (
-        <p className="mt-0.5 font-mono text-[10px] text-[#7f9c8c]">
-          Window {formatWall(eta.eta_low)} – {formatWall(eta.eta_high)}
-        </p>
-      )}
     </li>
   )
 }
