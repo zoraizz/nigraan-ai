@@ -1,0 +1,114 @@
+[
+  {
+    "name": "Tarbela",
+    "order": 1,
+    "lat": 34.089722,
+    "lon": 72.698333,
+    "river_km": 0,
+    "thresholds": {
+      "low": 250000,
+      "medium": 375000,
+      "high": 500000,
+      "very_high": 650000,
+      "exceptionally_high": 800000
+    },
+    "threshold_source": "FFC Flood Classification of Major Rivers, https://ffc.gov.pk/flood-classification-of-major-rivers/ (table unit is 100,000 cusecs: Indus at Tarbela 2.5 / 3.75 / 5.0 / 6.5 / 8.0). Applied to outflow.",
+    "notes": "Coordinates from Wikipedia, Tarbela Dam, 34°05′23″N 72°41′54″E (https://en.wikipedia.org/wiki/Tarbela_Dam). river_km is 0 at Tarbela, the origin of the FFC flood-season travel table (https://ffc.gov.pk/time-of-travel/). Distances below are that table's published segment lengths, summed, not a remeasured centerline."
+  },
+  {
+    "name": "Kalabagh",
+    "order": 2,
+    "lat": 32.918531,
+    "lon": 71.521922,
+    "river_km": 201,
+    "thresholds": {
+      "low": 250000,
+      "medium": 375000,
+      "high": 500000,
+      "very_high": 650000,
+      "exceptionally_high": 800000
+    },
+    "threshold_source": "FFC Flood Classification of Major Rivers, https://ffc.gov.pk/flood-classification-of-major-rivers/ (table unit is 100,000 cusecs: Indus at Kalabagh 2.5 / 3.75 / 5.0 / 6.5 / 8.0). Applied to outflow.",
+    "notes": "FFC calls the site Kalabagh. The structure is Jinnah Barrage. Coordinates from Wikipedia, 32°55′06.71″N 71°31′18.92″E (https://en.wikipedia.org/wiki/Jinnah_Barrage). river_km 201 = FFC Tarbela to Khairabad/Attock 40 km + Khairabad/Attock to Kalabagh 161 km (https://ffc.gov.pk/time-of-travel/)."
+  },
+  {
+    "name": "Chashma",
+    "order": 3,
+    "lat": 32.433889,
+    "lon": 71.378889,
+    "river_km": 259,
+    "thresholds": {
+      "low": 250000,
+      "medium": 375000,
+      "high": 500000,
+      "very_high": 650000,
+      "exceptionally_high": 800000
+    },
+    "threshold_source": "FFC Flood Classification of Major Rivers, https://ffc.gov.pk/flood-classification-of-major-rivers/ (table unit is 100,000 cusecs: Indus at Chashma 2.5 / 3.75 / 5.0 / 6.5 / 8.0). Applied to outflow.",
+    "notes": "Coordinates from Wikipedia, Chashma Barrage, 32°26′02″N 71°22′44″E (https://en.wikipedia.org/wiki/Chashma_Barrage). river_km 259 = Kalabagh 201 km + FFC Kalabagh to Chashma 58 km (https://ffc.gov.pk/time-of-travel/)."
+  },
+  {
+    "name": "Taunsa",
+    "order": 4,
+    "lat": 30.512778,
+    "lon": 70.849167,
+    "river_km": 496,
+    "thresholds": {
+      "low": 250000,
+      "medium": 375000,
+      "high": 500000,
+      "very_high": 650000,
+      "exceptionally_high": 800000
+    },
+    "threshold_source": "FFC Flood Classification of Major Rivers, https://ffc.gov.pk/flood-classification-of-major-rivers/ (table unit is 100,000 cusecs: Indus at Taunsa 2.5 / 3.75 / 5.0 / 6.5 / 8.0). Applied to outflow.",
+    "notes": "Coordinates from Wikipedia, Taunsa Barrage, 30°30′46″N 70°50′57″E (https://en.wikipedia.org/wiki/Taunsa_Barrage). river_km 496 = Chashma 259 km + FFC Chashma to Taunsa 237 km (https://ffc.gov.pk/time-of-travel/)."
+  },
+  {
+    "name": "Guddu",
+    "order": 5,
+    "lat": 28.418611,
+    "lon": 69.713333,
+    "river_km": 704,
+    "thresholds": {
+      "low": 200000,
+      "medium": 350000,
+      "high": 500000,
+      "very_high": 700000,
+      "exceptionally_high": 900000
+    },
+    "threshold_source": "FFC Flood Classification of Major Rivers, https://ffc.gov.pk/flood-classification-of-major-rivers/ (table unit is 100,000 cusecs: Indus at Guddu 2.0 / 3.5 / 5.0 / 7.0 / 9.0). Applied to outflow.",
+    "notes": "Coordinates from Wikipedia, Guddu Barrage, 28°25′07″N 69°42′48″E (https://en.wikipedia.org/wiki/Guddu_Barrage). river_km 704 = Taunsa 496 km + FFC Taunsa to Guddu 208 km. Mithankot, between them, is a separate FFC segment (95 km to Guddu) and is not added again (https://ffc.gov.pk/time-of-travel/)."
+  },
+  {
+    "name": "Sukkur",
+    "order": 6,
+    "lat": 27.680556,
+    "lon": 68.845278,
+    "river_km": 913,
+    "thresholds": {
+      "low": 200000,
+      "medium": 350000,
+      "high": 500000,
+      "very_high": 700000,
+      "exceptionally_high": 900000
+    },
+    "threshold_source": "FFC Flood Classification of Major Rivers, https://ffc.gov.pk/flood-classification-of-major-rivers/ (table unit is 100,000 cusecs: Indus at Sukkur 2.0 / 3.5 / 5.0 / 7.0 / 9.0). The tracker contract says Sukkur exceptionally high was not published in the FFD bulletin and that 900000 is assumed. The current FFC table prints 9.0, which is the same 900000 figure, and it is still marked assumed.",
+    "notes": "Coordinates from Wikipedia, Sukkur Barrage, 27°40′50″N 68°50′43″E (https://en.wikipedia.org/wiki/Sukkur_Barrage). river_km 913 = Guddu 704 km + FFC Guddu to Sukkur 209 km (https://ffc.gov.pk/time-of-travel/). exceptionally_high 900000 is assumed, per the tracker contract, even though the FFC classification table now prints 9.0."
+  },
+  {
+    "name": "Kotri",
+    "order": 7,
+    "lat": 25.442222,
+    "lon": 68.316667,
+    "river_km": 1393,
+    "thresholds": {
+      "low": 200000,
+      "medium": 300000,
+      "high": 450000,
+      "very_high": 650000,
+      "exceptionally_high": 800000
+    },
+    "threshold_source": "FFC Flood Classification of Major Rivers, https://ffc.gov.pk/flood-classification-of-major-rivers/ (table unit is 100,000 cusecs: Indus at Kotri 2.0 / 3.0 / 4.5 / 6.5 / 8.0). Applied to outflow.",
+    "notes": "Coordinates from Wikipedia, Kotri Barrage, 25°26′32″N 68°19′00″E (https://en.wikipedia.org/wiki/Kotri_Barrage). river_km 1393 = Sukkur 913 km + FFC Sukkur to Kotri 480 km (https://ffc.gov.pk/time-of-travel/)."
+  }
+]
