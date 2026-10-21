@@ -1,0 +1,220 @@
+date_time,barrage,inflow_cusecs,outflow_cusecs,ffc_category,trend,source_url
+2022-08-10T06:00,Tarbela,195000,158000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-10-08-2022.pdf
+2022-08-10T06:00,Kalabagh,155000,148000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-10-08-2022.pdf
+2022-08-10T06:00,Chashma,209000,192000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-10-08-2022.pdf
+2022-08-10T06:00,Taunsa,152000,136000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-10-08-2022.pdf
+2022-08-10T06:00,Guddu,202000,168000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-10-08-2022.pdf
+2022-08-10T06:00,Sukkur,174000,138000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-10-08-2022.pdf
+2022-08-10T06:00,Kotri,206000,195000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-10-08-2022.pdf
+2022-08-11T06:00,Tarbela,216000,248000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-11-08-2022.pdf
+2022-08-11T06:00,Kalabagh,145000,138000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-11-08-2022.pdf
+2022-08-11T06:00,Chashma,295000,280000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-11-08-2022.pdf
+2022-08-11T06:00,Taunsa,152000,136000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-11-08-2022.pdf
+2022-08-11T06:00,Guddu,183000,146000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-11-08-2022.pdf
+2022-08-11T06:00,Sukkur,163000,126000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-11-08-2022.pdf
+2022-08-11T06:00,Kotri,213000,201000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-11-08-2022.pdf
+2022-08-12T06:00,Tarbela,234000,143000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-12-08-2022.pdf
+2022-08-12T06:00,Kalabagh,220000,214000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-12-08-2022.pdf
+2022-08-12T06:00,Chashma,256000,241000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-12-08-2022.pdf
+2022-08-12T06:00,Taunsa,171000,154000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-12-08-2022.pdf
+2022-08-12T06:00,Guddu,180000,143000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-12-08-2022.pdf
+2022-08-12T06:00,Sukkur,139000,102000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-12-08-2022.pdf
+2022-08-12T06:00,Kotri,221000,205000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-12-08-2022.pdf
+2022-08-13T06:00,Tarbela,237000,216000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-13-08-2022.pdf
+2022-08-13T06:00,Kalabagh,187000,180000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-13-08-2022.pdf
+2022-08-13T06:00,Chashma,254000,236000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-13-08-2022.pdf
+2022-08-13T06:00,Taunsa,224000,204000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-13-08-2022.pdf
+2022-08-13T06:00,Guddu,184000,149000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-13-08-2022.pdf
+2022-08-13T06:00,Sukkur,131000,94000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-13-08-2022.pdf
+2022-08-13T06:00,Kotri,229000,211000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-13-08-2022.pdf
+2022-08-14T06:00,Tarbela,237000,218000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-14-08-2022.pdf
+2022-08-14T06:00,Kalabagh,188000,181000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-14-08-2022.pdf
+2022-08-14T06:00,Chashma,266000,248000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-14-08-2022.pdf
+2022-08-14T06:00,Taunsa,224000,203000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-14-08-2022.pdf
+2022-08-14T06:00,Guddu,208000,202000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-14-08-2022.pdf
+2022-08-14T06:00,Sukkur,140000,106000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-14-08-2022.pdf
+2022-08-14T06:00,Kotri,232000,220000,Low Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-14-08-2022.pdf
+2022-08-15T06:00,Tarbela,249000,219000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-15-08-2022.pdf
+2022-08-15T06:00,Kalabagh,197000,190000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-15-08-2022.pdf
+2022-08-15T06:00,Chashma,257000,238000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-15-08-2022.pdf
+2022-08-15T06:00,Taunsa,400000,394000,Medium Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-15-08-2022.pdf
+2022-08-15T06:00,Guddu,264000,261000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-15-08-2022.pdf
+2022-08-15T06:00,Sukkur,192000,162000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-15-08-2022.pdf
+2022-08-15T06:00,Kotri,223000,210000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-15-08-2022.pdf
+2022-08-16T06:00,Tarbela,296000,218000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-16-08-2022.pdf
+2022-08-16T06:00,Kalabagh,235000,229000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-16-08-2022.pdf
+2022-08-16T06:00,Chashma,278000,261000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-16-08-2022.pdf
+2022-08-16T06:00,Taunsa,291000,291000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-16-08-2022.pdf
+2022-08-16T06:00,Guddu,296000,293000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-16-08-2022.pdf
+2022-08-16T06:00,Sukkur,250000,228000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-16-08-2022.pdf
+2022-08-16T06:00,Kotri,213000,203000,Low Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-16-08-2022.pdf
+2022-08-17T06:00,Tarbela,263000,252000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-17-08-2022.pdf
+2022-08-17T06:00,Kalabagh,260000,254000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-17-08-2022.pdf
+2022-08-17T06:00,Chashma,363000,348000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-17-08-2022.pdf
+2022-08-17T06:00,Taunsa,269000,269000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-17-08-2022.pdf
+2022-08-17T06:00,Guddu,348000,343000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-17-08-2022.pdf
+2022-08-17T06:00,Sukkur,280000,276000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-17-08-2022.pdf
+2022-08-17T06:00,Kotri,199000,196000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-17-08-2022.pdf
+2022-08-18T06:00,Tarbela,302000,284000,Low Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-18-08-2022.pdf
+2022-08-18T06:00,Kalabagh,271000,266000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-18-08-2022.pdf
+2022-08-18T06:00,Chashma,383000,368000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-18-08-2022.pdf
+2022-08-18T06:00,Taunsa,439000,439000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-18-08-2022.pdf
+2022-08-18T06:00,Guddu,330000,330000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-18-08-2022.pdf
+2022-08-18T06:00,Sukkur,326000,322000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-18-08-2022.pdf
+2022-08-18T06:00,Kotri,177000,177000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-18-08-2022.pdf
+2022-08-19T06:00,Tarbela,301000,256000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-19-08-2022.pdf
+2022-08-19T06:00,Kalabagh,281000,277000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-19-08-2022.pdf
+2022-08-19T06:00,Chashma,388000,373000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-19-08-2022.pdf
+2022-08-19T06:00,Taunsa,461000,461000,Medium Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-19-08-2022.pdf
+2022-08-19T06:00,Guddu,346000,346000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-19-08-2022.pdf
+2022-08-19T06:00,Sukkur,344000,344000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-19-08-2022.pdf
+2022-08-19T06:00,Kotri,199000,199000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-19-08-2022.pdf
+2022-08-20T06:00,Tarbela,250000,219000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-20-08-2022.pdf
+2022-08-20T06:00,Kalabagh,258000,254000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-20-08-2022.pdf
+2022-08-20T06:00,Chashma,375000,359000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-20-08-2022.pdf
+2022-08-20T06:00,Taunsa,435000,435000,Medium Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-20-08-2022.pdf
+2022-08-20T06:00,Guddu,362000,362000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-20-08-2022.pdf
+2022-08-20T06:00,Sukkur,351000,351000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-20-08-2022.pdf
+2022-08-20T06:00,Kotri,219000,219000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-20-08-2022.pdf
+2022-08-21T06:00,Tarbela,264000,269000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-21-08-2022.pdf
+2022-08-21T06:00,Kalabagh,263000,259000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-21-08-2022.pdf
+2022-08-21T06:00,Chashma,318000,300000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-21-08-2022.pdf
+2022-08-21T06:00,Taunsa,490000,490000,Medium Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-21-08-2022.pdf
+2022-08-21T06:00,Guddu,403000,403000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-21-08-2022.pdf
+2022-08-21T06:00,Sukkur,369000,369000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-21-08-2022.pdf
+2022-08-21T06:00,Kotri,234000,234000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-21-08-2022.pdf
+2022-08-22T06:00,Tarbela,257000,241000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-22-08-2022.pdf
+2022-08-22T06:00,Kalabagh,269000,264000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-22-08-2022.pdf
+2022-08-22T06:00,Chashma,341000,323000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-22-08-2022.pdf
+2022-08-22T06:00,Taunsa,551000,551000,High Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-22-08-2022.pdf
+2022-08-22T06:00,Guddu,483000,483000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-22-08-2022.pdf
+2022-08-22T06:00,Sukkur,418000,418000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-22-08-2022.pdf
+2022-08-22T06:00,Kotri,247000,247000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-22-08-2022.pdf
+2022-08-23T06:00,Tarbela,245000,233000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-23-08-2022.pdf
+2022-08-23T06:00,Kalabagh,261000,256000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-23-08-2022.pdf
+2022-08-23T06:00,Chashma,369000,351000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-23-08-2022.pdf
+2022-08-23T06:00,Taunsa,436000,436000,Medium Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-23-08-2022.pdf
+2022-08-23T06:00,Guddu,550000,550000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-23-08-2022.pdf
+2022-08-23T06:00,Sukkur,474000,474000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-23-08-2022.pdf
+2022-08-23T06:00,Kotri,258000,258000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-23-08-2022.pdf
+2022-08-24T06:00,Tarbela,213000,199000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-24-08-2022.pdf
+2022-08-24T06:00,Kalabagh,271000,266000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-24-08-2022.pdf
+2022-08-24T06:00,Chashma,382000,364000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-24-08-2022.pdf
+2022-08-24T06:00,Taunsa,445000,445000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-24-08-2022.pdf
+2022-08-24T06:00,Guddu,547000,547000,High Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-24-08-2022.pdf
+2022-08-24T06:00,Sukkur,560000,560000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-24-08-2022.pdf
+2022-08-24T06:00,Kotri,271000,271000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-24-08-2022.pdf
+2022-08-25T06:00,Tarbela,200000,212000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-25-08-2022.pdf
+2022-08-25T06:00,Kalabagh,258000,254000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-25-08-2022.pdf
+2022-08-25T06:00,Chashma,316000,298000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-25-08-2022.pdf
+2022-08-25T06:00,Taunsa,471000,471000,Medium Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-25-08-2022.pdf
+2022-08-25T06:00,Guddu,517000,517000,High Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-25-08-2022.pdf
+2022-08-25T06:00,Sukkur,580000,580000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-25-08-2022.pdf
+2022-08-25T06:00,Kotri,297000,297000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-25-08-2022.pdf
+2022-08-26T06:00,Tarbela,307000,272000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-26-08-2022.pdf
+2022-08-26T06:00,Kalabagh,274000,270000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-26-08-2022.pdf
+2022-08-26T06:00,Chashma,333000,315000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-26-08-2022.pdf
+2022-08-26T06:00,Taunsa,483000,483000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-26-08-2022.pdf
+2022-08-26T06:00,Guddu,505000,505000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-26-08-2022.pdf
+2022-08-26T06:00,Sukkur,576000,576000,High Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-26-08-2022.pdf
+2022-08-26T06:00,Kotri,305000,305000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-26-08-2022.pdf
+2022-08-27T06:00,Tarbela,395000,332000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-27-08-2022.pdf
+2022-08-27T06:00,Kalabagh,320000,316000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-27-08-2022.pdf
+2022-08-27T06:00,Chashma,424000,425000,Medium Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-27-08-2022.pdf
+2022-08-27T06:00,Taunsa,504000,504000,High Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-27-08-2022.pdf
+2022-08-27T06:00,Guddu,490000,490000,Medium Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-27-08-2022.pdf
+2022-08-27T06:00,Sukkur,570000,570000,High Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-27-08-2022.pdf
+2022-08-27T06:00,Kotri,315000,315000,Medium Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-27-08-2022.pdf
+2022-08-28T06:00,Tarbela,302000,302000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-28-08-2022.pdf
+2022-08-28T06:00,Kalabagh,427000,423000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-28-08-2022.pdf
+2022-08-28T06:00,Chashma,503000,502000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-28-08-2022.pdf
+2022-08-28T06:00,Taunsa,516000,516000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-28-08-2022.pdf
+2022-08-28T06:00,Guddu,485000,485000,Medium Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-28-08-2022.pdf
+2022-08-28T06:00,Sukkur,562000,562000,High Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-28-08-2022.pdf
+2022-08-28T06:00,Kotri,335000,335000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-28-08-2022.pdf
+2022-08-29T06:00,Tarbela,255000,269000,Low Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-29-08-2022.pdf
+2022-08-29T06:00,Kalabagh,411000,407000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-29-08-2022.pdf
+2022-08-29T06:00,Chashma,525000,519000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-29-08-2022.pdf
+2022-08-29T06:00,Taunsa,567000,567000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-29-08-2022.pdf
+2022-08-29T06:00,Guddu,501000,501000,High Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-29-08-2022.pdf
+2022-08-29T06:00,Sukkur,531000,531000,High Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-29-08-2022.pdf
+2022-08-29T06:00,Kotri,338000,337000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-29-08-2022.pdf
+2022-08-30T06:00,Tarbela,222000,215000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-30-08-2022.pdf
+2022-08-30T06:00,Kalabagh,385000,380000,Medium Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-30-08-2022.pdf
+2022-08-30T06:00,Chashma,519000,504000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-30-08-2022.pdf
+2022-08-30T06:00,Taunsa,622000,622000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-30-08-2022.pdf
+2022-08-30T06:00,Guddu,513000,513000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-30-08-2022.pdf
+2022-08-30T06:00,Sukkur,531000,531000,High Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-30-08-2022.pdf
+2022-08-30T06:00,Kotri,353000,351000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-30-08-2022.pdf
+2022-08-31T06:00,Tarbela,194000,211000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-31-08-2022.pdf
+2022-08-31T06:00,Kalabagh,304000,299000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-31-08-2022.pdf
+2022-08-31T06:00,Chashma,463000,445000,Medium Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-31-08-2022.pdf
+2022-08-31T06:00,Taunsa,603000,603000,High Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-31-08-2022.pdf
+2022-08-31T06:00,Guddu,519000,519000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-31-08-2022.pdf
+2022-08-31T06:00,Sukkur,530000,530000,High Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-31-08-2022.pdf
+2022-08-31T06:00,Kotri,380000,377000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-31-08-2022.pdf
+2022-09-01T06:00,Tarbela,181000,206000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-01-09-2022.pdf
+2022-09-01T06:00,Kalabagh,252000,246000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-01-09-2022.pdf
+2022-09-01T06:00,Chashma,280000,263000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-01-09-2022.pdf
+2022-09-01T06:00,Taunsa,580000,580000,High Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-01-09-2022.pdf
+2022-09-01T06:00,Guddu,531000,531000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-01-09-2022.pdf
+2022-09-01T06:00,Sukkur,530000,530000,High Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-01-09-2022.pdf
+2022-09-01T06:00,Kotri,409000,404000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-01-09-2022.pdf
+2022-09-02T06:00,Tarbela,162000,154000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-02-09-2022.pdf
+2022-09-02T06:00,Kalabagh,194000,187000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-02-09-2022.pdf
+2022-09-02T06:00,Chashma,124000,104000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-02-09-2022.pdf
+2022-09-02T06:00,Taunsa,417000,417000,Medium Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-02-09-2022.pdf
+2022-09-02T06:00,Guddu,558000,558000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-02-09-2022.pdf
+2022-09-02T06:00,Sukkur,532000,532000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-02-09-2022.pdf
+2022-09-02T06:00,Kotri,447000,440000,Medium Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-02-09-2022.pdf
+2022-09-03T06:00,Tarbela,169000,156000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-03-09-2022.pdf
+2022-09-03T06:00,Kalabagh,191000,183000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-03-09-2022.pdf
+2022-09-03T06:00,Chashma,225000,207000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-03-09-2022.pdf
+2022-09-03T06:00,Taunsa,296000,296000,Low Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-03-09-2022.pdf
+2022-09-03T06:00,Guddu,553000,553000,High Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-03-09-2022.pdf
+2022-09-03T06:00,Sukkur,560000,560000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-03-09-2022.pdf
+2022-09-03T06:00,Kotri,514000,503000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-03-09-2022.pdf
+2022-09-04T06:00,Tarbela,175000,155000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-04-09-2022.pdf
+2022-09-04T06:00,Kalabagh,182000,174000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-04-09-2022.pdf
+2022-09-04T06:00,Chashma,236000,218000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-04-09-2022.pdf
+2022-09-04T06:00,Taunsa,205000,199000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-04-09-2022.pdf
+2022-09-04T06:00,Guddu,485000,485000,Medium Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-04-09-2022.pdf
+2022-09-04T06:00,Sukkur,545000,545000,High Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-04-09-2022.pdf
+2022-09-04T06:00,Kotri,585000,572000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-04-09-2022.pdf
+2022-09-05T06:00,Tarbela,161000,155000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-05-09-2022.pdf
+2022-09-05T06:00,Kalabagh,181000,173000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-05-09-2022.pdf
+2022-09-05T06:00,Chashma,239000,221000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-05-09-2022.pdf
+2022-09-05T06:00,Taunsa,215000,201000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-05-09-2022.pdf
+2022-09-05T06:00,Guddu,390000,390000,Medium Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-05-09-2022.pdf
+2022-09-05T06:00,Sukkur,499000,499000,Medium Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-05-09-2022.pdf
+2022-09-05T06:00,Kotri,599000,584000,High Flood,R,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-05-09-2022.pdf
+2022-09-06T06:00,Tarbela,154000,151000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-06-09-2022.pdf
+2022-09-06T06:00,Kalabagh,162000,154000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-06-09-2022.pdf
+2022-09-06T06:00,Chashma,220000,202000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-06-09-2022.pdf
+2022-09-06T06:00,Taunsa,223000,207000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-06-09-2022.pdf
+2022-09-06T06:00,Guddu,298000,298000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-06-09-2022.pdf
+2022-09-06T06:00,Sukkur,419000,419000,Medium Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-06-09-2022.pdf
+2022-09-06T06:00,Kotri,604000,584000,High Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-06-09-2022.pdf
+2022-09-07T06:00,Tarbela,166000,155000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-07-09-2022.pdf
+2022-09-07T06:00,Kalabagh,170000,162000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-07-09-2022.pdf
+2022-09-07T06:00,Chashma,205000,187000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-07-09-2022.pdf
+2022-09-07T06:00,Taunsa,191000,176000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-07-09-2022.pdf
+2022-09-07T06:00,Guddu,211000,208000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-07-09-2022.pdf
+2022-09-07T06:00,Sukkur,323000,323000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-07-09-2022.pdf
+2022-09-07T06:00,Kotri,604000,584000,High Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-07-09-2022.pdf
+2022-09-08T06:00,Tarbela,153000,155000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-08-09-2022.pdf
+2022-09-08T06:00,Kalabagh,167000,159000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-08-09-2022.pdf
+2022-09-08T06:00,Chashma,198000,180000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-08-09-2022.pdf
+2022-09-08T06:00,Taunsa,199000,183000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-08-09-2022.pdf
+2022-09-08T06:00,Guddu,193000,186000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-08-09-2022.pdf
+2022-09-08T06:00,Sukkur,273000,273000,Low Flood,F,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-08-09-2022.pdf
+2022-09-08T06:00,Kotri,604000,584000,High Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-08-09-2022.pdf
+2022-09-09T18:00,Kotri,604087,583882,High Flood,S,https://www.dawn.com/news/1709397
+2022-09-10T06:00,Kotri,626053,600018,High Flood,,https://www.dawn.com/news/1709397
+2022-09-11T06:00,Tarbela,165000,153000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-11-09-2022.pdf
+2022-09-11T06:00,Kalabagh,175000,167000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-11-09-2022.pdf
+2022-09-11T06:00,Chashma,182000,164000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-11-09-2022.pdf
+2022-09-11T06:00,Taunsa,181000,164000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-11-09-2022.pdf
+2022-09-11T06:00,Guddu,163000,156000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-11-09-2022.pdf
+2022-09-11T06:00,Sukkur,178000,176000,Normal,,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-11-09-2022.pdf
+2022-09-11T06:00,Kotri,626000,600000,High Flood,S,https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-11-09-2022.pdf

@@ -1,0 +1,178 @@
+[
+  {
+    "from": "Tarbela",
+    "to": "Kalabagh",
+    "lag_median_h": 24,
+    "lag_min_h": 24,
+    "lag_max_h": 24,
+    "attenuation_ratio": 1.125,
+    "events_used": [
+      {
+        "wave": 1,
+        "upstream_peak": "2022-08-18T06:00",
+        "downstream_peak": "2022-08-19T06:00",
+        "lag_h": 24,
+        "upstream_outflow_cusecs": 284000,
+        "downstream_outflow_cusecs": 277000,
+        "upstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-18-08-2022.pdf",
+        "downstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-19-08-2022.pdf"
+      },
+      {
+        "wave": 2,
+        "upstream_peak": "2022-08-27T06:00",
+        "downstream_peak": "2022-08-28T06:00",
+        "lag_h": 24,
+        "upstream_outflow_cusecs": 332000,
+        "downstream_outflow_cusecs": 423000,
+        "upstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-27-08-2022.pdf",
+        "downstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-28-08-2022.pdf"
+      }
+    ],
+    "note": "Lags are outflow-peak time differences for the two 2022 Indus waves (earlier crest around 23-25 Aug, later crest around 30 Aug-8 Sep), matched separately at each end of the reach. Daily Annexure-I sampling is 06:00, so each peak time is coarse by about +/-12 h. attenuation_ratio is the median of downstream peak outflow divided by upstream peak outflow; above 1 means tributary gain."
+  },
+  {
+    "from": "Kalabagh",
+    "to": "Chashma",
+    "lag_median_h": 12,
+    "lag_min_h": 0,
+    "lag_max_h": 24,
+    "attenuation_ratio": 1.287,
+    "events_used": [
+      {
+        "wave": 1,
+        "upstream_peak": "2022-08-19T06:00",
+        "downstream_peak": "2022-08-19T06:00",
+        "lag_h": 0,
+        "upstream_outflow_cusecs": 277000,
+        "downstream_outflow_cusecs": 373000,
+        "upstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-19-08-2022.pdf",
+        "downstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-19-08-2022.pdf"
+      },
+      {
+        "wave": 2,
+        "upstream_peak": "2022-08-28T06:00",
+        "downstream_peak": "2022-08-29T06:00",
+        "lag_h": 24,
+        "upstream_outflow_cusecs": 423000,
+        "downstream_outflow_cusecs": 519000,
+        "upstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-28-08-2022.pdf",
+        "downstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-29-08-2022.pdf"
+      }
+    ],
+    "note": "Lags are outflow-peak time differences for the two 2022 Indus waves (earlier crest around 23-25 Aug, later crest around 30 Aug-8 Sep), matched separately at each end of the reach. Daily Annexure-I sampling is 06:00, so each peak time is coarse by about +/-12 h. attenuation_ratio is the median of downstream peak outflow divided by upstream peak outflow; above 1 means tributary gain."
+  },
+  {
+    "from": "Chashma",
+    "to": "Taunsa",
+    "lag_median_h": 48,
+    "lag_min_h": 24,
+    "lag_max_h": 72,
+    "attenuation_ratio": 1.338,
+    "events_used": [
+      {
+        "wave": 1,
+        "upstream_peak": "2022-08-19T06:00",
+        "downstream_peak": "2022-08-22T06:00",
+        "lag_h": 72,
+        "upstream_outflow_cusecs": 373000,
+        "downstream_outflow_cusecs": 551000,
+        "upstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-19-08-2022.pdf",
+        "downstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-22-08-2022.pdf"
+      },
+      {
+        "wave": 2,
+        "upstream_peak": "2022-08-29T06:00",
+        "downstream_peak": "2022-08-30T06:00",
+        "lag_h": 24,
+        "upstream_outflow_cusecs": 519000,
+        "downstream_outflow_cusecs": 622000,
+        "upstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-29-08-2022.pdf",
+        "downstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-30-08-2022.pdf"
+      }
+    ],
+    "note": "Lags are outflow-peak time differences for the two 2022 Indus waves (earlier crest around 23-25 Aug, later crest around 30 Aug-8 Sep), matched separately at each end of the reach. Daily Annexure-I sampling is 06:00, so each peak time is coarse by about +/-12 h. attenuation_ratio is the median of downstream peak outflow divided by upstream peak outflow; above 1 means tributary gain."
+  },
+  {
+    "from": "Taunsa",
+    "to": "Guddu",
+    "lag_median_h": 48,
+    "lag_min_h": 24,
+    "lag_max_h": 72,
+    "attenuation_ratio": 0.948,
+    "events_used": [
+      {
+        "wave": 1,
+        "upstream_peak": "2022-08-22T06:00",
+        "downstream_peak": "2022-08-23T06:00",
+        "lag_h": 24,
+        "upstream_outflow_cusecs": 551000,
+        "downstream_outflow_cusecs": 550000,
+        "upstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-22-08-2022.pdf",
+        "downstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-23-08-2022.pdf"
+      },
+      {
+        "wave": 2,
+        "upstream_peak": "2022-08-30T06:00",
+        "downstream_peak": "2022-09-02T06:00",
+        "lag_h": 72,
+        "upstream_outflow_cusecs": 622000,
+        "downstream_outflow_cusecs": 558000,
+        "upstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-30-08-2022.pdf",
+        "downstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-02-09-2022.pdf"
+      }
+    ],
+    "note": "Lags are outflow-peak time differences for the two 2022 Indus waves (earlier crest around 23-25 Aug, later crest around 30 Aug-8 Sep), matched separately at each end of the reach. Daily Annexure-I sampling is 06:00, so each peak time is coarse by about +/-12 h. attenuation_ratio is the median of downstream peak outflow divided by upstream peak outflow; above 1 means tributary gain."
+  },
+  {
+    "from": "Guddu",
+    "to": "Sukkur",
+    "lag_median_h": 36,
+    "lag_min_h": 24,
+    "lag_max_h": 48,
+    "attenuation_ratio": 1.029,
+    "events_used": [
+      {
+        "wave": 1,
+        "upstream_peak": "2022-08-23T06:00",
+        "downstream_peak": "2022-08-25T06:00",
+        "lag_h": 48,
+        "upstream_outflow_cusecs": 550000,
+        "downstream_outflow_cusecs": 580000,
+        "upstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-23-08-2022.pdf",
+        "downstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/08/DFSR-25-08-2022.pdf"
+      },
+      {
+        "wave": 2,
+        "upstream_peak": "2022-09-02T06:00",
+        "downstream_peak": "2022-09-03T06:00",
+        "lag_h": 24,
+        "upstream_outflow_cusecs": 558000,
+        "downstream_outflow_cusecs": 560000,
+        "upstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-02-09-2022.pdf",
+        "downstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-03-09-2022.pdf"
+      }
+    ],
+    "note": "Lags are outflow-peak time differences for the two 2022 Indus waves (earlier crest around 23-25 Aug, later crest around 30 Aug-8 Sep), matched separately at each end of the reach. Daily Annexure-I sampling is 06:00, so each peak time is coarse by about +/-12 h. attenuation_ratio is the median of downstream peak outflow divided by upstream peak outflow; above 1 means tributary gain."
+  },
+  {
+    "from": "Sukkur",
+    "to": "Kotri",
+    "lag_median_h": 120,
+    "lag_min_h": 120,
+    "lag_max_h": 120,
+    "attenuation_ratio": 1.043,
+    "events_used": [
+      {
+        "wave": 2,
+        "upstream_peak": "2022-09-03T06:00",
+        "downstream_peak": "2022-09-08T06:00",
+        "lag_h": 120,
+        "upstream_outflow_cusecs": 560000,
+        "downstream_outflow_cusecs": 584000,
+        "upstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-03-09-2022.pdf",
+        "downstream_source": "https://ffc.gov.pk/wp-content/uploads/2022/09/DFSR-08-09-2022.pdf"
+      }
+    ],
+    "note": "Lags are outflow-peak time differences for the two 2022 Indus waves (earlier crest around 23-25 Aug, later crest around 30 Aug-8 Sep), matched separately at each end of the reach. Daily Annexure-I sampling is 06:00, so each peak time is coarse by about +/-12 h. attenuation_ratio is the median of downstream peak outflow divided by upstream peak outflow; above 1 means tributary gain. Kotri's FFC 06:00 outflow was 584,000 on 5, 6, 7 and 8 Sep, so the crest time is only known to about +/-36 h, wider than the usual +/-12 h. 8 Sep is the last day of that plateau. Dawn's 10 Sep 06:00 figure of 600,018 (https://www.dawn.com/news/1709397) is about 2.7% higher and the article attributes it to Manchhar Lake and an MNVD breach, so it is not used as the routed Indus peak. The earlier wave did not form a separate crest at Kotri; the 06:00 series was still rising."
+  }
+]
