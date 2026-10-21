@@ -192,6 +192,55 @@ def test_what_if_422():
         assert "error" in r.json(), r.text
 
 
+class _FakeResponse:
+    def __init__(self, body):
+        self._body = body
+
+    def raise_for_status(self):
+        pass
+
+    def json(self):
+        return self._body
+
+
+def _fetch_with_api_start(first_day: date):
+    """fetch_live against a mocked Open-Meteo reply whose 60 daily dates
+    start at first_day (the API counts past_days from its GMT date)."""
+    times = [(first_day + timedelta(days=i)).isoformat() for i in range(60)]
+    names = [n for n in main.CALIBRATION if not n.startswith("_")]
+    body = [{"daily": {"time": times, "river_discharge": [1000.0] * 60}} for _ in names]
+    original_get, original_cache = live.requests.get, live._cache
+    live.requests.get = lambda *a, **k: _FakeResponse(body)
+    live._cache = None
+    try:
+        return live.fetch_live(main.CALIBRATION)
+    finally:
+        live.requests.get, live._cache = original_get, original_cache
+
+
+def test_fetch_live_gmt_date_is_yesterday():
+    # 00:00-05:00 PKT: GMT is still yesterday, so the API's window starts a day early.
+    today = live.today_clock().date()
+    series = _fetch_with_api_start(today - timedelta(days=31))
+    for name, rows in series.items():
+        assert len(rows) == 60
+        assert rows[0]["date"] == (today - timedelta(days=31)).isoformat()
+        assert any(r["date"] == today.isoformat() for r in rows), name
+        scale = main.CALIBRATION[name]["scale"]
+        assert abs(rows[0]["cusecs"] - round(1000.0 * live.CUSECS * scale, 2)) < 0.01
+    assert live.last_fetch == "ok"
+
+
+def test_fetch_live_rejects_series_without_today():
+    today = live.today_clock().date()
+    try:
+        _fetch_with_api_start(today - timedelta(days=90))
+    except live.LiveUnavailable as exc:
+        assert "today" in str(exc)
+        return
+    raise AssertionError("expected LiveUnavailable")
+
+
 if __name__ == "__main__":
     tests = [v for k, v in dict(globals()).items() if k.startswith("test_") and callable(v)]
     passed, failed = 0, 0

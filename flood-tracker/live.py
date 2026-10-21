@@ -17,7 +17,7 @@ are outside the model. The 2022 village inventory is an exposure proxy.
 """
 from copy import deepcopy
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 import json
 import math
 import threading
@@ -90,7 +90,18 @@ def fetch_live(calibration):
             bodies = response.json()
             if not isinstance(bodies, list) or len(bodies) != len(names):
                 raise ValueError("expected one discharge series per barrage")
-            expected = [(today + timedelta(days=i)).isoformat() for i in range(-30, 30)]
+            # past_days/forecast_days count from the API's GMT date, which is
+            # the previous day between 00:00 and 05:00 PKT. Take the dates the
+            # API returned; require 60 consecutive days covering today's PKT date.
+            expected = bodies[0]["daily"]["time"] if bodies else []
+            try:
+                first = date.fromisoformat(expected[0])
+            except (IndexError, TypeError, ValueError):
+                raise ValueError("missing or invalid daily dates")
+            if expected != [(first + timedelta(days=i)).isoformat() for i in range(60)]:
+                raise ValueError("expected 60 consecutive daily dates")
+            if today.isoformat() not in expected:
+                raise ValueError(f"daily series does not include today ({today.isoformat()})")
             series = {}
             for name, body in zip(names, bodies):
                 daily = body["daily"]
