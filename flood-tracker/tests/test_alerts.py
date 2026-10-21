@@ -112,7 +112,7 @@ def _assert_template(draft):
         text = draft[language]
         assert "Rojhan" in text, language + " dropped the place"
         assert "Rajanpur" in text, language + " dropped the district"
-        assert LOW in text and HIGH in text, language + " dropped the time window"
+        assert alerts.format_time_window((LOW, HIGH), language) in text, language + " dropped the time window"
         assert len(text) <= 140, language + " template exceeds 140 characters"
     assert "اونچی زمین پر جائیں" in draft["urdu"], "urdu move instruction changed"
     assert "مٿانهين ڌرتي ڏانهن وڃو" in draft["sindhi"], "sindhi move instruction changed"
@@ -186,7 +186,7 @@ def test_validation_rejects_missing_place_name():
         assert draft["source"] == "template"
         assert draft["model"] == ""
         assert "Rojhan" in draft["urdu"]
-        assert LOW in draft["urdu"] and HIGH in draft["urdu"]
+        assert alerts.format_time_window((LOW, HIGH), "urdu") in draft["urdu"]
 
 
 def test_validation_rejects_reply_over_140_characters():
@@ -205,7 +205,8 @@ def test_validation_rejects_reply_over_140_characters():
         assert draft["source"] == "template"
         assert len(draft["urdu"]) <= 140
         assert len(draft["sindhi"]) <= 140
-        assert "Rojhan" in draft["urdu"] and LOW in draft["urdu"]
+        assert "Rojhan" in draft["urdu"]
+        assert alerts.format_time_window((LOW, HIGH), "urdu") in draft["urdu"]
 
 
 def test_validation_rejects_reply_missing_the_time():
@@ -217,7 +218,7 @@ def test_validation_rejects_reply_missing_the_time():
         provider = _Scripted([one_end, one_end])
         draft = draft_alerts([_village()], AS_OF, provider=provider)[0]
         assert draft["source"] == "template"
-        assert LOW in draft["urdu"] and HIGH in draft["urdu"]
+        assert alerts.format_time_window((LOW, HIGH), "urdu") in draft["urdu"]
 
 
 def test_provider_selection_from_env():
@@ -309,6 +310,41 @@ def test_llm_status_for_health():
         assert "k-test" not in str(alerts.llm_status())
 
 
+def test_localized_window_crossing_midnight():
+    window = ("2022-08-31T18:59", "2022-09-01T05:00")
+    assert alerts.format_time_window(window, "urdu") == "31 اگست شام سے 1 ستمبر صبح تک"
+    assert alerts.format_time_window(window, "sindhi") == "31 آگسٽ شام کان 1 سيپٽمبر صبح تائين"
+    night = ("2022-08-31T23:59", "2022-09-01T00:01")
+    assert alerts.format_time_window(night, "urdu") == "31 اگست رات سے 1 ستمبر رات تک"
+    assert alerts.format_time_window(night, "sindhi") == "31 آگسٽ رات کان 1 سيپٽمبر رات تائين"
+
+
+def test_localized_time_band_boundaries():
+    clocks = ("04:59", "05:00", "10:59", "11:00", "14:59", "15:00", "18:59", "19:00")
+    for language, expected in (
+        ("urdu", ("رات", "صبح", "صبح", "دوپہر", "دوپہر", "شام", "شام", "رات")),
+        ("sindhi", ("رات", "صبح", "صبح", "ٻپهرين", "ٻپهرين", "شام", "شام", "رات")),
+    ):
+        for clock, band in zip(clocks, expected):
+            assert alerts.format_time_window((f"2022-08-31T{clock}",), language).endswith(" " + band)
+        assert len(alerts._MONTHS[language]) == 12
+
+
+def test_template_crossing_midnight_keeps_marker_and_cap():
+    with _Env() as env:
+        env.set(ALERT_LLM_PROVIDER="template")
+        for name in ("Rojhan", "A" * 140):
+            draft = draft_alerts([_village(name=name, district="D" * 100,
+                safe_place="S" * 140, eta_low="2022-08-31T23:59",
+                eta_high="2022-09-01T05:00")], AS_OF)[0]
+            for language, marker in (("urdu", "مسودہ"), ("sindhi", "مسودو")):
+                text = draft[language]
+                assert len(text) <= 140
+                assert marker in text
+                assert alerts.format_time_window(("2022-08-31T23:59", "2022-09-01T05:00"), language) in text
+                assert "2022-" not in text
+
+
 if __name__ == "__main__":
     # `unit` is the supported mode. These tests never open a socket;
     # tests/test_api.py covers the live POST /alert-drafts route.
@@ -316,6 +352,9 @@ if __name__ == "__main__":
         print("Use: python tests/test_alerts.py unit")
         sys.exit(2)
     tests = [
+        test_localized_window_crossing_midnight,
+        test_localized_time_band_boundaries,
+        test_template_crossing_midnight_keeps_marker_and_cap,
         test_template_fallback_without_a_key,
         test_named_safe_place_and_hours_only_window,
         test_validation_rejects_missing_place_name,

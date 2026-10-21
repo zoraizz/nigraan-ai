@@ -187,8 +187,14 @@ def _assert_drafts(body: dict, expected_ids: list, by_id: dict) -> None:
         v = by_id[d["village_id"]]
         assert d["name"] == v["name"] and d["district"] == v["district"]
         # The draft carries the same ETA window the situation shows.
-        for text in (d["urdu"], d["sindhi"]):
-            assert v["eta_low"] in text and v["eta_high"] in text, text
+        for language in ("urdu", "sindhi"):
+            text = d[language]
+            assert len(text) <= 140
+            if d["source"] == "template":
+                from alerts import format_time_window
+                assert format_time_window((v["eta_low"], v["eta_high"]), language) in text
+            else:
+                assert v["eta_low"] in text and v["eta_high"] in text, text
 
 
 def test_alert_drafts_by_village_ids():

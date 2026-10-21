@@ -43,10 +43,12 @@ A draft never labels a template sentence as model text, or the reverse.
 The 140-character cap is the whole sentence. Templates are hand-written Urdu
 and Sindhi frames with the facts filled in. They are what ``ALERT_LLM_PROVIDER=none``
 returns, and what a missing key, a transport error, or a rejected reply
-returns. A one-word draft marker (مسودہ / مسودو) is included when it fits, so
-the sentence is not dressed up as an official warning. The cap comes first:
-place, time, and the move instruction are kept ahead of the marker and, if
-needed, ahead of the district.
+returns. Templates localize each date to day, month, and a rough time of day
+without converting time zones. A draft marker (مسودہ / مسودو) is always
+included. To fit the cap, omit the district, then use the higher-ground
+instruction; exceptionally long place names are shortened as a last resort.
+Model prompts and validation retain their exact time strings.
+
 
 PROVIDER SWITCH
 ===============
@@ -82,6 +84,7 @@ import logging
 import os
 import threading
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -410,45 +413,57 @@ def _build_prompt(facts: _Facts, language: str) -> str:
     )
 
 
-def _render_template(facts: _Facts, language: str) -> str:
-    """Fill the hand-written frame. Shorten only to stay within 140 characters.
+_MONTHS = {
+    "urdu": ("جنوری", "فروری", "مارچ", "اپریل", "مئی", "جون", "جولائی", "اگست", "ستمبر", "اکتوبر", "نومبر", "دسمبر"),
+    "sindhi": ("جنوري", "فيبروري", "مارچ", "اپريل", "مئي", "جون", "جولاءِ", "آگسٽ", "سيپٽمبر", "آڪٽوبر", "نومبر", "ڊسمبر"),
+}
 
-    Order of what we give up: the draft marker, then the district, then a
-    named safe place (the higher-ground instruction replaces it). The place
-    and the time window stay, because those are the facts a reader must see.
+
+def format_time_window(time_parts: tuple[str, ...], language: str) -> str:
+    """Render local dates without timezone conversion or minute-level precision.
+
+    Bands are [05, 11), [11, 15), [15, 19), and night otherwise.
+    Each endpoint keeps its calendar date, including after midnight. Non-date
+    tokens (such as hours-only estimates) retain their existing representation.
+    """
+    months = _MONTHS[language]
+    bands = ("صبح", "دوپہر", "شام", "رات") if language == "urdu" else ("صبح", "ٻپهرين", "شام", "رات")
+    parts = []
+    for value in time_parts:
+        try:
+            dt = datetime.fromisoformat(value)
+        except ValueError:
+            parts.append(value)
+            continue
+        band = 0 if 5 <= dt.hour < 11 else 1 if 11 <= dt.hour < 15 else 2 if 15 <= dt.hour < 19 else 3
+        parts.append(f"{dt.day} {months[dt.month - 1]} {bands[band]}")
+    if len(parts) == 2:
+        return f"{parts[0]} سے {parts[1]} تک" if language == "urdu" else f"{parts[0]} کان {parts[1]} تائين"
+    return " ".join(parts)
+
+
+def _render_template(facts: _Facts, language: str) -> str:
+    """Keep the localized window, move instruction and draft marker within 140.
+
+    Drop the district before replacing a long shelter instruction. Only an
+    oversized place name is truncated, and only after those shorter frames fail.
     """
     move = facts.move_urdu if language == "urdu" else facts.move_sindhi
     short_move = _MOVE_URDU_HIGH if language == "urdu" else _MOVE_SINDHI_HIGH
     unknown = _UNKNOWN_URDU if language == "urdu" else _UNKNOWN_SINDHI
     marker = _DRAFT_URDU if language == "urdu" else _DRAFT_SINDHI
+    clock = format_time_window(facts.time_parts, language) if facts.time_parts else unknown
     moves = [move] if move == short_move else [move, short_move]
     heads = [f"{facts.place} ({facts.district})"] if facts.district else []
     heads.append(facts.place)
-
-    candidates: list[str] = []
-    for head in heads:
-        clock = facts.time_marker if facts.time_parts else unknown
-        for instruction in moves:
-            sentence = f"{head}: {clock}۔ {instruction}"
-            candidates.append(f"{sentence}۔ {marker}")
-            candidates.append(sentence)
-    for text in candidates:
-        if _template_fits(text, facts):
-            return text
-    core = f"{facts.place}: {facts.time_marker}".strip()
-    if len(core) > MAX_ALERT_CHARS:
-        logger.warning(
-            "Place and time for %s exceed %s characters",
-            facts.place,
-            MAX_ALERT_CHARS,
-        )
-    return core
-
-
-def _template_fits(text: str, facts: _Facts) -> bool:
-    if len(text) > MAX_ALERT_CHARS or facts.place not in text:
-        return False
-    return all(part in text for part in facts.time_parts)
+    for instruction in moves:
+        for head in heads:
+            text = f"{head}: {clock}۔ {instruction}۔ {marker}"
+            if len(text) <= MAX_ALERT_CHARS:
+                return text
+    suffix = f": {clock}۔ {short_move}۔ {marker}"
+    available = MAX_ALERT_CHARS - len(suffix)
+    return facts.place[:max(0, available - 1)] + "…" + suffix
 
 
 def _facts_from(record, as_of: str) -> _Facts | None:
