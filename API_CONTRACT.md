@@ -296,3 +296,85 @@ Scoring notes:
   signal, so its priority scores stay on the risk-and-damage formula.
   The value is echoed under ranked_districts[].signals.flood when active,
   and scoring.signals lists the curve and note whether or not it is active.
+
+<!-- flood -->
+## River Flood Tracker
+
+Service: `flood-tracker/`. Endpoint shapes below follow
+[flood-tracker/CONTRACT.md](flood-tracker/CONTRACT.md), with the current
+main-wave scorecard filtering noted explicitly. ETAs are modelled estimates;
+`data_provenance` distinguishes them from gauge readings.
+[Fixtures](flood-tracker/data/fixtures/) are hand-made contract examples,
+not gauge readings or model output.
+
+## `GET /flood-situation?mode=replay&as_of=2022-08-31T06:00`
+
+```json
+{
+  "as_of": "",
+  "mode": "replay|live",
+  "barrages": [{ "name": "", "order": 1, "lat": 0, "lon": 0, "inflow_cusecs": 0, "outflow_cusecs": 0, "category": "", "trend": "rising|falling|stable" }],
+  "reaches": [{ "from": "", "to": "", "category": "", "coords": [[0, 0]] }],
+  "peaks": [{ "barrage": "", "wave_id": "", "wave_label": "Wave 1|null", "status": "forming|passed", "peak_time": "", "peak_outflow_cusecs": 0 }],
+  "etas": [{ "wave_id": "", "wave_label": "Wave 1|null", "from_barrage": "", "barrage": "", "status": "estimated|arrived", "eta": "", "eta_low": "", "eta_high": "", "hours_from_now": 0, "observed_time": null }],
+  "at_risk_villages": [{ "id": "", "name": "", "district": "", "lat": 0, "lon": 0, "eta": "", "eta_low": "", "eta_high": "", "hours_to_arrival": 0, "population": 0, "population_source": "" }],
+  "district_eta_hours": { "<district>": 0.0 },
+  "data_provenance": { "flows": "", "etas": "", "villages": "", "population": "" }
+}
+```
+
+`reaches[].coords` are `[lat, lon]`. `mode` defaults to `replay`; omitted
+`as_of` uses the last available reading. `mode=live` returns HTTP 501
+`live_not_enabled` because no live FFC feed is wired in. Invalid mode or
+time returns HTTP 422 (`invalid_mode`, `invalid_as_of`,
+`as_of_out_of_range`); missing required data returns HTTP 503
+`data_unavailable`.
+
+## Time and category rules
+
+- All times are Asia/Karachi local, format `YYYY-MM-DDTHH:MM`, with no offset.
+- `hours_from_now` and `hours_to_arrival` are negative once the peak or the village arrival has passed.
+- A reach's `category` is the higher of its two end barrages' categories. Order is Normal < Low Flood < Medium Flood < High Flood < Very High Flood < Exceptionally High Flood.
+
+## Waves
+
+- `wave_id` (`indus-<year>-w<n>`) is internal: every rise above Low Flood at any barrage gets one. Use it as a key, not as display text.
+- `wave_label` is what the UI shows: `"Wave 1"`, `"Wave 2"`, ... in time order, only for waves that reached Medium Flood or higher at 2 or more barrages. It is `null` for a minor rise.
+- `eta_low`/`eta_high` (and scorecard `predicted_low`/`predicted_high`) are at least 12 h either side of the estimate (daily 06:00 sampling).
+
+## `GET /replay/2022`
+
+```json
+{
+  "steps": ["<flood-situation objects, one per day at 06:00>"],
+  "scorecard_note": "",
+  "scorecard": [{ "barrage": "", "wave_id": "", "wave_label": "Wave 1|Wave 2", "in_sample": true, "note": "<string|null>", "actual_peak_time": "", "predicted_time": "", "predicted_low": "", "predicted_high": "", "error_hours": 0 }]
+}
+```
+
+- The API scorecard excludes rows with null `wave_label` and sorts by
+  `wave_label`, then barrage order: Tarbela, Kalabagh, Chashma, Taunsa,
+  Guddu, Sukkur, Kotri.
+- `error_hours = actual - predicted`: positive means the crest came later than predicted. A plateau crest (same outflow on consecutive readings, e.g. Kotri 584000 on 5-8 Sep) scores 0 when the prediction falls inside it, else the hours to the nearest edge; `note` says so.
+- `in_sample` is true when reaches.json lags were calibrated on that crest. `scorecard_note` states this and gives the leave-one-wave-out errors.
+
+## `POST /alert-drafts`
+
+Body: `{ "village_ids"?: [], "district"?: "", "as_of": "" }`
+
+```json
+{
+  "drafts": [{ "village_id": "", "name": "", "district": "", "urdu": "", "sindhi": "", "source": "gemini|qwen|template", "model": "" }]
+}
+```
+
+- Villages are resolved against `at_risk_villages` of `/flood-situation` at `as_of`; `village_ids` wins when both are given. A district gives its at-risk villages in ETA order (`{"drafts": []}` when none is at risk), at most 25.
+- Template fallback drafts use localized day, month and rough time of day
+  in Urdu and Sindhi, retain the draft marker, and are at most 140 characters.
+- 422 codes: `invalid_request` (body shape, e.g. no `as_of`), `missing_target`, `too_many_villages` (over 25 ids), `invalid_as_of`, `as_of_out_of_range`, `unknown_village_ids`, `village_not_at_risk`, `unknown_district`. 503 `data_unavailable` / `villages_unavailable`.
+
+## Errors
+
+```json
+{ "error": { "code": "<machine>", "message": "<human>" } }
+```

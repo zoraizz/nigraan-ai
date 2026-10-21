@@ -9,12 +9,15 @@ Disaster damage assessment & aid-priority platform for NDMA/PDMA — Bano Qabil 
 - `dashboard/` — frontend
 - `infra/` — cloud deployment configs
 
+<!-- flood -->
+- `flood-tracker/` - Indus flood-wave routing, 2022 replay, village ETAs and Urdu/Sindhi alert drafts
+
 See `API_CONTRACT.md` for interface definitions.
 
 ## Live Deployment
 
-The full stack is deployed on Render (free tier), auto-built from the `dev`
-branch:
+The existing services below are deployed on Render (free tier), auto-built
+from the `dev` branch. River Flood Tracker is pending service creation:
 
 | Service | Type | URL |
 |---------|------|-----|
@@ -22,6 +25,30 @@ branch:
 | risk-flag | Web service | <https://nigraan-risk-flag.onrender.com> |
 | damage-checker | Web service | <https://nigraan-damage-checker.onrender.com> |
 | aid-priority | Web service | <https://nigraan-aid-priority.onrender.com> |
+| flood-tracker (`nigraan-flood-tracker`) | Web service (pending) | Not deployed; create the Render service first |
+
+<!-- flood -->
+### River Flood Tracker - Render setup (pending)
+
+Create a Render web service named `nigraan-flood-tracker` from the
+`feat/flood-tracker` branch with these settings:
+
+- Root directory: `flood-tracker/`
+- Build command: `pip install -r requirements.txt`
+- Start command: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+- Environment: `CORS_ORIGINS` (the dashboard origin), `GEMINI_API_KEY`,
+  `GEMINI_MODEL`, and `ALERT_LLM_PROVIDER` (`gemini` for Gemini drafts;
+  `template` for template-only drafts). Keep keys in Render environment settings.
+- Only when switching to Qwen: set `ALERT_LLM_PROVIDER=qwen` and configure
+  `DASHSCOPE_API_KEY` and `QWEN_MODEL`.
+- Dashboard environment: set `VITE_FLOOD_API_URL` to the actual service URL
+  after creation, then rebuild the dashboard with the flood-tracker changes.
+
+Nothing in this branch is deployed by these instructions. The Render service
+must exist and be deployed before the dashboard can call it. The API currently
+supports the 2022 replay; live river-feed mode is not enabled.
+
+### Existing deployment notes
 
 - **Free-tier cold start:** all services spin down after ~15 min of
   inactivity, and the first request after that takes **~30–60 s** to wake

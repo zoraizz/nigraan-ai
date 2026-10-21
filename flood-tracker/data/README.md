@@ -84,3 +84,11 @@ The errors are multiples of the daily sample. Wave 1 was slower than wave 2 from
 ### Replay scorecard (`GET /replay/2022`)
 
 `error_hours = actual - predicted`; positive means the crest came later than predicted. Rows whose crest is one of the `events_used` above carry `"in_sample": true`: the lags were calibrated on those same two waves, so those errors flatter the model. The leave-one-wave-out table above is the out-of-sample check, and `scorecard_note` repeats it. Kotri's wave-2 crest is the 584000 plateau (5–8 Sep 06:00): it scores 0 h when the prediction falls inside the plateau and otherwise the hours to the nearest edge.
+
+## Villages, centreline and fixtures
+
+See [VILLAGES.md](VILLAGES.md) for the sources and method behind
+`villages.json`, `indus.geojson` and the estimated populations. See its
+[fixtures note](VILLAGES.md#limits) before using the
+[fixture files](fixtures/): these are hand-made contract examples, not
+gauge readings or model output.
