@@ -163,7 +163,7 @@ def _num(x) -> bool:
 def assert_situation_shape(s: dict) -> None:
     assert set(s) == SITUATION_KEYS, f"top-level keys: {sorted(s)}"
     assert TIME_RE.match(s["as_of"]), s["as_of"]
-    assert s["mode"] in ("replay", "live")
+    assert s["mode"] in ("replay", "live", "what_if")
     for b in s["barrages"]:
         assert set(b) == BARRAGE_KEYS, sorted(b)
         assert isinstance(b["name"], str) and isinstance(b["order"], int)

@@ -22,8 +22,8 @@ query parameters and shapes the HTTP responses.
 Modes:
     replay -- as_of is a point inside the 2022 flows data. Every number is
               computed from readings at or before as_of only (no look-ahead).
-    live   -- not enabled: there is no live FFC feed wired in yet, so the
-              endpoint returns 501 rather than presenting replay data as live.
+    live   -- bias-scaled GloFAS daily discharge, not FFC observations.
+    what_if -- synthetic peak routed with the same lag engine via POST /what-if.
 
 Environment variables (loaded from flood-tracker/.env, see .env.example):
     CORS_ORIGINS        -- comma-separated browser origins (default
@@ -58,7 +58,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Literal
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
@@ -72,6 +72,7 @@ load_dotenv(Path(__file__).parent / ".env")
 
 import alerts  # noqa: E402
 import routing  # noqa: E402
+import live  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Logging
@@ -160,6 +161,11 @@ def _load() -> tuple:
 
 DATA, DATA_ERROR = _load()
 _replay_cache: Optional[dict] = None
+try:
+    CALIBRATION = live.load_calibration(DATA_DIR / "glofas_calibration.json", DATA.barrages if DATA else [])
+except live.LiveUnavailable as exc:
+    logger.warning("%s", exc)
+    CALIBRATION = None
 
 
 # ---------------------------------------------------------------------------
@@ -226,10 +232,18 @@ class DataProvenance(BaseModel):
     population: str
 
 
+class WhatIfRequest(BaseModel):
+    barrage: str
+    peak_cusecs: float = Field(gt=0, le=2000000, allow_inf_nan=False)
+    peak_time: Optional[str] = None
+
+
 class AlertDraftsRequest(BaseModel):
     village_ids: Optional[list[str]] = None
     district: Optional[str] = None
     as_of: str
+    mode: Literal["replay", "live", "what_if"] = "replay"
+    scenario: Optional[WhatIfRequest] = None
 
 
 # ---------------------------------------------------------------------------
@@ -276,14 +290,16 @@ def flood_situation(mode: str = "replay", as_of: Optional[str] = None):
     """Flood situation at as_of (CONTRACT.md).
 
     mode=replay (default): as_of is "YYYY-MM-DDTHH:MM" Asia/Karachi inside
-    the flows data; defaults to the last reading. mode=live returns 501.
+    the flows data; defaults to the last reading. Live uses today at 06:00 PKT.
     """
     mode = (mode or "").strip().lower()
     if mode == "live":
-        return _error(
-            501, "live_not_enabled",
-            "live mode is not enabled: no live FFC feed is wired in; use mode=replay",
-        )
+        if DATA is None:
+            return _data_unavailable()
+        try:
+            return _validate_situation(live.live_situation(DATA, CALIBRATION))
+        except live.LiveUnavailable as exc:
+            return _error(503, "live_unavailable", str(exc))
     if mode != "replay":
         return _error(422, "invalid_mode", f"mode must be 'replay' or 'live', got {mode!r}")
     if DATA is None:
@@ -334,6 +350,16 @@ def replay_2022():
     return _replay_cache
 
 
+@app.post("/what-if")
+def what_if(req: WhatIfRequest):
+    if DATA is None:
+        return _data_unavailable()
+    try:
+        return _validate_situation(live.what_if(DATA, req.barrage, req.peak_cusecs, req.peak_time))
+    except (ValueError, OverflowError) as exc:
+        return _error(422, "invalid_scenario", str(exc))
+
+
 @app.post("/alert-drafts")
 def alert_drafts(req: AlertDraftsRequest):
     """Urdu/Sindhi drafts for at-risk villages at as_of (CONTRACT.md)."""
@@ -356,9 +382,23 @@ def alert_drafts(req: AlertDraftsRequest):
     except ValueError as exc:
         return _error(422, "invalid_as_of", str(exc))
     try:
-        situation = routing.situation(DATA, as_of_dt, mode="replay")
+        if req.mode == "live":
+            situation = live.live_situation(DATA, CALIBRATION)
+        elif req.mode == "what_if":
+            if req.scenario is None:
+                return _error(422, "invalid_scenario", "what_if drafts require scenario")
+            situation = live.what_if(DATA, req.scenario.barrage, req.scenario.peak_cusecs, req.scenario.peak_time)
+        else:
+            situation = routing.situation(DATA, as_of_dt, mode="replay")
+        if situation["as_of"] != routing.fmt_time(as_of_dt):
+            return _error(422, "invalid_as_of", "as_of must match the selected live/scenario situation")
     except routing.AsOfOutOfRange as exc:
         return _error(422, "as_of_out_of_range", str(exc))
+
+    except live.LiveUnavailable as exc:
+        return _error(503, "live_unavailable", str(exc))
+    except (ValueError, OverflowError) as exc:
+        return _error(422, "invalid_scenario", str(exc))
 
     at_risk = situation["at_risk_villages"]
     if ids:
@@ -400,5 +440,7 @@ def health():
         "data_files": {name: path.exists() for name, path in DATA_FILES.items()},
         "data_range": data_range,
         "data_error": DATA_ERROR,
+        "live_available": live.last_fetch,
+        "calibration_loaded": CALIBRATION is not None,
         **alerts.llm_status(),
     }

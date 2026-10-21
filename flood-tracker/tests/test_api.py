@@ -120,14 +120,17 @@ def test_flood_situation_default_as_of():
     assert_situation_shape(r.json())
 
 
-def test_live_mode_not_enabled():
-    if not _server_up():
-        _skip("server not running")
+def test_live_mode_live_or_unavailable():
+    if not _ready():
         return
     import requests
 
-    r = requests.get(f"{BASE_URL}/flood-situation", params={"mode": "live"}, timeout=10)
-    _assert_error(r, 501, "live_not_enabled")
+    r = requests.get(f"{BASE_URL}/flood-situation", params={"mode": "live"}, timeout=30)
+    if r.status_code == 503:
+        _assert_error(r, 503, "live_unavailable")
+        return
+    assert r.status_code == 200, r.text
+    assert r.json()["mode"] == "live" and "forecast" in r.json()
 
 
 def test_bad_requests():
@@ -272,7 +275,7 @@ if __name__ == "__main__":
         test_health,
         test_flood_situation_replay,
         test_flood_situation_default_as_of,
-        test_live_mode_not_enabled,
+        test_live_mode_live_or_unavailable,
         test_bad_requests,
         test_replay_2022,
         test_alert_drafts_by_village_ids,

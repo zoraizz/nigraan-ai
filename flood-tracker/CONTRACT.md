@@ -26,7 +26,7 @@ Thresholds in cusecs (Low/Medium/High/VeryHigh/ExceptionallyHigh), source FFD bu
 ```json
 {
   "as_of": "",
-  "mode": "replay|live",
+  "mode": "replay|live|what_if",
   "barrages": [{ "name": "", "order": 1, "lat": 0, "lon": 0, "inflow_cusecs": 0, "outflow_cusecs": 0, "category": "", "trend": "rising|falling|stable" }],
   "reaches": [{ "from": "", "to": "", "category": "", "coords": [[0, 0]] }],
   "peaks": [{ "barrage": "", "wave_id": "", "wave_label": "Wave 1|null", "status": "forming|passed", "peak_time": "", "peak_outflow_cusecs": 0 }],
@@ -51,6 +51,46 @@ Thresholds in cusecs (Low/Medium/High/VeryHigh/ExceptionallyHigh), source FFD bu
 - `wave_label` is what the UI shows: `"Wave 1"`, `"Wave 2"`, ... in time order, only for waves that reached Medium Flood or higher at 2 or more barrages. It is `null` for a minor rise.
 - `eta_low`/`eta_high` (and scorecard `predicted_low`/`predicted_high`) are at least 12 h either side of the estimate (daily 06:00 sampling).
 
+## `GET /flood-situation?mode=live`
+
+Same situation object with `mode: "live"` and `as_of` = today 06:00 PKT, plus:
+
+```json
+{
+  "forecast": [{ "name": "", "today_cusecs": 0, "today_category": "", "series": [{ "date": "YYYY-MM-DD", "cusecs": 0 }], "forecast_peak_cusecs": 0, "forecast_peak_date": "", "forecast_peak_category": "", "low_threshold_cusecs": 0, "first_crossing": { "category": "", "date": "" }, "calibrated": true, "confidence": "bias-scaled|low confidence" }],
+  "outlook": ["<forecast rows whose forecast reaches Low Flood or higher, soonest first_crossing first>"],
+  "forecast_days": 30,
+  "calibration_warnings": [""]
+}
+```
+
+- Flows are modelled: GloFAS v4 daily river discharge via the Open-Meteo Flood API (m3/s x 35.3147 = cusecs), multiplied by a per-barrage `scale` from `data/glofas_calibration.json` (FFC 2022 peak / GloFAS 2022 peak at the highest-mean-discharge cell of a 7x7, 0.05 degree grid). `data_provenance.flows` says so; these are not FFC gauge readings.
+- Daily model dates are stamped 06:00 PKT. Readings up to today feed the routing engine; `series` holds today and the forecast days (up to 30).
+- `first_crossing` is the first forecast day (today included) at or above Low Flood, with that day's category; `null` if none.
+- Barrages with `calibrated: false` (scale outside 0.25..4 or correlation < 0.3) are shown with a "low confidence" badge.
+- Fetches are cached in memory for 3 hours. Any fetch or calibration failure returns 503 `live_unavailable`.
+
+## `POST /what-if`
+
+Body: `{ "barrage": "Taunsa", "peak_cusecs": 650000, "peak_time"?: "YYYY-MM-DDTHH:MM" }` (`peak_time` defaults to today 06:00 PKT).
+
+Returns a situation object with `mode: "what_if"`, `as_of` = `peak_time` + 24 h, plus:
+
+```json
+{
+  "scenario": { "barrage": "", "peak_cusecs": 0, "peak_category": "", "peak_time": "", "assumption": "peak carried downstream unchanged; barrage gates and breaches not modelled; villages are those flooded in 2022" },
+  "note": "Below Medium Flood: villages not listed (only when peak_category is below Medium Flood)"
+}
+```
+
+- Synthetic hydrograph: every barrage at 60% of its Low threshold for the 6 days before `peak_time`; the chosen barrage rises over 3 days to `peak_cusecs` and falls 10% the next day. Routed with the same lag engine.
+- Below Medium Flood, `etas` are kept but `at_risk_villages` is `[]` and `note` is set.
+- 422: `invalid_request` (`peak_cusecs` <= 0 or > 2,000,000, bad body), `invalid_scenario` (unknown barrage, bad `peak_time`).
+
+## `GET /health` (flood fields)
+
+`live_available`: `"ok"|"failed"|"never"` (last GloFAS fetch); `calibration_loaded`: bool.
+
 ## `GET /replay/2022`
 
 ```json
@@ -66,7 +106,7 @@ Thresholds in cusecs (Low/Medium/High/VeryHigh/ExceptionallyHigh), source FFD bu
 
 ## `POST /alert-drafts`
 
-Body: `{ "village_ids"?: [], "district"?: "", "as_of": "" }`
+Body: `{ "village_ids"?: [], "district"?: "", "as_of": "", "mode"?: "replay|live|what_if", "scenario"?: <what-if body> }` (for live/what_if, `as_of` must equal that situation's `as_of`; `scenario` is required for what_if)
 
 ```json
 {

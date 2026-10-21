@@ -1,0 +1,81 @@
+{
+  "_notes": {
+    "source": "https://flood-api.open-meteo.com/v1/flood",
+    "model": "GloFAS v4 (API default seamless)",
+    "period": "2022-08-10..2022-09-11",
+    "method": "7x7 grid, 0.05 degree spacing; highest mean discharge over the 33-day 2022 interval; scale = paired FFC peak / paired GloFAS peak cusecs; calibrated only when scale in [0.25,4] and corr >= 0.3",
+    "units": "m3/s x 35.3147 = cusecs",
+    "cell_selection": "nearest",
+    "limits": "In-sample peak bias scaling from 2022, not independently validated; cell may represent a tributary or reservoir; daily model dates assigned 06:00 PKT, not instantaneous readings."
+  },
+  "Tarbela": {
+    "lat": 33.975006,
+    "lon": 72.52501,
+    "scale": 1.630265042400375,
+    "corr": 0.6688389295037523,
+    "glofas_peak_cusecs": 203647.867902,
+    "ffc_peak_cusecs": 332000.0,
+    "mean_2022_cusecs": 172022.06655403032,
+    "calibrated": true
+  },
+  "Kalabagh": {
+    "lat": 32.925003,
+    "lon": 71.425,
+    "scale": 1.6122908178446829,
+    "corr": 0.8094594895325327,
+    "glofas_peak_cusecs": 262359.616093,
+    "ffc_peak_cusecs": 423000.0,
+    "mean_2022_cusecs": 218129.7949879697,
+    "calibrated": true
+  },
+  "Chashma": {
+    "lat": 32.275,
+    "lon": 71.27501,
+    "scale": 1.9287184465946983,
+    "corr": 0.6811039874586555,
+    "glofas_peak_cusecs": 269090.59791300003,
+    "ffc_peak_cusecs": 519000.0,
+    "mean_2022_cusecs": 221415.06802184848,
+    "calibrated": true
+  },
+  "Taunsa": {
+    "lat": 30.375,
+    "lon": 70.77501,
+    "scale": 1.7736936748941705,
+    "corr": 0.8286053340804914,
+    "glofas_peak_cusecs": 350680.621352,
+    "ffc_peak_cusecs": 622000.0,
+    "mean_2022_cusecs": 258944.81302009095,
+    "calibrated": true
+  },
+  "Guddu": {
+    "lat": 28.425003,
+    "lon": 69.675,
+    "scale": 1.1768235022748985,
+    "corr": 0.8392050925533766,
+    "glofas_peak_cusecs": 474157.763608,
+    "ffc_peak_cusecs": 558000.0,
+    "mean_2022_cusecs": 366259.433721394,
+    "calibrated": true
+  },
+  "Sukkur": {
+    "lat": 27.725006,
+    "lon": 68.675,
+    "scale": 1.2260413404358617,
+    "corr": 0.8569264092013587,
+    "glofas_peak_cusecs": 473067.24567200005,
+    "ffc_peak_cusecs": 580000.0,
+    "mean_2022_cusecs": 365540.06258096977,
+    "calibrated": true
+  },
+  "Kotri": {
+    "lat": 25.275002,
+    "lon": 68.27501,
+    "scale": 0.6014836418340453,
+    "corr": -0.11300421757960376,
+    "glofas_peak_cusecs": 997563.288954,
+    "ffc_peak_cusecs": 600018.0,
+    "mean_2022_cusecs": 485043.47707730305,
+    "calibrated": false
+  }
+}
