@@ -90,9 +90,16 @@ that ETA is provisional because the crest has not been seen yet).
 For every barrage j downstream of L:
 
     eta      = peak_time(L) + sum(lag_median_h, L..j)
-    eta_low  = peak_time(L) + sum(lag_min_h,    L..j)
-    eta_high = peak_time(L) + sum(lag_max_h,    L..j)
+    eta_low  = min(peak_time(L) + sum(lag_min_h, L..j), eta - 12 h)
+    eta_high = max(peak_time(L) + sum(lag_max_h, L..j), eta + 12 h)
     status   = "estimated", hours_from_now = eta - as_of
+
+Minimum half-width: every estimate (barrage ETAs, village ETAs, scorecard
+predictions) is at least +/-12 h around its eta. Each crest time is read
+from one 06:00 sample a day, so it is only known to about +/-12 h; a reach
+calibrated on a single event (Sukkur -> Kotri, 120/120/120) or on two
+identical lags (Tarbela -> Kalabagh, 24/24/24) would otherwise claim an
+exact arrival time.
 
 For every barrage j upstream of L (inclusive of L) where the wave has a
 passed peak, except the first one in the chain, the row is "arrived": the
@@ -154,7 +161,8 @@ series (actual_peak_time = T), the prediction is rebuilt from upstream
 readings strictly before T only (j's own readings are not used): events are
 re-detected on that truncated data, e's peak is matched to an upstream
 reported (forming or passed) peak with the same window rule, and
-    predicted_time = f.peak + sum(lag_median_h), low/high from min/max.
+    predicted_time = f.peak + sum(lag_median_h), low/high from min/max
+                     (widened to at least +/-12 h, as for every estimate).
     error_hours    = actual_peak_time - predicted_time
 Positive error = the crest came later than predicted. Barrages with no
 upstream peak to predict from (Tarbela, or a wave first seen at j) have no
@@ -187,6 +195,7 @@ TREND_TOLERANCE = 0.02   # stable within 2% of the previous reading
 PASSED_DROP = 0.02       # passed once the latest reading is >= 2% below max
 NEW_WAVE_DIP = 0.10      # dip >= 10% below max then rise = new wave
 MATCH_SLACK_H = 24       # +/-12 h sampling uncertainty at each end of a reach
+MIN_HALF_WIDTH_H = 12    # every estimate is at least eta +/- 12 h (daily 06:00 sampling)
 LIVE_GRACE_H = 24        # keep a wave this long past the next barrage's eta_high
 FINAL_DISPLAY_H = 72     # keep a wave this long after it passes the last barrage
 
@@ -430,9 +439,15 @@ def link_waves(events_by_order: dict, reaches: list) -> dict:
 # ---------------------------------------------------------------------------
 # Per-wave ETAs
 # ---------------------------------------------------------------------------
+def _widen(eta: datetime, lo: datetime, hi: datetime) -> tuple:
+    """(eta, low, high) with low/high at least MIN_HALF_WIDTH_H from eta."""
+    half = timedelta(hours=MIN_HALF_WIDTH_H)
+    return eta, min(lo, eta - half), max(hi, eta + half)
+
+
 def _eta_triplet(reaches: list, f: Event, j_order: int) -> tuple:
     med, lo, hi = _lag_sums(reaches, f.order, j_order)
-    return (
+    return _widen(
         f.peak_time + timedelta(hours=med),
         f.peak_time + timedelta(hours=lo),
         f.peak_time + timedelta(hours=hi),
@@ -578,6 +593,7 @@ def village_etas(
                 b = a + 1
                 frac = (vkm - km[a]) / (km[b] - km[a])
                 triplet = tuple(_lerp(times[a][k], times[b][k], frac) for k in range(3))
+            triplet = _widen(*triplet)
             if triplet[2] < as_of:
                 continue
             eta = triplet[0]
@@ -811,7 +827,11 @@ def situation(data: FloodData, as_of: datetime, mode: str = "replay") -> dict:
     etas_note = (
         "modelled: upstream peak_time + summed lag_median_h from reaches.json "
         "(2022 peak-to-peak lags, not a hydraulic model); range from summed "
-        "lag_min_h/lag_max_h. Peaks use only readings at or before as_of"
+        "lag_min_h/lag_max_h, widened to at least +/-12 h around every "
+        "estimate because daily 06:00 sampling places each crest only to "
+        "about +/-12 h (a reach seen once, like Sukkur->Kotri, or with equal "
+        "lags, like Tarbela->Kalabagh, would otherwise show no range). Peaks "
+        "use only readings at or before as_of"
     )
     if any(w.leading is not None and w.leading.status == "forming" for w in live):
         etas_note += (

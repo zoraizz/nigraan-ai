@@ -403,15 +403,56 @@ def test_village_ordering_and_district_minimum():
 
 def test_village_drops_off_once_the_wave_passes_it():
     data = make_data(villages=FAKE_VILLAGES)
-    s4 = situation(data, day(4))
-    assert "v-a" in [v["id"] for v in s4["at_risk_villages"]]
     # Day 5: crest confirmed at Kalabagh (km 200), not yet at Chashma (km 300).
-    # A (km 250) has eta_high = Kalabagh's day-4 peak + half the 30 h
-    # Kalabagh-Chashma lag_max = day 4 + 15 h, which is behind as_of: the wave
-    # has passed A even though Chashma has not confirmed it.
+    # A (km 250): eta = day 4 + 12 h, and the 12 h minimum half-width puts
+    # eta_high at day 5 exactly, so A is still inside its window.
     s5 = situation(data, day(5))
-    assert "v-a" not in [v["id"] for v in s5["at_risk_villages"]]
-    assert s5["district_eta_hours"]["X"] == s5["district_eta_hours"]["Y"]
+    a = next(v for v in s5["at_risk_villages"] if v["id"] == "v-a")
+    assert a["hours_to_arrival"] == -12.0
+    assert a["eta_high"] == t(5)
+    # Day 6: Chashma confirms its crest, so A has been passed.
+    s6 = situation(data, day(6))
+    assert "v-a" not in [v["id"] for v in s6["at_risk_villages"]]
+    assert s6["district_eta_hours"]["X"] == s6["district_eta_hours"]["Y"]
+
+
+def test_village_window_closing_drops_it_before_confirmation():
+    # Chashma never confirms wave 1 (flat at its day-5 value): A (km 250)
+    # stays listed only until its eta_high (day 5), not until Chashma.
+    data = make_data(villages=FAKE_VILLAGES)
+    chashma = data.readings["Chashma"]
+    hold = next(r.outflow for r in chashma if r.time == day(5))
+    data.readings["Chashma"] = [
+        Reading(r.time, r.inflow, hold) if day(5) <= r.time <= day(8) else r
+        for r in chashma
+    ]
+    s5 = situation(data, day(5))
+    assert "v-a" in [v["id"] for v in s5["at_risk_villages"]]
+    s6 = situation(data, day(6))
+    assert "v-a" not in [v["id"] for v in s6["at_risk_villages"]]
+    assert all(v["eta_high"] >= s6["as_of"] for v in s6["at_risk_villages"])
+
+
+def test_minimum_half_width_on_zero_width_reaches():
+    data = make_data(villages=FAKE_VILLAGES)
+    for r in data.reaches:
+        r["lag_min_h"] = r["lag_max_h"] = r["lag_median_h"]
+    s = situation(data, day(4))
+    rows = _etas(s, "indus-2022-w1")
+    assert rows
+    for e in rows.values():
+        eta = routing.parse_time(e["eta"])
+        assert e["eta_low"] == fmt_time(eta - timedelta(hours=12)), e
+        assert e["eta_high"] == fmt_time(eta + timedelta(hours=12)), e
+    for v in s["at_risk_villages"]:
+        eta = routing.parse_time(v["eta"])
+        assert routing.parse_time(v["eta_low"]) <= eta - timedelta(hours=12), v
+        assert routing.parse_time(v["eta_high"]) >= eta + timedelta(hours=12), v
+    for row in routing.scorecard(data):
+        eta = routing.parse_time(row["predicted_time"])
+        assert row["predicted_low"] == fmt_time(eta - timedelta(hours=12)), row
+        assert row["predicted_high"] == fmt_time(eta + timedelta(hours=12)), row
+    assert "+/-12 h" in s["data_provenance"]["etas"]
 
 
 def test_no_village_listed_after_its_window_closes():
@@ -493,8 +534,12 @@ def test_replay_and_scorecard():
         order = NAMES.index(r["barrage"]) + 1
         assert r["error_hours"] == 0.0, r
         up_peak = day(peak_day(order - 1, int(r["wave_id"][-1])))
-        assert r["predicted_low"] == fmt_time(up_peak + timedelta(hours=LAG_MIN[order - 2]))
-        assert r["predicted_high"] == fmt_time(up_peak + timedelta(hours=LAG_MAX[order - 2]))
+        eta = up_peak + timedelta(hours=LAG_MEDIAN[order - 2])
+        half = timedelta(hours=routing.MIN_HALF_WIDTH_H)
+        low = min(up_peak + timedelta(hours=LAG_MIN[order - 2]), eta - half)
+        high = max(up_peak + timedelta(hours=LAG_MAX[order - 2]), eta + half)
+        assert r["predicted_low"] == fmt_time(low)
+        assert r["predicted_high"] == fmt_time(high)
 
 
 def test_scorecard_uses_only_upstream_data_before_the_peak():
@@ -607,6 +652,8 @@ if __name__ == "__main__":
         test_village_ordering_and_district_minimum,
         test_village_drops_off_once_the_wave_passes_it,
         test_no_village_listed_after_its_window_closes,
+        test_village_window_closing_drops_it_before_confirmation,
+        test_minimum_half_width_on_zero_width_reaches,
         test_villages_and_barrages_on_the_centreline_scale,
         test_missing_villages_file_is_reported,
         test_as_of_outside_data_raises,
