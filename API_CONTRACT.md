@@ -202,7 +202,10 @@ Request: JSON body
       // Optional (breakdown mode only): total tiles incl. unclassified; coverage info, never scored
       "tile_count": 0,
       // Optional (single-tile mode only): /classify-damage confidence
-      "confidence": 0.0
+      "confidence": 0.0,
+      // Optional signals: one key per registered signal's request_field
+      // (none registered yet). Omit or send null when the district has no value.
+      "<request_field>": "any"
     }
   ]
 }
@@ -220,23 +223,33 @@ Response:
       "damage_source": "damage_breakdown|overall_damage_level",
       "priority_score": 0.0,
       "low_coverage_warning": "low coverage — based on 1 tile" | null,
-      "damage_breakdown": { ... }, "overall_damage_level": "string", "confidence": 0.0
+      "damage_breakdown": { ... }, "overall_damage_level": "string", "confidence": 0.0,
+      // Active signals only ({} when none are active). score is null when a
+      // "skip" signal has no value for this district.
+      "signals": { "<name>": { "value": "any", "score": 0.0 } }
     }
   ],
   "scoring": {
-    "formula": "priority = (risk_weight * risk_score + damage_weight * damage_score) / (risk_weight + damage_weight)",
+    "formula": "priority = (risk_weight * risk_score + damage_weight * damage_score) / (risk_weight + damage_weight)",  // extended when signals are active
     "risk_weight": 0.4, "damage_weight": 0.6,
     "risk_level_scores": { "low": 0.0, "medium": 0.5, "high": 1.0, "unknown": 0.0 },
     "damage_severity_scores": { "none": 0.0, "partial": 0.5, "destroyed": 1.0 },
     "tie_breaker": "equal scores ordered by district name (ascending)",
     "photo_count_note": "damage_score is a per-tile average, never a sum",
-    "low_coverage_note": "transparency signal only; never a scoring input"
+    "low_coverage_note": "transparency signal only; never a scoring input",
+    // Every registered signal, active or not ([] while none are registered)
+    "signals": [
+      { "name": "string", "request_field": "string", "weight": 0.0,
+        "missing_policy": "zero|skip", "curve": "string", "note": "string",
+        "active": true }
+    ]
   }
 }
 
 Errors: unified structure { "error": { "code": "string", "message": "string" } }
 with HTTP 422 for domain violations (duplicate district, conflicting damage
-fields); schema-level problems use FastAPI's standard 422 detail format.
+fields, `invalid_signal_value` when a signal rejects a value); schema-level
+problems use FastAPI's standard 422 detail format.
 
 Scoring notes:
 - damage_score is normalized per classified tile, so the number of assessed
@@ -250,3 +263,19 @@ Scoring notes:
   rank-1 district assessed from one photo deserves more skepticism than
   one assessed from 100 tiles -- and is NOT a scoring input: it never
   affects priority_score, rank order, or any other computed value.
+- Optional signals (aid-priority/scoring.py OPTIONAL_SIGNALS) let features
+  such as River Flood Tracker and Ground Photo Intake add a term without
+  changing the formula's shape:
+      priority = (risk_weight * risk_score + damage_weight * damage_score
+                  + sum_k weight_k * score_k)
+                 / (risk_weight + damage_weight + sum_k weight_k)
+  Each signal maps its request_field value to a score in [0, 1] and takes
+  its weight from its own env var (validated like PRIORITY_RISK_WEIGHT).
+  A signal is ACTIVE for a request only when at least one district carries
+  a non-null value for its field; a request without any signal fields is
+  scored exactly as before. When a signal is active, a district without a
+  value follows the signal's missing_policy: "zero" scores 0 and the weight
+  still counts (e.g. no flood ETA = no water coming); "skip" removes the
+  weight from both sums for that district, so it keeps exactly its
+  no-signal score (e.g. no ground photos = no evidence, not zero damage).
+  Unregistered extra keys on a district are accepted and ignored.
