@@ -18,15 +18,29 @@ import './flood.css'
 
 // CARTO Dark Matter. {r} is Leaflet's retina placeholder (@2x or empty).
 // Since 25 Sep 2026 the raster endpoint requires a free key (VITE_CARTO_API_KEY).
-// Without it, CARTO serves an "API key required" tile.
+// Without a key CARTO serves an "API key required" tile, so the map falls back
+// to OSM standard tiles, darkened in flood.css (.is-osm-fallback).
 const CARTO_DARK_BASE = 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+const OSM_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
 
-function cartoTileUrl() {
+function basemap() {
   const key = String(import.meta.env.VITE_CARTO_API_KEY || '').trim()
-  if (!key) return CARTO_DARK_BASE
-  return `${CARTO_DARK_BASE}?key=${encodeURIComponent(key)}`
+  if (!key) {
+    return {
+      url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+      attribution: OSM_ATTRIBUTION,
+      subdomains: 'abc',
+      fallback: true,
+    }
+  }
+  return {
+    url: `${CARTO_DARK_BASE}?key=${encodeURIComponent(key)}`,
+    attribution: `${OSM_ATTRIBUTION} &copy; <a href="https://carto.com/attributions">CARTO</a>`,
+    subdomains: 'abcd',
+    fallback: false,
+  }
 }
-const CARTO_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+const BASEMAP = basemap()
 
 // Outflow is drawn as marker area, not as a second colour. 100,000 cusecs sits
 // under the lowest Low Flood threshold; 800,000 is the upper Indus exceptional
@@ -141,7 +155,7 @@ export default function RiverMap({ situation, selectedVillageId, onSelectVillage
   }), [])
 
   return (
-    <div className="flood-map relative h-full min-h-[460px] overflow-hidden rounded-xl border border-[#1b4a33]/80">
+    <div className={`flood-map${BASEMAP.fallback ? ' is-osm-fallback' : ''} relative h-full min-h-[460px] overflow-hidden rounded-xl border border-[#1b4a33]/80`}>
       <MapContainer
         center={[29.7, 70.4]}
         zoom={6}
@@ -150,9 +164,9 @@ export default function RiverMap({ situation, selectedVillageId, onSelectVillage
         zoomControl
       >
         <TileLayer
-          attribution={CARTO_ATTRIBUTION}
-          url={cartoTileUrl()}
-          subdomains="abcd"
+          attribution={BASEMAP.attribution}
+          url={BASEMAP.url}
+          subdomains={BASEMAP.subdomains}
           maxZoom={19}
         />
         <MapFrame positions={positions} />

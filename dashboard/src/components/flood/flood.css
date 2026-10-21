@@ -15,6 +15,12 @@
   max-height: none !important;
 }
 
+/* OSM standard tiles (no CARTO key), darkened. Only the tile pane: the river,
+   markers and popups keep their colours. */
+.flood-map.is-osm-fallback .leaflet-tile-pane {
+  filter: invert(1) hue-rotate(180deg) brightness(0.85) contrast(0.9);
+}
+
 .flood-map .leaflet-control-attribution {
   background: rgba(7, 26, 14, 0.88) !important;
   color: #9dbdac !important;
