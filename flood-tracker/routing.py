@@ -112,6 +112,16 @@ small blip at one barrage, a reservoir release) and is dropped.
 
 Village ETAs
 ------------
+Villages and barrages must sit on one kilometre scale. villages.json
+river_km is measured along the indus.geojson centreline (1,468 km from
+Tarbela to Kotri), while barrages.json river_km is the FFC travel-table
+distance (Kotri 1,393). The two differ by up to ~140 km, enough to put a
+Kashmore village (between Guddu and Sukkur) below Sukkur. So each barrage's
+km here is its coordinate projected onto the same centreline
+(barrage_positions); barrages.json river_km is used only when the
+centreline (or its per-vertex river_km) is missing, and data_provenance
+says so.
+
 For each live wave, the arrival time at each barrage at or below L is known
 (L: its observed peak_time, low = high = peak_time; below L: eta / eta_low /
 eta_high). A village at river_km between barrages a and b (a.km <= km <
@@ -155,6 +165,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -222,6 +233,7 @@ class FloodData:
     villages: Optional[list] = None         # villages.json, or None if absent
     river_coords: Optional[list] = None     # [[lat, lon], ...] or None
     sources: dict = field(default_factory=dict)  # file name -> present?
+    river_km_line: Optional[list] = None    # km of each river_coords vertex, or None
 
 
 # ---------------------------------------------------------------------------
@@ -479,16 +491,64 @@ def _lerp(t0: datetime, t1: datetime, frac: float) -> datetime:
     return t0 + (t1 - t0) * frac
 
 
+def _project_km(coords: list, kms: list, lat: float, lon: float) -> float:
+    """km of the closest point on the polyline to (lat, lon).
+
+    Local equirectangular plane (lon scaled by cos(lat)); at these distances
+    the error is far below the daily-sampling uncertainty.
+    """
+    scale = math.cos(math.radians(lat))
+    px, py = lon * scale, lat
+    best = None
+    for i in range(len(coords) - 1):
+        ax, ay = coords[i][1] * scale, coords[i][0]
+        bx, by = coords[i + 1][1] * scale, coords[i + 1][0]
+        dx, dy = bx - ax, by - ay
+        seg = dx * dx + dy * dy
+        t = 0.0 if seg == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / seg))
+        d = (ax + t * dx - px) ** 2 + (ay + t * dy - py) ** 2
+        if best is None or d < best[0]:
+            best = (d, kms[i] + t * (kms[i + 1] - kms[i]))
+    return best[1]
+
+
+def barrage_positions(data: FloodData) -> tuple:
+    """({order: km on the villages' scale}, on_centreline).
+
+    Barrages projected onto the indus.geojson centreline, which is where
+    villages.json river_km is measured. Falls back to barrages.json river_km
+    (FFC travel-table km) when the centreline or its per-vertex km is
+    missing, or the projection does not keep the barrages in river order.
+    """
+    ffc = {b["order"]: float(b["river_km"]) for b in data.barrages}
+    coords, kms = data.river_coords, data.river_km_line
+    if not coords or not kms or len(coords) != len(kms) or len(coords) < 2:
+        return ffc, False
+    line = {
+        b["order"]: _project_km(coords, kms, float(b["lat"]), float(b["lon"]))
+        for b in data.barrages
+    }
+    ordered = [line[o] for o in sorted(line)]
+    if any(a >= b for a, b in zip(ordered, ordered[1:])):
+        return ffc, False
+    return line, True
+
+
 def village_etas(
     villages: list,
     barrages: list,
     reaches: list,
     waves: list,
     as_of: datetime,
+    positions: Optional[dict] = None,
 ) -> list:
-    """At-risk villages (contract shape), sorted by eta then population desc."""
+    """At-risk villages (contract shape), sorted by eta then population desc.
+
+    positions: {barrage order: km on the villages' river_km scale}; defaults
+    to barrages.json river_km.
+    """
     n = len(barrages)
-    km = {b["order"]: float(b["river_km"]) for b in barrages}
+    km = positions or {b["order"]: float(b["river_km"]) for b in barrages}
     last_reach = reaches[-1]
     last_len = km[n] - km[n - 1]
 
@@ -712,12 +772,25 @@ def situation(data: FloodData, as_of: datetime, mode: str = "replay") -> dict:
         )
         population_note = "no villages file, so no population figures"
     else:
-        at_risk = village_etas(data.villages, data.barrages, data.reaches, live, as_of)
+        positions, on_line = barrage_positions(data)
+        at_risk = village_etas(data.villages, data.barrages, data.reaches, live, as_of,
+                               positions)
         villages_note = (
             f"villages.json ({len(data.villages)} villages). Village ETAs are "
             "modelled: barrage ETAs interpolated by river_km between the two "
             "barrages around each village"
         )
+        if on_line:
+            villages_note += (
+                "; barrages placed on the indus.geojson centreline that "
+                "village river_km is measured on"
+            )
+        else:
+            villages_note += (
+                "; indus.geojson river_km not available, so barrages use the "
+                "FFC travel-table river_km, which can differ from the village "
+                "centreline km by up to ~140 km"
+            )
         pop_sources = sorted({
             str(v.get("population_source", "")) for v in data.villages
             if v.get("population_source")
@@ -849,6 +922,17 @@ def _river_coords(geojson: dict) -> list:
     return [[c[1], c[0]] for c in coords]   # GeoJSON [lon, lat] -> [lat, lon]
 
 
+def _river_km_line(geojson: dict, n_coords: int) -> Optional[list]:
+    """properties.river_km per vertex of a single-LineString centreline."""
+    feats = geojson.get("features", [geojson]) if isinstance(geojson, dict) else []
+    if len(feats) != 1:
+        return None
+    kms = (feats[0].get("properties") or {}).get("river_km")
+    if not isinstance(kms, list) or len(kms) != n_coords:
+        return None
+    return [float(k) for k in kms]
+
+
 def load_data(
     barrages_path: Path,
     reaches_path: Path,
@@ -890,9 +974,11 @@ def load_data(
     if villages_path is not None and Path(villages_path).exists():
         villages = json.loads(Path(villages_path).read_text(encoding="utf-8"))
 
-    river = None
+    river = river_km_line = None
     if geojson_path is not None and Path(geojson_path).exists():
-        river = _river_coords(json.loads(Path(geojson_path).read_text(encoding="utf-8")))
+        geo = json.loads(Path(geojson_path).read_text(encoding="utf-8"))
+        river = _river_coords(geo)
+        river_km_line = _river_km_line(geo, len(river))
 
     return FloodData(
         barrages=barrages,
@@ -900,6 +986,7 @@ def load_data(
         readings=readings,
         villages=villages,
         river_coords=river,
+        river_km_line=river_km_line,
         sources={
             "barrages.json": True,
             "reaches.json": True,

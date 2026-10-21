@@ -427,6 +427,26 @@ def test_no_village_listed_after_its_window_closes():
         assert s["district_eta_hours"] == expected, s["as_of"]
 
 
+def test_villages_and_barrages_on_the_centreline_scale():
+    # Villages measured on a centreline twice as long as the barrage table:
+    # barrages are projected onto that line, so a village at line-km 500
+    # (halfway Kalabagh 400 -> Chashma 600) times like table-km 250.
+    data = make_data(villages=[dict(FAKE_VILLAGES[0], river_km=500)])
+    data.river_coords = [[b["lat"], b["lon"]] for b in data.barrages]
+    data.river_km_line = [2.0 * b["river_km"] for b in data.barrages]
+    positions, on_line = routing.barrage_positions(data)
+    assert on_line and positions == {o: 2.0 * k for o, k in enumerate(RIVER_KM, start=1)}
+    s = situation(data, day(4))
+    assert s["at_risk_villages"][0]["eta"] == "2022-08-05T18:00"
+    assert "centreline" in s["data_provenance"]["villages"]
+
+    # Without per-vertex km the table km are used, and provenance says so.
+    data.river_km_line = None
+    assert routing.barrage_positions(data) == (
+        {o: float(k) for o, k in enumerate(RIVER_KM, start=1)}, False)
+    assert "FFC travel-table" in situation(data, day(4))["data_provenance"]["villages"]
+
+
 def test_missing_villages_file_is_reported():
     s = situation(make_data(villages=None), day(4))
     assert s["at_risk_villages"] == [] and s["district_eta_hours"] == {}
@@ -545,9 +565,28 @@ def test_real_31_aug_lists_villages_ahead_of_the_second_wave():
     villages = s["at_risk_villages"]
     assert villages[0]["district"] in ("Muzaffargarh", "Rajanpur"), villages[0]
     assert all(v["eta_high"] >= s["as_of"] for v in villages)
-    assert all(h > 0 for h in s["district_eta_hours"].values()), s["district_eta_hours"]
+    # Negative only inside a village's window (crest due now), never days stale.
+    assert min(s["district_eta_hours"].values()) > -12, s["district_eta_hours"]
     first_two = sorted(s["district_eta_hours"], key=s["district_eta_hours"].get)[:2]
     assert set(first_two) == {"Muzaffargarh", "Rajanpur"}, s["district_eta_hours"]
+
+
+def test_real_villages_sit_between_their_barrages():
+    # Kashmore lies around Guddu and above Sukkur, Matiari and Hyderabad
+    # between Sukkur and Kotri: their ETAs must fall inside those bounds.
+    data = _real_data()
+    if data is None:
+        return
+    positions, on_line = routing.barrage_positions(data)
+    assert on_line, "indus.geojson should carry per-vertex river_km"
+    s = situation(data, routing.parse_time("2022-08-31T06:00"))
+    est = {e["barrage"]: e["eta"] for e in s["etas"] if e["status"] == "estimated"
+           and e["from_barrage"] == "Taunsa"}
+    for v in s["at_risk_villages"]:
+        if v["district"] == "Kashmore":
+            assert v["eta"] <= est["Sukkur"], v
+        if v["district"] in ("Matiari", "Hyderabad"):
+            assert est["Sukkur"] <= v["eta"] <= est["Kotri"], v
 
 
 # ---------------------------------------------------------------------------
@@ -568,6 +607,7 @@ if __name__ == "__main__":
         test_village_ordering_and_district_minimum,
         test_village_drops_off_once_the_wave_passes_it,
         test_no_village_listed_after_its_window_closes,
+        test_villages_and_barrages_on_the_centreline_scale,
         test_missing_villages_file_is_reported,
         test_as_of_outside_data_raises,
         test_situation_matches_contract,
@@ -575,6 +615,7 @@ if __name__ == "__main__":
         test_scorecard_uses_only_upstream_data_before_the_peak,
         test_real_flows_2022,
         test_real_31_aug_lists_villages_ahead_of_the_second_wave,
+        test_real_villages_sit_between_their_barrages,
     ]
 
     passed, failed = 0, 0
