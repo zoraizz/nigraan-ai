@@ -24,6 +24,12 @@ Environment variables (loaded from aid-priority/.env, see .env.example):
     PRIORITY_DAMAGE_WEIGHT  -- weight of Damage Checker severity (default 0.6)
     LOW_COVERAGE_TILE_THRESHOLD -- flag districts assessed on fewer tiles
                        (transparency only; never affects the score)
+    <signal weight_env>     -- one weight per registered optional signal
+                       (scoring.OPTIONAL_SIGNALS), validated like
+                       PRIORITY_RISK_WEIGHT
+    PRIORITY_FLOOD_WEIGHT -- River Flood Tracker hours-to-peak weight
+                       (default 0.3). Read once at import from the flood
+                       signal registered in scoring.py.
 
 Error responses use a unified structure:
     { "error": { "code": "<machine-readable>", "message": "<human-readable>" } }
@@ -35,13 +41,13 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # Load .env from the aid-priority directory (same pattern as risk-flag).
 load_dotenv(Path(__file__).parent / ".env")
@@ -51,11 +57,17 @@ from scoring import (  # noqa: E402
     DEFAULT_DAMAGE_WEIGHT,
     DEFAULT_RISK_WEIGHT,
     HAZARD_TYPES,
+    OPTIONAL_SIGNALS,
     RISK_LEVEL_SCORES,
+    SignalValueError,
+    active_signals,
+    formula_text,
     low_coverage_warning,
     rank_districts,
     score_breakdown,
     score_single_tile,
+    signal_weight,
+    validate_signal_spec,
 )
 
 # ---------------------------------------------------------------------------
@@ -118,6 +130,20 @@ if RISK_WEIGHT + DAMAGE_WEIGHT <= 0:
     DAMAGE_WEIGHT = DEFAULT_DAMAGE_WEIGHT
 
 
+def _load_signal_weights(registry: dict) -> dict:
+    """Weight per optional signal from its weight_env (same validation as
+    PRIORITY_RISK_WEIGHT). Signals registered after startup fall back to
+    their default_weight inside scoring.rank_districts."""
+    weights = {}
+    for name, spec in registry.items():
+        validate_signal_spec(name, spec)
+        weights[name] = _load_weight(spec["weight_env"], spec["default_weight"])
+    return weights
+
+
+SIGNAL_WEIGHTS = _load_signal_weights(OPTIONAL_SIGNALS)
+
+
 def _load_int(name: str, default: int) -> int:
     raw = os.environ.get(name)
     if raw is None:
@@ -160,6 +186,10 @@ class DamageBreakdown(BaseModel):
 class DistrictAssessment(BaseModel):
     """One district's inputs, sourced from Risk Flag + Damage Checker."""
 
+    # Declared optional-signal fields are validated below. Unregistered
+    # extra keys are accepted and never scored.
+    model_config = ConfigDict(extra="allow")
+
     district: str = Field(..., min_length=1)
     hazard_type: str
     risk_level: str
@@ -174,6 +204,11 @@ class DistrictAssessment(BaseModel):
     # that failed classification. Must be >= classified tile count.
     # NEVER enters the score -- echoed for situational awareness only.
     tile_count: Optional[int] = Field(None, ge=1)
+
+    # --- flood signal (River Flood Tracker) ---
+    # Hours until the river flood peak reaches the district (estimate, not
+    # a gauge reading). Null or omitted means no ETA.
+    flood_eta_hours: Optional[float] = Field(None, ge=0)
 
     @field_validator("district")
     @classmethod
@@ -266,6 +301,11 @@ class RankPriorityRequest(BaseModel):
 # ---------------------------------------------------------------------------
 # Response models
 # ---------------------------------------------------------------------------
+class SignalValue(BaseModel):
+    value: Any = None
+    score: Optional[float] = None
+
+
 class RankedDistrict(BaseModel):
     rank: int
     district: str
@@ -285,6 +325,19 @@ class RankedDistrict(BaseModel):
     # fewer tiles than LOW_COVERAGE_TILE_THRESHOLD. INFORMATIONAL ONLY --
     # never a scoring input (see scoring.low_coverage_warning).
     low_coverage_warning: Optional[str] = None
+    # Active optional signals only: raw request value and its [0, 1] score
+    # (score is null when a "skip" signal is missing for this district).
+    signals: dict[str, SignalValue] = Field(default_factory=dict)
+
+
+class SignalInfo(BaseModel):
+    name: str
+    request_field: str
+    weight: float
+    missing_policy: str
+    curve: str
+    note: str
+    active: bool
 
 
 class ScoringInfo(BaseModel):
@@ -296,6 +349,7 @@ class ScoringInfo(BaseModel):
     tie_breaker: str
     photo_count_note: str
     low_coverage_note: str
+    signals: list[SignalInfo] = Field(default_factory=list)
 
 
 class RankPriorityResponse(BaseModel):
@@ -382,9 +436,22 @@ def rank_priority(req: RankPriorityRequest):
                 "confidence": d.confidence,
             })
 
-    ranked = rank_districts(
-        entries, risk_weight=RISK_WEIGHT, damage_weight=DAMAGE_WEIGHT
-    )
+    for d, entry in zip(req.districts, entries):
+        for spec in OPTIONAL_SIGNALS.values():
+            value = _signal_value(d, spec["request_field"])
+            if value is not None:
+                entry[spec["request_field"]] = value
+
+    active = active_signals(entries)
+    try:
+        ranked = rank_districts(
+            entries,
+            risk_weight=RISK_WEIGHT,
+            damage_weight=DAMAGE_WEIGHT,
+            signal_weights=SIGNAL_WEIGHTS,
+        )
+    except SignalValueError as exc:
+        return _error(422, "invalid_signal_value", str(exc))
 
     logger.info(
         "Ranked %d district(s); top: %s (%.4f)",
@@ -396,10 +463,7 @@ def rank_priority(req: RankPriorityRequest):
     return RankPriorityResponse(
         ranked_districts=[RankedDistrict(**r) for r in ranked],
         scoring=ScoringInfo(
-            formula=(
-                "priority = (risk_weight * risk_score + damage_weight * "
-                "damage_score) / (risk_weight + damage_weight)"
-            ),
+            formula=formula_text(active),
             risk_weight=RISK_WEIGHT,
             damage_weight=DAMAGE_WEIGHT,
             risk_level_scores=RISK_LEVEL_SCORES,
@@ -417,8 +481,28 @@ def rank_priority(req: RankPriorityRequest):
                 "transparency signal for response teams only and never "
                 "affects priority_score or rank order"
             ),
+            signals=[
+                SignalInfo(
+                    name=name,
+                    request_field=spec["request_field"],
+                    weight=signal_weight(name, spec, SIGNAL_WEIGHTS),
+                    missing_policy=spec["missing_policy"],
+                    curve=spec["curve"],
+                    note=spec["note"],
+                    active=name in active,
+                )
+                for name, spec in OPTIONAL_SIGNALS.items()
+            ],
         ),
     )
+
+
+def _signal_value(d: DistrictAssessment, field: str):
+    """A signal's raw value from a district, whether the field is declared
+    on the model or arrived as an extra key; None when absent."""
+    if field in type(d).model_fields:
+        return getattr(d, field)
+    return (d.model_extra or {}).get(field)
 
 
 @app.get("/health")
@@ -428,4 +512,8 @@ def health():
         "risk_weight": RISK_WEIGHT,
         "damage_weight": DAMAGE_WEIGHT,
         "low_coverage_tile_threshold": LOW_COVERAGE_TILE_THRESHOLD,
+        "signal_weights": {
+            name: signal_weight(name, spec, SIGNAL_WEIGHTS)
+            for name, spec in OPTIONAL_SIGNALS.items()
+        },
     }

@@ -190,6 +190,433 @@ def test_tie_break_is_deterministic():
 
 
 # ---------------------------------------------------------------------------
+# Optional signal registry (dummy signals in a private registry)
+# ---------------------------------------------------------------------------
+
+def _dummy_registry():
+    """A "zero" signal (like a flood ETA) and a "skip" signal (like ground
+    photos), each mapping a raw value in [0, 1] to itself."""
+    from scoring import register_signal
+
+    registry = {}
+    register_signal(
+        "dummy_zero", request_field="dummy_zero_value",
+        weight_env="PRIORITY_DUMMY_ZERO_WEIGHT", default_weight=0.5,
+        score_fn=lambda v: float(v), missing_policy="zero",
+        curve="identity", note="test signal; missing scores 0",
+        registry=registry,
+    )
+    register_signal(
+        "dummy_skip", request_field="dummy_skip_value",
+        weight_env="PRIORITY_DUMMY_SKIP_WEIGHT", default_weight=0.3,
+        score_fn=lambda v: float(v), missing_policy="skip",
+        curve="identity", note="test signal; missing is no evidence",
+        registry=registry,
+    )
+    return registry
+
+
+def test_signal_spec_validation():
+    from scoring import register_signal
+
+    registry = _dummy_registry()
+    bad = dict(request_field="x", weight_env="X", default_weight=0.1,
+               score_fn=float, curve="c", note="n")
+    for kwargs in (
+        dict(bad, missing_policy="ignore"),           # unknown policy
+        dict(bad, missing_policy="zero", default_weight=-1),
+        dict(bad, missing_policy="zero", score_fn="nope"),
+        dict(bad, missing_policy="zero", request_field="dummy_zero_value"),
+    ):
+        try:
+            register_signal("bad", registry=registry, **kwargs)
+        except ValueError:
+            continue
+        raise AssertionError(f"register_signal accepted {kwargs}")
+    try:
+        register_signal("dummy_zero", registry=registry, **dict(bad, missing_policy="zero"))
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("duplicate signal name accepted")
+
+
+def test_signal_inactive_when_no_district_carries_field():
+    """Registered but absent signals change nothing: identical scores and
+    ranks to the base formula, and no per-district signal entries."""
+    from scoring import active_signals
+
+    registry = _dummy_registry()
+    entries = [
+        _entry("Sukkur", "flood", "low", 0.10),
+        _entry("Swat", "flood", "high", 0.70),
+        _entry("Dadu", "flood", "medium", 0.35, dummy_zero_value=None),
+    ]
+    assert active_signals(entries, registry) == []
+    base = rank_districts(entries, signals={})
+    with_registry = rank_districts(entries, signals=registry)
+    assert [(r["district"], r["priority_score"], r["rank"]) for r in base] == [
+        (r["district"], r["priority_score"], r["rank"]) for r in with_registry
+    ]
+    assert all(r["signals"] == {} for r in with_registry)
+
+
+def test_signal_activation_is_per_signal():
+    from scoring import active_signals
+
+    registry = _dummy_registry()
+    entries = [
+        _entry("A", "flood", "high", 0.5, dummy_skip_value=0.8),
+        _entry("B", "flood", "low", 0.2),
+    ]
+    assert active_signals(entries, registry) == ["dummy_skip"]
+    ranked = {r["district"]: r for r in rank_districts(entries, signals=registry)}
+    assert set(ranked["A"]["signals"]) == {"dummy_skip"}
+    assert ranked["A"]["signals"]["dummy_skip"] == {"value": 0.8, "score": 0.8}
+    assert ranked["B"]["signals"]["dummy_skip"] == {"value": None, "score": None}
+
+
+def test_signal_normalisation_hand_computed():
+    """priority = (Wr*r + Wd*d + sum Wk*s_k) / (Wr + Wd + sum Wk), and all
+    maxed-out inputs still score exactly 1.0 for any weights."""
+    registry = _dummy_registry()
+    weights = {"dummy_zero": 0.5, "dummy_skip": 0.3}
+    entries = [
+        _entry("Hand", "flood", "medium", 0.4,
+               dummy_zero_value=0.9, dummy_skip_value=0.2),
+        _entry("Max", "flood", "high", 1.0,
+               dummy_zero_value=1.0, dummy_skip_value=1.0),
+    ]
+    ranked = {r["district"]: r for r in rank_districts(
+        entries, signal_weights=weights, signals=registry)}
+    expected = (0.4 * 0.5 + 0.6 * 0.4 + 0.5 * 0.9 + 0.3 * 0.2) / (0.4 + 0.6 + 0.5 + 0.3)
+    assert ranked["Hand"]["priority_score"] == round(expected, 4)
+    assert ranked["Max"]["priority_score"] == 1.0
+
+    # Large weights stay in range thanks to the denominator.
+    big = rank_districts(entries, risk_weight=3, damage_weight=7,
+                         signal_weights={"dummy_zero": 50, "dummy_skip": 20},
+                         signals=registry)
+    assert all(0.0 <= r["priority_score"] <= 1.0 for r in big)
+
+    # Unset weights fall back to default_weight.
+    defaulted = {r["district"]: r for r in rank_districts(entries, signals=registry)}
+    assert defaulted["Hand"]["priority_score"] == round(expected, 4)
+
+
+def test_zero_signal_lowers_district_missing_value():
+    """"zero": a district without the value scores 0 for the signal and the
+    weight still counts, so its priority drops below the base formula."""
+    registry = {"dummy_zero": _dummy_registry()["dummy_zero"]}
+    entries = [
+        _entry("HasEta", "flood", "low", 0.3, dummy_zero_value=1.0),
+        _entry("NoEta", "flood", "high", 0.6),
+    ]
+    base = {r["district"]: r for r in rank_districts(entries, signals={})}
+    with_sig = {r["district"]: r for r in rank_districts(entries, signals=registry)}
+
+    assert with_sig["NoEta"]["priority_score"] < base["NoEta"]["priority_score"]
+    expected = (0.4 * 1.0 + 0.6 * 0.6 + 0.5 * 0.0) / (0.4 + 0.6 + 0.5)
+    assert with_sig["NoEta"]["priority_score"] == round(expected, 4)
+    assert with_sig["NoEta"]["signals"]["dummy_zero"] == {"value": None, "score": 0.0}
+
+
+def test_skip_signal_leaves_missing_district_unchanged():
+    """"skip": a district without the value keeps EXACTLY the score it
+    would have without the signal (weight leaves both sums)."""
+    registry = {"dummy_skip": _dummy_registry()["dummy_skip"]}
+    entries = [
+        _entry("HasPhotos", "flood", "low", 0.3, dummy_skip_value=1.0),
+        _entry("NoPhotos", "landslide", "high", 0.45),
+    ]
+    base = {r["district"]: r for r in rank_districts(entries, signals={})}
+    with_sig = {r["district"]: r for r in rank_districts(entries, signals=registry)}
+
+    assert with_sig["NoPhotos"]["priority_score"] == base["NoPhotos"]["priority_score"]
+    assert priority_score("high", 0.45) == priority_score("high", 0.45, signal_terms=())
+    # The district WITH the value does move.
+    assert with_sig["HasPhotos"]["priority_score"] != base["HasPhotos"]["priority_score"]
+
+
+def test_signal_invalid_value_and_bad_score_fn():
+    from scoring import SignalValueError, register_signal
+
+    registry = _dummy_registry()
+    try:
+        rank_districts([_entry("A", "flood", "low", 0.1, dummy_zero_value="soon")],
+                       signals=registry)
+    except SignalValueError as exc:
+        assert "'A'" in str(exc) and "dummy_zero_value" in str(exc)
+    else:
+        raise AssertionError("non-numeric signal value accepted")
+
+    out_of_range = {}
+    register_signal("broken", request_field="broken_value", weight_env="X",
+                    default_weight=1.0, score_fn=lambda v: 2.0,
+                    missing_policy="zero", curve="c", note="n",
+                    registry=out_of_range)
+    try:
+        rank_districts([_entry("A", "flood", "low", 0.1, broken_value=1)],
+                       signals=out_of_range)
+    except SignalValueError:
+        raise AssertionError("a buggy score_fn is a server bug, not a caller error")
+    except ValueError:
+        pass
+    else:
+        raise AssertionError("score outside [0, 1] accepted")
+
+
+def test_endpoint_signals_in_process():
+    """main.rank_priority called directly (no server) with a dummy signal
+    registered globally: response blocks, weights and 422 on bad values.
+    Real registered signals are set aside for the test and restored."""
+    import scoring
+    import main
+
+    saved = dict(scoring.OPTIONAL_SIGNALS)
+    scoring.OPTIONAL_SIGNALS.clear()
+    try:
+        _run_endpoint_signals_in_process(scoring, main)
+    finally:
+        scoring.OPTIONAL_SIGNALS.clear()
+        scoring.OPTIONAL_SIGNALS.update(saved)
+
+
+def _run_endpoint_signals_in_process(scoring, main):
+
+    payload = [
+        {"district": "Dadu", "hazard_type": "flood", "risk_level": "high",
+         "damage_breakdown": {"none": 5, "partial": 3, "destroyed": 2},
+         "dummy_zero_value": 0.75},
+        {"district": "Swat", "hazard_type": "flood", "risk_level": "medium",
+         "overall_damage_level": "partial", "unrelated_extra": 1},
+    ]
+
+    # No registered signals: extra keys are ignored, response is the base one.
+    body = main.rank_priority(main.RankPriorityRequest(districts=payload))
+    assert body.scoring.signals == []
+    assert all(d.signals == {} for d in body.ranked_districts)
+    assert body.scoring.formula.startswith("priority = (risk_weight * risk_score")
+    base_scores = {d.district: d.priority_score for d in body.ranked_districts}
+
+    scoring.OPTIONAL_SIGNALS.update(_dummy_registry())
+    body = main.rank_priority(main.RankPriorityRequest(districts=payload))
+    by_name = {d.district: d for d in body.ranked_districts}
+    info = {s.name: s for s in body.scoring.signals}
+    assert info["dummy_zero"].active and not info["dummy_skip"].active
+    assert info["dummy_zero"].weight == 0.5
+    assert info["dummy_zero"].curve == "identity"
+    assert set(by_name["Dadu"].signals) == {"dummy_zero"}
+    assert by_name["Dadu"].signals["dummy_zero"].score == 0.75
+    assert by_name["Swat"].signals["dummy_zero"].score == 0.0
+    assert "dummy_zero" in body.scoring.formula
+
+    rw, dw = main.RISK_WEIGHT, main.DAMAGE_WEIGHT
+    dadu_damage = (0.5 * 3 + 1.0 * 2) / 10
+    expected = (rw * 1.0 + dw * dadu_damage + 0.5 * 0.75) / (rw + dw + 0.5)
+    assert by_name["Dadu"].priority_score == round(expected, 4)
+    assert by_name["Swat"].priority_score < base_scores["Swat"]
+
+    bad = [dict(payload[0], dummy_zero_value="soon")]
+    resp = main.rank_priority(main.RankPriorityRequest(districts=bad))
+    assert resp.status_code == 422
+    assert b"invalid_signal_value" in resp.body
+
+
+# ---------------------------------------------------------------------------
+# Flood signal (River Flood Tracker) -- the real OPTIONAL_SIGNALS entry
+# ---------------------------------------------------------------------------
+
+def test_flood_12h_outranks_96h_all_else_equal():
+    """A peak 12 h out is more urgent than one 96 h out when risk, damage
+    and every other input match. 96 h sits on the linear segment:
+    (120 - 96) / 108 = 24/108."""
+    from scoring import flood_urgency_score
+
+    assert flood_urgency_score(12) == 1.0
+    assert abs(flood_urgency_score(96) - (24 / 108)) < 1e-12
+
+    entries = [
+        _entry("Far", "flood", "high", 0.5, flood_eta_hours=96),
+        _entry("Near", "flood", "high", 0.5, flood_eta_hours=12),
+    ]
+    ranked = rank_districts(entries)
+    assert [r["district"] for r in ranked] == ["Near", "Far"]
+    assert ranked[0]["priority_score"] > ranked[1]["priority_score"]
+    assert ranked[0]["signals"]["flood"] == {"value": 12, "score": 1.0}
+    assert ranked[1]["signals"]["flood"]["score"] == round(24 / 108, 4)
+
+    weight = 0.3
+    near = (0.4 * 1.0 + 0.6 * 0.5 + weight * 1.0) / (0.4 + 0.6 + weight)
+    far = (0.4 * 1.0 + 0.6 * 0.5 + weight * (24 / 108)) / (0.4 + 0.6 + weight)
+    assert ranked[0]["priority_score"] == round(near, 4)
+    assert ranked[1]["priority_score"] == round(far, 4)
+
+
+def test_flood_urgency_boundaries_at_12_and_120():
+    """Plateau through 12 h, zero at and beyond 120 h, line strictly between.
+    The line meets both kinks: (120 - 12) / 108 == 1 and (120 - 120) / 108 == 0."""
+    from scoring import SignalValueError, flood_urgency_score
+
+    assert flood_urgency_score(12) == 1.0
+    assert flood_urgency_score(0) == 1.0
+    assert flood_urgency_score(11.9) == 1.0
+    just_over_12 = 12.0 + 1e-6
+    assert abs(flood_urgency_score(just_over_12) - (120.0 - just_over_12) / 108.0) < 1e-12
+    assert flood_urgency_score(just_over_12) < 1.0
+
+    assert flood_urgency_score(120) == 0.0
+    assert flood_urgency_score(120.1) == 0.0
+    assert flood_urgency_score(1000) == 0.0
+    just_under_120 = 119.999
+    assert abs(flood_urgency_score(just_under_120) - (120.0 - just_under_120) / 108.0) < 1e-12
+    assert flood_urgency_score(just_under_120) > 0.0
+    assert flood_urgency_score(None) == 0.0
+    assert abs((120 - 12) / 108 - 1.0) < 1e-12
+
+    ranked = rank_districts([
+        _entry("At120", "flood", "medium", 0.4, flood_eta_hours=120),
+        _entry("At12", "flood", "medium", 0.4, flood_eta_hours=12),
+    ])
+    by_name = {r["district"]: r for r in ranked}
+    assert by_name["At12"]["signals"]["flood"]["score"] == 1.0
+    assert by_name["At120"]["signals"]["flood"]["score"] == 0.0
+    assert by_name["At12"]["rank"] < by_name["At120"]["rank"]
+
+    try:
+        rank_districts([_entry("Bad", "flood", "low", 0.1, flood_eta_hours=-1)])
+    except SignalValueError as exc:
+        assert "flood_eta_hours" in str(exc)
+    else:
+        raise AssertionError("negative flood_eta_hours accepted")
+
+
+def test_flood_request_without_field_is_unchanged():
+    """Omitting flood_eta_hours (or sending null on every district) leaves
+    scores, ranks and the base formula identical to a registry with no
+    signals. The flood entry is listed inactive; it does not enter the math."""
+    from scoring import OPTIONAL_SIGNALS, active_signals, formula_text
+
+    spec = OPTIONAL_SIGNALS["flood"]
+    assert spec["request_field"] == "flood_eta_hours"
+    assert spec["weight_env"] == "PRIORITY_FLOOD_WEIGHT"
+    assert spec["default_weight"] == 0.3
+    assert spec["missing_policy"] == "zero"
+    assert spec["curve"] == "1.0 up to 12 h, falling linearly to 0 at 120 h"
+    assert "River Flood Tracker estimate" in spec["note"]
+
+    entries = [
+        _entry("Sukkur", "flood", "low", 0.10),
+        _entry("Swat", "flood", "high", 0.70),
+        _entry("Dadu", "flood", "medium", 0.35, flood_eta_hours=None),
+    ]
+    base = rank_districts(entries, signals={})
+    with_flood = rank_districts(entries)
+    assert [(r["district"], r["priority_score"], r["rank"]) for r in base] == [
+        (r["district"], r["priority_score"], r["rank"]) for r in with_flood
+    ]
+    assert all(r["signals"] == {} for r in with_flood)
+    assert formula_text([]) == formula_text(active_signals(entries))
+
+    import main
+
+    payload = [
+        {"district": "Dadu", "hazard_type": "flood", "risk_level": "high",
+         "damage_breakdown": {"none": 5, "partial": 3, "destroyed": 2}},
+        {"district": "Swat", "hazard_type": "flood", "risk_level": "medium",
+         "overall_damage_level": "partial"},
+    ]
+    body = main.rank_priority(main.RankPriorityRequest(districts=payload))
+    info = {s.name: s for s in body.scoring.signals}
+    assert info["flood"].active is False
+    assert info["flood"].weight == 0.3
+    assert info["flood"].request_field == "flood_eta_hours"
+    assert body.scoring.formula == formula_text([])
+    rw, dw = main.RISK_WEIGHT, main.DAMAGE_WEIGHT
+    by_name = {d.district: d for d in body.ranked_districts}
+    dadu_damage = (0.5 * 3 + 1.0 * 2) / 10
+    assert by_name["Dadu"].priority_score == round(
+        (rw * 1.0 + dw * dadu_damage) / (rw + dw), 4
+    )
+    assert by_name["Swat"].priority_score == round(
+        (rw * 0.5 + dw * 0.5) / (rw + dw), 4
+    )
+    assert all(d.signals == {} for d in body.ranked_districts)
+
+    nulled = [dict(row, flood_eta_hours=None) for row in payload]
+    nulled_body = main.rank_priority(main.RankPriorityRequest(districts=nulled))
+    assert [d.priority_score for d in nulled_body.ranked_districts] == [
+        d.priority_score for d in body.ranked_districts
+    ]
+
+    from pydantic import ValidationError
+    try:
+        main.DistrictAssessment(
+            district="X", hazard_type="flood", risk_level="low",
+            overall_damage_level="none", flood_eta_hours=-0.1,
+        )
+    except ValidationError:
+        pass
+    else:
+        raise AssertionError("negative flood_eta_hours passed validation")
+
+
+def test_flood_signal_through_rank_priority():
+    """The declared field is what the endpoint scores, and 12 h still
+    outranks 96 h there. A district with no ETA scores 0 once the signal
+    is active (missing_policy zero)."""
+    import main
+    from scoring import OPTIONAL_SIGNALS
+
+    assert "flood" in OPTIONAL_SIGNALS
+    assert main.SIGNAL_WEIGHTS["flood"] == 0.3
+
+    payload = [
+        {"district": "Far", "hazard_type": "flood", "risk_level": "high",
+         "overall_damage_level": "partial", "flood_eta_hours": 96},
+        {"district": "Near", "hazard_type": "flood", "risk_level": "high",
+         "overall_damage_level": "partial", "flood_eta_hours": 12},
+        {"district": "NoEta", "hazard_type": "flood", "risk_level": "high",
+         "overall_damage_level": "partial"},
+    ]
+    body = main.rank_priority(main.RankPriorityRequest(districts=payload))
+    by_name = {d.district: d for d in body.ranked_districts}
+    assert [d.district for d in body.ranked_districts][:2] == ["Near", "Far"]
+    assert by_name["Near"].rank < by_name["Far"].rank < by_name["NoEta"].rank
+    assert by_name["Near"].signals["flood"].value == 12
+    assert by_name["Near"].signals["flood"].score == 1.0
+    assert by_name["Far"].signals["flood"].score == round(24 / 108, 4)
+    assert by_name["NoEta"].signals["flood"].value is None
+    assert by_name["NoEta"].signals["flood"].score == 0.0
+    info = {s.name: s for s in body.scoring.signals}
+    assert info["flood"].active is True
+    assert info["flood"].missing_policy == "zero"
+    assert "sum_k" in body.scoring.formula
+
+
+def test_signal_weights_loaded_from_env():
+    import os
+    import main
+
+    registry = _dummy_registry()
+    old = {k: os.environ.get(k) for k in
+           ("PRIORITY_DUMMY_ZERO_WEIGHT", "PRIORITY_DUMMY_SKIP_WEIGHT")}
+    try:
+        os.environ["PRIORITY_DUMMY_ZERO_WEIGHT"] = "0.25"
+        os.environ["PRIORITY_DUMMY_SKIP_WEIGHT"] = "-1"   # invalid -> default
+        weights = main._load_signal_weights(registry)
+        assert weights == {"dummy_zero": 0.25, "dummy_skip": 0.3}
+        os.environ["PRIORITY_DUMMY_SKIP_WEIGHT"] = "abc"  # invalid -> default
+        assert main._load_signal_weights(registry)["dummy_skip"] == 0.3
+    finally:
+        for k, v in old.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+# ---------------------------------------------------------------------------
 # Endpoint tests (live server on BASE_URL; skipped when unreachable)
 # ---------------------------------------------------------------------------
 
@@ -389,6 +816,19 @@ if __name__ == "__main__":
         test_unknown_risk_scores_zero,
         test_low_coverage_warning_thresholds,
         test_tie_break_is_deterministic,
+        test_signal_spec_validation,
+        test_signal_inactive_when_no_district_carries_field,
+        test_signal_activation_is_per_signal,
+        test_signal_normalisation_hand_computed,
+        test_zero_signal_lowers_district_missing_value,
+        test_skip_signal_leaves_missing_district_unchanged,
+        test_signal_invalid_value_and_bad_score_fn,
+        test_endpoint_signals_in_process,
+        test_flood_12h_outranks_96h_all_else_equal,
+        test_flood_urgency_boundaries_at_12_and_120,
+        test_flood_request_without_field_is_unchanged,
+        test_flood_signal_through_rank_priority,
+        test_signal_weights_loaded_from_env,
     ]
     if not unit_only:
         tests += [
