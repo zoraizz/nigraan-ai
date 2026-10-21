@@ -42,8 +42,14 @@ wave's passage at one barrage:
     * It ends when outflow drops below Low. The next reading >= Low starts a
       new event.
     * It also ends when, after the event's max, outflow has dipped at least
-      10% below that max (trough <= 0.9 * max) and then rises again (a
+      7% below that max (trough <= 0.93 * max) and then rises again (a
       "rising" trend reading). That rising reading starts the new event.
+      7% is the crest rule shared with scripts/flood/calibrate_reaches.py,
+      which calibrates reaches.json: on the 2022 data both find the same
+      crests at every barrage, including the second crests at Kalabagh
+      (19 Aug; dip 8.3%) and Sukkur (3 Sep, 560000; dip 8.6%) that a 10%
+      rule merged into one event. tests/test_routing.py checks the two
+      agree.
     * The event's peak is its max outflow. On ties the LATER reading wins,
       so a plateau's peak_time is the last day of the plateau seen so far
       (Kotri sat at 584000 for four 06:00 readings in 2022).
@@ -71,16 +77,28 @@ upstream barrage i when e's peak time falls inside f's routed window:
 
 The 24 h slack is the daily 06:00 sampling: each crest time is only known
 to about +/-12 h at each end (reaches.json note). The nearest upstream
-barrage is tried first, then the next one up (a wave can be merged into a
-neighbouring wave at one barrage, e.g. Kalabagh and Sukkur in 2022, whose
-dips between the two crests were under 10%). Among candidates, the one
+barrage is tried first, then the next one up (a wave can be missing at one
+barrage when its crest did not separate there). Among candidates, the one
 closest to the median ETA wins. A wave joins at most one event per barrage.
 An event with no upstream match starts a new wave (its "root").
 
 Linking uses the peak times known at as_of only, so a forming event's wave
 can change as its max moves; passed events are stable. Wave ids are
 "indus-<year>-w<n>", numbered by the root event's peak time (ties by
-barrage order).
+barrage order). They are internal: every small rise above Low at one
+barrage gets one.
+
+Wave labels (for display)
+-------------------------
+wave_label is "Wave 1", "Wave 2", ... for waves that reached Medium Flood
+or higher (event max outflow >= the barrage's medium threshold) at 2 or
+more barrages, numbered in time order of their root peak; null for any
+other wave (a minor rise). A barrage counts when the wave's crest there
+has passed, or is forming and linked to the barrage directly upstream (a
+forming crest linked further up can be a rising limb that will move to
+another wave). Like everything else it uses only readings at or before
+as_of. In 2022 this gives Wave 1 (Taunsa 22 Aug, Sukkur 25 Aug)
+and Wave 2 (Taunsa 30 Aug, Sukkur 3 Sep, Kotri 8 Sep).
 
 ETAs (per wave)
 ---------------
@@ -193,7 +211,9 @@ THRESHOLD_KEYS = ["low", "medium", "high", "very_high", "exceptionally_high"]
 
 TREND_TOLERANCE = 0.02   # stable within 2% of the previous reading
 PASSED_DROP = 0.02       # passed once the latest reading is >= 2% below max
-NEW_WAVE_DIP = 0.10      # dip >= 10% below max then rise = new wave
+NEW_WAVE_DIP = 0.07      # dip >= 7% below max then rise = new wave (= calibrate_reaches.py)
+LABEL_MIN_CATEGORY = "Medium Flood"  # a labelled wave reaches this ...
+LABEL_MIN_BARRAGES = 2               # ... at this many barrages
 MATCH_SLACK_H = 24       # +/-12 h sampling uncertainty at each end of a reach
 MIN_HALF_WIDTH_H = 12    # every estimate is at least eta +/- 12 h (daily 06:00 sampling)
 LIVE_GRACE_H = 24        # keep a wave this long past the next barrage's eta_high
@@ -461,6 +481,7 @@ class _Wave:
     leading: Optional[Event]
     eta_rows: list          # internal rows with datetimes
     live: bool
+    label: Optional[str] = None   # "Wave n" or None (see "Wave labels")
 
 
 def _build_wave(wave_id: str, events: dict, reaches: list, n_barrages: int,
@@ -703,7 +724,37 @@ def _waves_at(data: FloodData, as_of: datetime) -> tuple:
         for rid, evs in grouped.items()
     ]
     waves.sort(key=lambda w: int(w.wave_id.rsplit("w", 1)[1]))
+    label_waves(waves, data.barrages)
     return events_by_order, waves
+
+
+def label_waves(waves: list, barrages: list) -> None:
+    """Set wave.label: "Wave n" for significant waves in time order, else None.
+
+    waves must be in wave-id order (= root peak time order).
+    """
+    by_order = {b["order"]: b for b in barrages}
+    floor = category_rank(LABEL_MIN_CATEGORY)
+
+    def counts(e: Event) -> bool:
+        if category_rank(category(by_order[e.order], e.peak_outflow)) < floor:
+            return False
+        if e.status == "passed":
+            return True
+        # A forming crest's link can still move (Kotri's long 2022 rise
+        # latched onto whichever wave's window held as_of), so it counts
+        # only when linked to the barrage directly upstream.
+        return (e.status == "forming" and e.upstream is not None
+                and e.upstream.order == e.order - 1)
+
+    n = 0
+    for w in waves:
+        strong = sum(1 for e in w.events.values() if counts(e))
+        if strong >= LABEL_MIN_BARRAGES:
+            n += 1
+            w.label = f"Wave {n}"
+        else:
+            w.label = None
 
 
 def situation(data: FloodData, as_of: datetime, mode: str = "replay") -> dict:
@@ -760,6 +811,7 @@ def situation(data: FloodData, as_of: datetime, mode: str = "replay") -> dict:
                 peaks.append({
                     "barrage": e.barrage,
                     "wave_id": w.wave_id,
+                    "wave_label": w.label,
                     "status": e.status,
                     "peak_time": fmt_time(e.peak_time),
                     "peak_outflow_cusecs": e.peak_outflow,
@@ -768,6 +820,7 @@ def situation(data: FloodData, as_of: datetime, mode: str = "replay") -> dict:
             ref = r["observed_time"] if r["status"] == "arrived" else r["eta"]
             etas.append({
                 "wave_id": w.wave_id,
+                "wave_label": w.label,
                 "from_barrage": r["from"].barrage,
                 "barrage": by_order[r["barrage_order"]]["name"],
                 "status": r["status"],
@@ -900,6 +953,7 @@ def scorecard(data: FloodData) -> list:
             rows.append({
                 "barrage": e.barrage,
                 "wave_id": w.wave_id,
+                "wave_label": w.label,
                 "actual_peak_time": fmt_time(e.peak_time),
                 "predicted_time": fmt_time(eta),
                 "predicted_low": fmt_time(lo),

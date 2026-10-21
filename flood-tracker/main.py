@@ -186,6 +186,7 @@ class ReachState(BaseModel):
 class Peak(BaseModel):
     barrage: str
     wave_id: str
+    wave_label: Optional[str]
     status: str
     peak_time: str
     peak_outflow_cusecs: float
@@ -193,6 +194,7 @@ class Peak(BaseModel):
 
 class Eta(BaseModel):
     wave_id: str
+    wave_label: Optional[str]
     from_barrage: str
     barrage: str
     status: str

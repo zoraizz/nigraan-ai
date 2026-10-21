@@ -139,14 +139,20 @@ SITUATION_KEYS = {"as_of", "mode", "barrages", "reaches", "peaks", "etas",
 BARRAGE_KEYS = {"name", "order", "lat", "lon", "inflow_cusecs", "outflow_cusecs",
                 "category", "trend"}
 REACH_KEYS = {"from", "to", "category", "coords"}
-PEAK_KEYS = {"barrage", "wave_id", "status", "peak_time", "peak_outflow_cusecs"}
-ETA_KEYS = {"wave_id", "from_barrage", "barrage", "status", "eta", "eta_low",
-            "eta_high", "hours_from_now", "observed_time"}
+PEAK_KEYS = {"barrage", "wave_id", "wave_label", "status", "peak_time",
+             "peak_outflow_cusecs"}
+ETA_KEYS = {"wave_id", "wave_label", "from_barrage", "barrage", "status", "eta",
+            "eta_low", "eta_high", "hours_from_now", "observed_time"}
+LABEL_RE = re.compile(r"^Wave [1-9]\d*$")
 VILLAGE_KEYS = {"id", "name", "district", "lat", "lon", "eta", "eta_low",
                 "eta_high", "hours_to_arrival", "population", "population_source"}
 PROVENANCE_KEYS = {"flows", "etas", "villages", "population"}
-SCORECARD_KEYS = {"barrage", "wave_id", "actual_peak_time", "predicted_time",
-                  "predicted_low", "predicted_high", "error_hours"}
+SCORECARD_KEYS = {"barrage", "wave_id", "wave_label", "actual_peak_time",
+                  "predicted_time", "predicted_low", "predicted_high", "error_hours"}
+
+
+def _label_ok(label) -> bool:
+    return label is None or bool(LABEL_RE.match(label))
 
 
 def _num(x) -> bool:
@@ -172,9 +178,11 @@ def assert_situation_shape(s: dict) -> None:
         assert set(p) == PEAK_KEYS, sorted(p)
         assert p["status"] in ("forming", "passed")
         assert TIME_RE.match(p["peak_time"]) and _num(p["peak_outflow_cusecs"])
+        assert _label_ok(p["wave_label"]), p
     for e in s["etas"]:
         assert set(e) == ETA_KEYS, sorted(e)
         assert e["status"] in ("estimated", "arrived")
+        assert _label_ok(e["wave_label"]), e
         for k in ("eta", "eta_low", "eta_high"):
             assert TIME_RE.match(e[k]), e[k]
         assert e["eta_low"] <= e["eta"] <= e["eta_high"]
@@ -204,6 +212,7 @@ def assert_replay_shape(r: dict) -> None:
     for row in r["scorecard"]:
         assert set(row) == SCORECARD_KEYS, sorted(row)
         assert _num(row["error_hours"])
+        assert _label_ok(row["wave_label"]), row
 
 
 # ---------------------------------------------------------------------------
@@ -250,16 +259,17 @@ def _series(values):
 UPPER_BARRAGE = {"name": "Taunsa", "order": 4, "thresholds": UPPER}
 
 
-def test_dip_of_ten_percent_starts_new_wave():
-    # 500k -> 440k is a 12% dip, then it rises again: two events.
-    evs = detect_events(_series([300000, 400000, 500000, 440000, 460000, 520000, 480000]),
+def test_dip_of_seven_percent_starts_new_wave():
+    # 500k -> 460k is an 8% dip (Sukkur 2022: 580k -> 530k was 8.6%), then it
+    # rises again: two events.
+    evs = detect_events(_series([300000, 400000, 500000, 460000, 480000, 520000, 480000]),
                         UPPER_BARRAGE)
     assert len(evs) == 2, evs
     assert evs[0].peak_outflow == 500000 and evs[0].status == "passed"
     assert evs[1].start_time == day(4) and evs[1].peak_time == day(5)
 
-    # 500k -> 460k is only an 8% dip: still one event, whose max moves on.
-    evs = detect_events(_series([300000, 400000, 500000, 460000, 480000, 520000, 480000]),
+    # 500k -> 470k is only a 6% dip: still one event, whose max moves on.
+    evs = detect_events(_series([300000, 400000, 500000, 470000, 480000, 520000, 480000]),
                         UPPER_BARRAGE)
     assert len(evs) == 1, evs
     assert evs[0].peak_outflow == 520000 and evs[0].peak_time == day(5)
@@ -298,6 +308,24 @@ def test_both_waves_found_at_every_barrage():
     w2 = _etas(situation(data, day(kotri_peak + 2)), "indus-2022-w2")
     assert len(w2) == 6 and all(e["status"] == "arrived" for e in w2.values())
     assert not _etas(situation(data, day(kotri_peak + 4)), "indus-2022-w2")
+
+
+def test_wave_labels_skip_minor_rises():
+    # A Low Flood blip at Taunsa only (days 10-12, between the two waves) is
+    # its own internal wave but gets no label; the two big waves are
+    # "Wave 1" and "Wave 2" in time order.
+    data = make_data()
+    taunsa = data.readings["Taunsa"]
+    blip = {day(10): 260000, day(11): 290000, day(12): 240000}
+    data.readings["Taunsa"] = [
+        Reading(r.time, r.inflow, blip[r.time]) if r.time in blip else r for r in taunsa
+    ]
+    _, waves = routing._waves_at(data, day(N_DAYS - 1))
+    assert [(w.wave_id, w.label) for w in waves] == [
+        ("indus-2022-w1", "Wave 1"), ("indus-2022-w2", None), ("indus-2022-w3", "Wave 2")]
+    s = situation(data, day(12))
+    minor = [p for p in s["peaks"] if p["wave_id"] == "indus-2022-w2"]
+    assert minor and all(p["wave_label"] is None for p in minor)
 
 
 def test_no_peak_before_its_confirming_reading_day_by_day():
@@ -616,6 +644,66 @@ def test_real_31_aug_lists_villages_ahead_of_the_second_wave():
     assert set(first_two) == {"Muzaffargarh", "Rajanpur"}, s["district_eta_hours"]
 
 
+def _calibrate_module():
+    import importlib.util
+    path = Path(__file__).resolve().parents[2] / "scripts" / "flood" / "calibrate_reaches.py"
+    if not path.exists():
+        _skip("scripts/flood/calibrate_reaches.py not present")
+        return None
+    spec = importlib.util.spec_from_file_location("calibrate_reaches", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_real_crests_agree_with_calibrate_reaches():
+    # routing.py and the script that calibrated reaches.json must find the
+    # same crest per barrage and wave. Kotri is the exception the script
+    # documents: its wave-2 crest is the 5-8 Sep plateau, taken by hand
+    # because the series goes on rising (10 Sep, Manchhar/MNVD inflow).
+    data = _real_data()
+    cal = _calibrate_module()
+    if data is None or cal is None:
+        return
+    script_peaks = cal.match_waves(cal.load_rows())
+    _, end = routing.data_range(data)
+    _, waves = routing._waves_at(data, end)
+    by_label = {w.label: w for w in waves if w.label}
+    assert sorted(by_label) == ["Wave 1", "Wave 2"], sorted(by_label)
+    checked = 0
+    for name, per_wave in script_peaks.items():
+        if name == "Kotri":
+            continue
+        for wave, peak in per_wave.items():
+            w = by_label[f"Wave {wave}"]
+            ev = next((e for e in w.events.values() if e.barrage == name), None)
+            assert ev is not None, (name, wave)
+            assert ev.status == "passed" and ev.peak_time == peak["time"], (
+                name, wave, ev, peak["time"])
+            checked += 1
+    assert checked == 12, checked
+
+
+def test_real_wave_2_arrives_at_sukkur_and_labels_are_stable():
+    data = _real_data()
+    if data is None:
+        return
+    s = situation(data, routing.parse_time("2022-09-04T06:00"))
+    suk = [e for e in s["etas"] if e["barrage"] == "Sukkur" and e["wave_label"] == "Wave 2"]
+    assert len(suk) == 1, suk
+    assert suk[0]["status"] == "arrived" and suk[0]["observed_time"] == "2022-09-03T06:00"
+
+    label_of: dict = {}
+    for t_ in routing.replay_steps(data):
+        st = situation(data, t_)
+        for row in st["peaks"] + st["etas"]:
+            if row["wave_label"] is None:
+                continue
+            seen = label_of.setdefault(row["wave_label"], row["wave_id"])
+            assert seen == row["wave_id"], (st["as_of"], row)
+    assert sorted(label_of) == ["Wave 1", "Wave 2"], label_of
+
+
 def test_real_villages_sit_between_their_barrages():
     # Kashmore lies around Guddu and above Sukkur, Matiari and Hyderabad
     # between Sukkur and Kotri: their ETAs must fall inside those bounds.
@@ -641,10 +729,11 @@ if __name__ == "__main__":
     tests = [
         test_category_boundaries_upstream_and_sindh,
         test_trend_two_percent_band,
-        test_dip_of_ten_percent_starts_new_wave,
+        test_dip_of_seven_percent_starts_new_wave,
         test_drop_below_low_starts_new_wave,
         test_forming_needs_two_rises_and_passed_needs_two_percent_drop,
         test_both_waves_found_at_every_barrage,
+        test_wave_labels_skip_minor_rises,
         test_no_peak_before_its_confirming_reading_day_by_day,
         test_situation_ignores_readings_after_as_of,
         test_eta_ranges_add_up,
@@ -663,6 +752,8 @@ if __name__ == "__main__":
         test_real_flows_2022,
         test_real_31_aug_lists_villages_ahead_of_the_second_wave,
         test_real_villages_sit_between_their_barrages,
+        test_real_crests_agree_with_calibrate_reaches,
+        test_real_wave_2_arrives_at_sukkur_and_labels_are_stable,
     ]
 
     passed, failed = 0, 0

@@ -29,8 +29,8 @@ Thresholds in cusecs (Low/Medium/High/VeryHigh/ExceptionallyHigh), source FFD bu
   "mode": "replay|live",
   "barrages": [{ "name": "", "order": 1, "lat": 0, "lon": 0, "inflow_cusecs": 0, "outflow_cusecs": 0, "category": "", "trend": "rising|falling|stable" }],
   "reaches": [{ "from": "", "to": "", "category": "", "coords": [[0, 0]] }],
-  "peaks": [{ "barrage": "", "wave_id": "", "status": "forming|passed", "peak_time": "", "peak_outflow_cusecs": 0 }],
-  "etas": [{ "wave_id": "", "from_barrage": "", "barrage": "", "status": "estimated|arrived", "eta": "", "eta_low": "", "eta_high": "", "hours_from_now": 0, "observed_time": null }],
+  "peaks": [{ "barrage": "", "wave_id": "", "wave_label": "Wave 1|null", "status": "forming|passed", "peak_time": "", "peak_outflow_cusecs": 0 }],
+  "etas": [{ "wave_id": "", "wave_label": "Wave 1|null", "from_barrage": "", "barrage": "", "status": "estimated|arrived", "eta": "", "eta_low": "", "eta_high": "", "hours_from_now": 0, "observed_time": null }],
   "at_risk_villages": [{ "id": "", "name": "", "district": "", "lat": 0, "lon": 0, "eta": "", "eta_low": "", "eta_high": "", "hours_to_arrival": 0, "population": 0, "population_source": "" }],
   "district_eta_hours": { "<district>": 0.0 },
   "data_provenance": { "flows": "", "etas": "", "villages": "", "population": "" }
@@ -45,12 +45,18 @@ Thresholds in cusecs (Low/Medium/High/VeryHigh/ExceptionallyHigh), source FFD bu
 - `hours_from_now` and `hours_to_arrival` are negative once the peak or the village arrival has passed.
 - A reach's `category` is the higher of its two end barrages' categories. Order is Normal < Low Flood < Medium Flood < High Flood < Very High Flood < Exceptionally High Flood.
 
+## Waves
+
+- `wave_id` (`indus-<year>-w<n>`) is internal: every rise above Low Flood at any barrage gets one. Use it as a key, not as display text.
+- `wave_label` is what the UI shows: `"Wave 1"`, `"Wave 2"`, ... in time order, only for waves that reached Medium Flood or higher at 2 or more barrages. It is `null` for a minor rise.
+- `eta_low`/`eta_high` (and scorecard `predicted_low`/`predicted_high`) are at least 12 h either side of the estimate (daily 06:00 sampling).
+
 ## `GET /replay/2022`
 
 ```json
 {
   "steps": ["<flood-situation objects, one per day at 06:00>"],
-  "scorecard": [{ "barrage": "", "wave_id": "", "actual_peak_time": "", "predicted_time": "", "predicted_low": "", "predicted_high": "", "error_hours": 0 }]
+  "scorecard": [{ "barrage": "", "wave_id": "", "wave_label": "Wave 1|null", "actual_peak_time": "", "predicted_time": "", "predicted_low": "", "predicted_high": "", "error_hours": 0 }]
 }
 ```
 

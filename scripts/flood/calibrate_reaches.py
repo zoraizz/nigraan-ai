@@ -11,6 +11,11 @@ or downstream of the neighbour already matched. Pairing the two biggest
 days independently at every site mis-labels the waves, because Tarbela is
 a regulated release and Kotri's hydrograph is a single long rise.
 
+flood-tracker/routing.py finds crests on the live series with a 7% dip
+rule (NEW_WAVE_DIP) and must agree with the crests found here; on the 2022
+data it does at every barrage except Kotri, whose plateau is taken below.
+flood-tracker/tests/test_routing.py checks that agreement.
+
 Kotri's FFC outflow sat at 584,000 cusecs at 06:00 on 5, 6, 7 and 8 Sep.
 A later Dawn reading of 600,018 on 10 Sep is about 2.7 percent higher and
 the article attributes it to Manchhar Lake and an MNVD breach, not to the
