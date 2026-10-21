@@ -74,6 +74,9 @@ Body: `{ "village_ids"?: [], "district"?: "", "as_of": "" }`
 }
 ```
 
+- Villages are resolved against `at_risk_villages` of `/flood-situation` at `as_of`; `village_ids` wins when both are given. A district gives its at-risk villages in ETA order (`{"drafts": []}` when none is at risk), at most 25.
+- 422 codes: `invalid_request` (body shape, e.g. no `as_of`), `missing_target`, `too_many_villages` (over 25 ids), `invalid_as_of`, `as_of_out_of_range`, `unknown_village_ids`, `village_not_at_risk`, `unknown_district`. 503 `data_unavailable` / `villages_unavailable`.
+
 ## Errors
 
 ```json

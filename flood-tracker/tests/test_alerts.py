@@ -292,9 +292,26 @@ def test_empty_village_list():
         assert draft_alerts([], AS_OF) == []
 
 
+def test_llm_status_for_health():
+    with _Env() as env:
+        assert alerts.llm_status() == {"llm_provider": "gemini", "llm_configured": False}
+        env.set(GEMINI_API_KEY="k-test")
+        assert alerts.llm_status() == {"llm_provider": "gemini", "llm_configured": True}
+        env.set(ALERT_LLM_PROVIDER="qwen")
+        assert alerts.llm_status() == {"llm_provider": "qwen", "llm_configured": False}
+        env.set(DASHSCOPE_API_KEY="d-test")
+        assert alerts.llm_status()["llm_configured"] is True
+        # .env.example documents "template"; "none" is the older spelling.
+        for choice in ("template", "none"):
+            env.set(ALERT_LLM_PROVIDER=choice)
+            assert select_provider() is None
+            assert alerts.llm_status() == {"llm_provider": "template", "llm_configured": False}
+        assert "k-test" not in str(alerts.llm_status())
+
+
 if __name__ == "__main__":
-    # `unit` is the supported mode. There is no live /alert-drafts route here;
-    # integration adds that in main.py, and these tests never open a socket.
+    # `unit` is the supported mode. These tests never open a socket;
+    # tests/test_api.py covers the live POST /alert-drafts route.
     if len(sys.argv) > 1 and sys.argv[1].lower() != "unit":
         print("Use: python tests/test_alerts.py unit")
         sys.exit(2)
@@ -308,6 +325,7 @@ if __name__ == "__main__":
         test_unknown_provider_uses_gemini,
         test_accepted_reply_is_cached_per_language,
         test_empty_village_list,
+        test_llm_status_for_health,
     ]
     passed, failed = 0, 0
     for fn in tests:

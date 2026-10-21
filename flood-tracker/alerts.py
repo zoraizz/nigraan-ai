@@ -51,9 +51,10 @@ needed, ahead of the district.
 PROVIDER SWITCH
 ===============
 ``ALERT_LLM_PROVIDER`` chooses the phrasing engine. ``gemini`` (the default),
-``qwen``, and ``none`` are the only values. Anything else logs a warning and
-uses Gemini. Changing provider is an environment change; callers do not pass
-a vendor flag.
+``qwen``, and ``template`` (or its older spelling ``none``) are the only
+values. Anything else logs a warning and uses Gemini. Changing provider is
+an environment change; callers do not pass a vendor flag. ``llm_status()``
+reports the provider and whether its key is set, for ``GET /health``.
 
 - Gemini uses the google-genai SDK the same way risk-flag does: a lazy
   client, ``GEMINI_API_KEY``, ``GEMINI_MODEL`` (default ``gemini-3.8-flash``),
@@ -99,7 +100,9 @@ _DEFAULT_QWEN_MODEL = "qwen-plus"
 _QWEN_CHAT_URL = (
     "https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions"
 )
-_KNOWN_PROVIDERS = ("gemini", "qwen", "none")
+_KNOWN_PROVIDERS = ("gemini", "qwen", "template", "none")
+_TEMPLATE_CHOICES = ("template", "none")
+_PROVIDER_KEYS = {"gemini": "GEMINI_API_KEY", "qwen": "DASHSCOPE_API_KEY"}
 
 # Hand-written frames. Proper nouns and clock times are filled from the record.
 _MOVE_URDU_HIGH = "اونچی زمین پر جائیں"
@@ -176,17 +179,17 @@ def reply_acceptable(text: str, place: str, time_parts: tuple[str, ...] | list[s
 def select_provider() -> AlertProvider | None:
     """Build the provider named by ``ALERT_LLM_PROVIDER``.
 
-    Unset or blank uses Gemini and logs that fallback once. ``none`` returns
-    None so the caller stays on the template. An unknown value logs a warning
-    and uses Gemini. The key is not required to select a provider; a missing
-    key is handled inside ``generate``.
+    Unset or blank uses Gemini and logs that fallback once. ``template`` (or
+    ``none``) returns None so the caller stays on the template. An unknown
+    value logs a warning and uses Gemini. The key is not required to select a
+    provider; a missing key is handled inside ``generate``.
     """
     raw = os.getenv("ALERT_LLM_PROVIDER")
     if raw is None or not raw.strip():
         _note_default("ALERT_LLM_PROVIDER", "gemini")
         return GeminiProvider()
     choice = raw.strip().lower()
-    if choice == "none":
+    if choice in _TEMPLATE_CHOICES:
         return None
     if choice == "qwen":
         return QwenProvider()
@@ -197,6 +200,19 @@ def select_provider() -> AlertProvider | None:
         raw.strip(),
     )
     return GeminiProvider()
+
+
+def llm_status() -> dict:
+    """``{"llm_provider": "gemini|qwen|template", "llm_configured": bool}``.
+
+    The provider ``draft_alerts`` would use now, and whether its key is set
+    (never the key). ``template`` is never "configured": no model is called.
+    """
+    provider = select_provider()
+    name = provider.name if provider is not None else "template"
+    key_env = _PROVIDER_KEYS.get(name)
+    configured = bool(key_env and os.getenv(key_env, "").strip())
+    return {"llm_provider": name, "llm_configured": configured}
 
 
 class GeminiProvider(AlertProvider):

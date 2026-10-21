@@ -7,6 +7,9 @@ Endpoints:
                              who is at risk (CONTRACT.md shape)
     GET /replay/2022      -- one /flood-situation per day at 06:00 for the
                              2022 floods, plus a predicted-vs-actual scorecard
+    POST /alert-drafts    -- Urdu/Sindhi alert drafts (alerts.py) for at-risk
+                             villages, picked by village_ids or by district,
+                             resolved against /flood-situation at as_of
     GET /health           -- service status, data files present, LLM config
 
 Run:
@@ -28,12 +31,23 @@ Environment variables (loaded from flood-tracker/.env, see .env.example):
     FLOOD_DATA_DIR      -- directory with flows_2022.csv, barrages.json,
                            reaches.json and optionally villages.json and
                            indus.geojson (default flood-tracker/data)
-    ALERT_LLM_PROVIDER  -- gemini | qwen | template (default gemini). Only
-                           reported by /health here; alert drafting lives in
-                           alerts.py.
+    ALERT_LLM_PROVIDER  -- gemini | qwen | template (default gemini). Read by
+                           alerts.py, which drafts the alerts and tells
+                           /health the provider and whether its key is set.
     GEMINI_API_KEY, GEMINI_MODEL, DASHSCOPE_API_KEY, QWEN_MODEL
                         -- LLM settings for alerts.py. /health reports only
                            whether a key is set, never the key.
+
+POST /alert-drafts:
+    Body {"village_ids"?: [...], "district"?: "", "as_of": "YYYY-MM-DDTHH:MM"}.
+    village_ids wins when both are given. Villages are taken from the
+    at_risk_villages of /flood-situation at as_of, so every draft carries
+    the same ETA window the map shows. Unknown ids, a known village that is
+    not at risk at as_of, an unknown district, a missing target and an
+    as_of outside the data are 422. A district with no village at risk
+    returns {"drafts": []}. At most MAX_ALERT_VILLAGES villages per request
+    (each can cost two model calls with a 10 s timeout); a district is cut
+    to its earliest-ETA villages.
 
 Error responses use a unified structure:
     { "error": { "code": "<machine-readable>", "message": "<human-readable>" } }
@@ -47,7 +61,8 @@ from pathlib import Path
 from typing import Optional
 
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
@@ -55,6 +70,7 @@ from pydantic import BaseModel, Field
 # Load .env from the flood-tracker directory (same pattern as aid-priority).
 load_dotenv(Path(__file__).parent / ".env")
 
+import alerts  # noqa: E402
 import routing  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -91,22 +107,7 @@ app.add_middleware(
 # ---------------------------------------------------------------------------
 # Configuration (env-configurable; see .env.example)
 # ---------------------------------------------------------------------------
-LLM_PROVIDERS = {"gemini": "GEMINI_API_KEY", "qwen": "DASHSCOPE_API_KEY", "template": None}
-DEFAULT_LLM_PROVIDER = "gemini"
-
-
-def _load_provider() -> str:
-    raw = os.environ.get("ALERT_LLM_PROVIDER")
-    if not raw:
-        return DEFAULT_LLM_PROVIDER
-    value = raw.strip().lower()
-    if value not in LLM_PROVIDERS:
-        logger.warning(
-            "Invalid ALERT_LLM_PROVIDER=%r (must be one of %s); using default %s",
-            raw, sorted(LLM_PROVIDERS), DEFAULT_LLM_PROVIDER,
-        )
-        return DEFAULT_LLM_PROVIDER
-    return value
+MAX_ALERT_VILLAGES = 25
 
 
 def _load_data_dir() -> Path:
@@ -121,7 +122,6 @@ def _load_data_dir() -> Path:
     return path
 
 
-LLM_PROVIDER = _load_provider()
 DATA_DIR = _load_data_dir()
 
 DATA_FILES = {
@@ -226,6 +226,12 @@ class DataProvenance(BaseModel):
     population: str
 
 
+class AlertDraftsRequest(BaseModel):
+    village_ids: Optional[list[str]] = None
+    district: Optional[str] = None
+    as_of: str
+
+
 # ---------------------------------------------------------------------------
 # Endpoints
 # ---------------------------------------------------------------------------
@@ -238,6 +244,15 @@ def _error(status: int, code: str, message: str) -> JSONResponse:
 
 def _data_unavailable() -> JSONResponse:
     return _error(503, "data_unavailable", DATA_ERROR or "flood data not loaded")
+
+
+@app.exception_handler(RequestValidationError)
+async def _invalid_request(_request: Request, exc: RequestValidationError) -> JSONResponse:
+    parts = []
+    for err in exc.errors():
+        where = ".".join(str(p) for p in err.get("loc", ()) if p != "body")
+        parts.append(f"{where}: {err.get('msg')}" if where else str(err.get("msg")))
+    return _error(422, "invalid_request", "; ".join(parts) or "invalid request")
 
 
 def _validate_situation(body: dict) -> dict:
@@ -314,9 +329,63 @@ def replay_2022():
     return _replay_cache
 
 
+@app.post("/alert-drafts")
+def alert_drafts(req: AlertDraftsRequest):
+    """Urdu/Sindhi drafts for at-risk villages at as_of (CONTRACT.md)."""
+    if DATA is None:
+        return _data_unavailable()
+    if DATA.villages is None:
+        return _error(503, "villages_unavailable",
+                      "villages.json is not loaded, so there are no villages to draft for")
+
+    ids = [i.strip() for i in (req.village_ids or []) if i and i.strip()]
+    district = (req.district or "").strip()
+    if not ids and not district:
+        return _error(422, "missing_target", "give village_ids or district")
+    if len(ids) > MAX_ALERT_VILLAGES:
+        return _error(422, "too_many_villages",
+                      f"at most {MAX_ALERT_VILLAGES} village_ids per request, got {len(ids)}")
+
+    try:
+        as_of_dt = routing.parse_time(req.as_of)
+    except ValueError as exc:
+        return _error(422, "invalid_as_of", str(exc))
+    try:
+        situation = routing.situation(DATA, as_of_dt, mode="replay")
+    except routing.AsOfOutOfRange as exc:
+        return _error(422, "as_of_out_of_range", str(exc))
+
+    at_risk = situation["at_risk_villages"]
+    if ids:
+        known = {v["id"] for v in DATA.villages}
+        unknown = [i for i in ids if i not in known]
+        if unknown:
+            return _error(422, "unknown_village_ids",
+                          f"not in villages.json: {', '.join(unknown)}")
+        by_id = {v["id"]: v for v in at_risk}
+        not_at_risk = [i for i in ids if i not in by_id]
+        if not_at_risk:
+            return _error(422, "village_not_at_risk",
+                          f"no flood wave is due at {', '.join(not_at_risk)} "
+                          f"as of {situation['as_of']}")
+        targets = [by_id[i] for i in dict.fromkeys(ids)]
+    else:
+        if not any(v["district"] == district for v in DATA.villages):
+            return _error(422, "unknown_district", f"no villages.json village in district {district!r}")
+        targets = [v for v in at_risk if v["district"] == district]
+        if len(targets) > MAX_ALERT_VILLAGES:
+            logger.info("Alert drafts for %s: %d villages at risk, drafting the first %d by ETA",
+                        district, len(targets), MAX_ALERT_VILLAGES)
+            targets = targets[:MAX_ALERT_VILLAGES]
+
+    drafts = alerts.draft_alerts(targets, situation["as_of"])
+    logger.info("Alert drafts at %s: %d village(s), sources %s", situation["as_of"],
+                len(drafts), sorted({d["source"] for d in drafts}))
+    return {"drafts": drafts}
+
+
 @app.get("/health")
 def health():
-    key_env = LLM_PROVIDERS[LLM_PROVIDER]
     data_range = None
     if DATA is not None:
         start, end = routing.data_range(DATA)
@@ -326,6 +395,5 @@ def health():
         "data_files": {name: path.exists() for name, path in DATA_FILES.items()},
         "data_range": data_range,
         "data_error": DATA_ERROR,
-        "llm_provider": LLM_PROVIDER,
-        "llm_configured": bool(key_env and os.environ.get(key_env, "").strip()),
+        **alerts.llm_status(),
     }

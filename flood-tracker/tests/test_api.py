@@ -148,6 +148,101 @@ def test_replay_2022():
     assert single == step
 
 
+DRAFT_KEYS = {"village_id", "name", "district", "urdu", "sindhi", "source", "model"}
+AS_OF = "2022-08-31T06:00"
+
+
+def _situation(as_of: str = AS_OF) -> dict:
+    import requests
+    r = requests.get(f"{BASE_URL}/flood-situation", params={"as_of": as_of}, timeout=30)
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def _assert_drafts(body: dict, expected_ids: list, by_id: dict) -> None:
+    assert set(body) == {"drafts"}, body
+    drafts = body["drafts"]
+    assert [d["village_id"] for d in drafts] == expected_ids
+    for d in drafts:
+        assert set(d) == DRAFT_KEYS, sorted(d)
+        assert d["source"] in ("gemini", "qwen", "template")
+        assert d["urdu"] and d["sindhi"]
+        v = by_id[d["village_id"]]
+        assert d["name"] == v["name"] and d["district"] == v["district"]
+        # The draft carries the same ETA window the situation shows.
+        for text in (d["urdu"], d["sindhi"]):
+            assert v["eta_low"] in text and v["eta_high"] in text, text
+
+
+def test_alert_drafts_by_village_ids():
+    if not _ready():
+        return
+    import requests
+
+    villages = _situation()["at_risk_villages"]
+    assert len(villages) >= 2
+    ids = [villages[0]["id"], villages[1]["id"]]
+    r = requests.post(f"{BASE_URL}/alert-drafts",
+                      json={"village_ids": ids, "as_of": AS_OF}, timeout=60)
+    assert r.status_code == 200, r.text
+    _assert_drafts(r.json(), ids, {v["id"]: v for v in villages})
+
+
+def test_alert_drafts_by_district():
+    if not _ready():
+        return
+    import requests
+
+    villages = _situation()["at_risk_villages"]
+    district = villages[0]["district"]
+    expected = [v["id"] for v in villages if v["district"] == district][:25]
+    r = requests.post(f"{BASE_URL}/alert-drafts",
+                      json={"district": district, "as_of": AS_OF}, timeout=300)
+    assert r.status_code == 200, r.text
+    _assert_drafts(r.json(), expected, {v["id"]: v for v in villages})
+
+
+def test_alert_drafts_district_with_nobody_at_risk():
+    if not _ready():
+        return
+    import requests
+
+    # On 10 Sep 2022 the second wave has passed Kotri: no village is at risk.
+    s = _situation("2022-09-10T06:00")
+    assert s["at_risk_villages"] == []
+    r = requests.post(f"{BASE_URL}/alert-drafts",
+                      json={"district": "Hyderabad", "as_of": "2022-09-10T06:00"}, timeout=30)
+    assert r.status_code == 200, r.text
+    assert r.json() == {"drafts": []}
+
+
+def test_alert_drafts_errors():
+    if not _ready():
+        return
+    import requests
+
+    url = f"{BASE_URL}/alert-drafts"
+    villages = _situation()["at_risk_villages"]
+    good_id = villages[0]["id"]
+    _assert_error(requests.post(url, json={"village_ids": ["no-such-village"], "as_of": AS_OF},
+                                timeout=10), 422, "unknown_village_ids")
+    _assert_error(requests.post(url, json={"village_ids": [good_id, "nope"], "as_of": AS_OF},
+                                timeout=10), 422, "unknown_village_ids")
+    _assert_error(requests.post(url, json={"village_ids": [good_id], "as_of": "2021-01-01T06:00"},
+                                timeout=10), 422, "as_of_out_of_range")
+    _assert_error(requests.post(url, json={"village_ids": [good_id], "as_of": "2030-01-01T06:00"},
+                                timeout=10), 422, "as_of_out_of_range")
+    _assert_error(requests.post(url, json={"village_ids": [good_id], "as_of": "31-08-2022"},
+                                timeout=10), 422, "invalid_as_of")
+    _assert_error(requests.post(url, json={"district": "Nowhere", "as_of": AS_OF},
+                                timeout=10), 422, "unknown_district")
+    _assert_error(requests.post(url, json={"as_of": AS_OF}, timeout=10), 422, "missing_target")
+    _assert_error(requests.post(url, json={"village_ids": [good_id]}, timeout=10),
+                  422, "invalid_request")
+    _assert_error(requests.post(url, json={"village_ids": [good_id], "as_of": "2022-09-10T06:00"},
+                                timeout=10), 422, "village_not_at_risk")
+
+
 if __name__ == "__main__":
     tests = [
         test_health,
@@ -156,6 +251,10 @@ if __name__ == "__main__":
         test_live_mode_not_enabled,
         test_bad_requests,
         test_replay_2022,
+        test_alert_drafts_by_village_ids,
+        test_alert_drafts_by_district,
+        test_alert_drafts_district_with_nobody_at_risk,
+        test_alert_drafts_errors,
     ]
 
     passed, failed = 0, 0
