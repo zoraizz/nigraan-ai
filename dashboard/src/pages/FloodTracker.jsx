@@ -7,6 +7,7 @@ import ReplayScorecard from '../components/flood/ReplayScorecard.jsx'
 import RiverMap from '../components/flood/RiverMap.jsx'
 import ForecastTable from '../components/flood/ForecastTable.jsx'
 import OutlookCard from '../components/flood/OutlookCard.jsx'
+import ScenarioImpact from '../components/flood/ScenarioImpact.jsx'
 import WhatIfForm from '../components/flood/WhatIfForm.jsx'
 import { formatDay, formatPeople } from '../components/flood/timeFormat.js'
 import { useFloodReplay } from '../hooks/useFloodReplay.js'
@@ -224,7 +225,9 @@ function ModeHeader({ title, subtitle, situation, children }) {
 }
 
 // Map, downstream peaks, villages and the alert-draft drawer for one
-// situation. `side` renders above the peaks; `below` under the map.
+// situation. `side` renders above the peaks; `below` under the map, either a
+// node or a render function below({ selectedId, onSelect }) sharing the
+// village selection (so a row there can open the alert draft).
 function SituationView({ situation, side, below, draftContext }) {
   const [selectedId, setSelectedId] = useState(null)
   const villages = situation?.at_risk_villages ?? []
@@ -237,7 +240,7 @@ function SituationView({ situation, side, below, draftContext }) {
           <div className="h-[380px] lg:h-[520px]">
             <RiverMap situation={situation} selectedVillageId={selectedId} onSelectVillage={setSelectedId} />
           </div>
-          {below}
+          {typeof below === 'function' ? below({ selectedId, onSelect: setSelectedId }) : below}
         </div>
         <div className="flex min-w-0 flex-col gap-3 lg:col-span-1">
           {side}
@@ -323,6 +326,9 @@ function WhatIfView({ prefill }) {
         <SituationView
           situation={situation}
           draftContext={{ mode: 'what_if', scenario: body }}
+          below={({ selectedId, onSelect }) => (
+            <ScenarioImpact situation={situation} selectedId={selectedId} onSelect={onSelect} />
+          )}
         />
       )}
     </div>
