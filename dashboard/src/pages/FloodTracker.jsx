@@ -7,7 +7,7 @@ import ReplayScorecard from '../components/flood/ReplayScorecard.jsx'
 import RiverMap from '../components/flood/RiverMap.jsx'
 import ForecastTable from '../components/flood/ForecastTable.jsx'
 import OutlookCard from '../components/flood/OutlookCard.jsx'
-import ScenarioImpact from '../components/flood/ScenarioImpact.jsx'
+import ScenarioImpact, { exposureLabel } from '../components/flood/ScenarioImpact.jsx'
 import WhatIfForm from '../components/flood/WhatIfForm.jsx'
 import { formatDay, formatPeople } from '../components/flood/timeFormat.js'
 import { useFloodReplay } from '../hooks/useFloodReplay.js'
@@ -245,7 +245,7 @@ function SituationView({ situation, side, below, draftContext }) {
         <div className="flex min-w-0 flex-col gap-3 lg:col-span-1">
           {side}
           <EtaPanel etas={situation?.etas} scenario={situation?.mode === 'what_if' ? situation?.scenario : null} />
-          <AtRiskTable villages={villages} selectedId={selectedId} onSelect={setSelectedId} />
+          <AtRiskTable villages={villages} selectedId={selectedId} onSelect={setSelectedId} showDistance />
         </div>
       </div>
       <AlertDrafts
@@ -312,9 +312,12 @@ function WhatIfView({ prefill }) {
           <>
             <p className="mt-1 text-xs text-slate-200">
               {scenario.barrage} peak {formatPeople(Math.round(scenario.peak_cusecs))} cusecs ({scenario.peak_category}) on {formatDay(scenario.peak_time)}
-              {situation.note ? '' : ` · est. ${formatPeople(people)} people in 2022-flooded villages downstream`}
+              {situation.note ? '' : ` · est. ${formatPeople(people)} people in exposed villages downstream`}
             </p>
             <p className="mt-0.5 text-[11px] text-[#9dbdac]">Assumption: {scenario.assumption}</p>
+            {exposureLabel(scenario.exposure) && (
+              <p className="mt-0.5 text-[11px] text-slate-300">{exposureLabel(scenario.exposure)}</p>
+            )}
             {situation.note && <p className="mt-0.5 text-[11px] text-amber-300">{situation.note}</p>}
           </>
         )}

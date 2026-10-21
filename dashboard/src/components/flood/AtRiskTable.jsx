@@ -21,7 +21,8 @@ function etaCell(village) {
   return { estimate, bandText, relative }
 }
 
-export default function AtRiskTable({ villages, selectedId, onSelect }) {
+// showDistance: extra Distance column (river_distance_km), What-if and Today only.
+export default function AtRiskTable({ villages, selectedId, onSelect, showDistance = false }) {
   const [showAll, setShowAll] = useState(false)
   const rows = (Array.isArray(villages) ? villages : []).slice().sort(byEta)
   const visibleRows = showAll ? rows : rows.slice(0, 15)
@@ -43,13 +44,14 @@ export default function AtRiskTable({ villages, selectedId, onSelect }) {
               <th className="px-2 py-1 font-semibold">Village</th>
               <th className="px-2 py-1 font-semibold">District</th>
               <th className="px-2 py-1 font-semibold">ETA</th>
+              {showDistance && <th className="px-2 py-1 text-right font-semibold">Distance</th>}
               <th className="px-2 py-1 text-right font-semibold">Est. population</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="px-3 py-4 text-[#9dbdac]">No villages in this step.</td>
+                <td colSpan={showDistance ? 5 : 4} className="px-3 py-4 text-[#9dbdac]">No villages in this step.</td>
               </tr>
             ) : visibleRows.map((village) => {
               const selected = village.id === selectedId
@@ -76,6 +78,11 @@ export default function AtRiskTable({ villages, selectedId, onSelect }) {
                   <td className="px-2 py-1 text-slate-100" title={`Estimated arrival: ${cell.estimate}${cell.bandText} · ${cell.relative}`}>
                     {cell.estimate}{cell.bandText}
                   </td>
+                  {showDistance && (
+                    <td className="px-2 py-1 text-right text-slate-300" title="Distance to the river centreline">
+                      {village.river_distance_km == null ? '—' : `${Number(village.river_distance_km).toFixed(1)} km`}
+                    </td>
+                  )}
                   <td
                     className="px-2 py-1 text-right text-slate-200"
                     title={village.population_source || 'Estimated population'}

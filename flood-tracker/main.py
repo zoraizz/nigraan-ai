@@ -223,6 +223,7 @@ class AtRiskVillage(BaseModel):
     hours_to_arrival: float
     population: float
     population_source: str
+    river_distance_km: Optional[float] = None
 
 
 class DataProvenance(BaseModel):

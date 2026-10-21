@@ -14,6 +14,12 @@ sub-Low baselines. The existing lag and village interpolation engine routes
 that event. No downstream gauge observations are invented. Peak magnitude
 is assumed unchanged downstream; gates, breaches and new flood footprints
 are outside the model. The 2022 village inventory is an exposure proxy.
+
+Exposure scales with flood size (routing.EXPOSURE_RADIUS_KM): what-if keeps
+villages within the radius for the scenario peak category; live keeps a
+village when it is within the radius for the forecast peak category at the
+barrage just upstream of it (by river_km on the centreline). Below Medium
+Flood no village is listed. The 2022 replay is never filtered.
 """
 from copy import deepcopy
 from dataclasses import replace
@@ -149,6 +155,17 @@ def forecast_rows(barrages, series, today):
     return rows, outlook
 
 
+def _keep_exposed(body, keep):
+    """Filter at_risk_villages with keep(row) and recompute district hours."""
+    body["at_risk_villages"] = [v for v in body["at_risk_villages"] if keep(v)]
+    body["district_eta_hours"] = routing.district_eta_hours(body["at_risk_villages"])
+
+
+def _exposure_block(category):
+    radius = routing.exposure_radius_km(category)
+    return {"radius_km": radius, "category": category, "rule": routing.EXPOSURE_RULE}
+
+
 def live_situation(data, calibration):
     series = fetch_live(calibration)
     clock = today_clock()
@@ -163,6 +180,21 @@ def live_situation(data, calibration):
         row["confidence"] = "bias-scaled" if row["calibrated"] else "low confidence"
     body["forecast_days"] = len(body["forecast"][0]["series"])
     body["calibration_warnings"] = calibration_warnings(calibration)
+    # Band per village from the forecast peak at the barrage just upstream.
+    positions, _ = routing.barrage_positions(data)
+    peak_cat = {data.barrages[i]["order"]: row["forecast_peak_category"]
+                for i, row in enumerate(body["forecast"])}
+    village_km = {v["id"]: float(v["river_km"]) for v in data.villages or []}
+
+    def keep(v):
+        km = village_km.get(v["id"])
+        upstream = [o for o, pos in positions.items() if km is not None and pos <= km]
+        order = max(upstream) if upstream else min(positions)
+        return routing.exposed(v.get("river_distance_km"), peak_cat[order])
+
+    _keep_exposed(body, keep)
+    body["exposure"] = {"rule": routing.EXPOSURE_RULE + "; band from the forecast peak at the barrage just upstream",
+                        "bands_km": {c: routing.exposure_radius_km(c) for c in routing.CATEGORIES}}
     return body
 
 
@@ -194,8 +226,8 @@ def what_if(data, barrage, peak_cusecs, peak_time=None):
                             peak_time=routing.fmt_time(peak), assumption=ASSUMPTION)
     body["data_provenance"]["flows"] = "synthetic what-if hydrograph; not gauge readings or a forecast"
     body["data_provenance"]["etas"] += "; " + ASSUMPTION
+    _keep_exposed(body, lambda v: routing.exposed(v.get("river_distance_km"), cat))
+    body["scenario"]["exposure"] = _exposure_block(cat)
     if routing.category_rank(cat) < routing.category_rank("Medium Flood"):
-        body["at_risk_villages"] = []
-        body["district_eta_hours"] = {}
         body["note"] = "Below Medium Flood: villages not listed"
     return body

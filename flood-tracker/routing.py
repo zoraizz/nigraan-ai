@@ -172,6 +172,24 @@ carries an arrival from a wave that has already passed.
 All ETAs are MODELLED (summed historical lags from reaches.json, not a
 hydraulic model) and data_provenance says so in every response.
 
+Exposure bands (what-if and live only)
+--------------------------------------
+villages.json lists villages flooded in 2022, the largest flood on record,
+so listing all of them for any wave overstates a smaller flood. At load each
+village gets river_distance_km: the distance to the indus.geojson centreline
+(local equirectangular plane, point-to-segment, rounded to 0.1 km; all 926
+lie within ~15 km). A smaller flood spreads less far from the channel, so
+what-if and live keep only villages within a radius set by the peak
+category (EXPOSURE_RADIUS_KM):
+    Normal, Low Flood         -> no villages
+    Medium Flood              -> within 3 km
+    High Flood                -> within 6 km
+    Very High Flood           -> within 10 km
+    Exceptionally High Flood  -> all 2022-flooded villages
+This is a coarse exposure proxy, not an inundation model: the radii are
+chosen so the counts grow with flood size (3/6/10 km hold ~75/255/563 of the
+926 villages). The 2022 replay is never filtered: those villages did flood.
+
 Replay scorecard
 ----------------
 For each barrage j and each wave with a crest at j over the whole series,
@@ -235,6 +253,19 @@ LIVE_GRACE_H = 24        # keep a wave this long past the next barrage's eta_hig
 FINAL_DISPLAY_H = 72     # keep a wave this long after it passes the last barrage
 
 REPLAY_STEP_HOUR = 6     # replay steps are daily at 06:00 (FFC Annexure-I time)
+
+# Exposure bands (module docstring): peak category -> radius in km from the
+# river centreline. None = no distance limit. Categories not listed (Normal,
+# Low Flood) list no villages.
+EXPOSURE_RADIUS_KM = {
+    "Medium Flood": 3.0,
+    "High Flood": 6.0,
+    "Very High Flood": 10.0,
+    "Exceptionally High Flood": None,
+}
+EXPOSURE_RULE = ("villages flooded in 2022 within R km of the river centreline; "
+                 "larger floods reach further")
+KM_PER_DEG = 111.195     # mean Earth radius 6371 km
 
 
 class AsOfOutOfRange(ValueError):
@@ -563,6 +594,44 @@ def _project_km(coords: list, kms: list, lat: float, lon: float) -> float:
     return best[1]
 
 
+def river_distance_km(coords: list, lat: float, lon: float) -> float:
+    """Distance in km from (lat, lon) to the polyline [[lat, lon], ...].
+
+    Same local equirectangular plane as _project_km, point-to-segment.
+    """
+    scale = math.cos(math.radians(lat))
+    px, py = lon * scale, lat
+    best = None
+    for i in range(len(coords) - 1):
+        ax, ay = coords[i][1] * scale, coords[i][0]
+        bx, by = coords[i + 1][1] * scale, coords[i + 1][0]
+        dx, dy = bx - ax, by - ay
+        seg = dx * dx + dy * dy
+        t = 0.0 if seg == 0 else max(0.0, min(1.0, ((px - ax) * dx + (py - ay) * dy) / seg))
+        d = (ax + t * dx - px) ** 2 + (ay + t * dy - py) ** 2
+        if best is None or d < best:
+            best = d
+    return math.sqrt(best) * KM_PER_DEG
+
+
+def exposure_radius_km(category_name: str) -> Optional[float]:
+    """Radius for a peak category: km, None for no limit (Exceptionally
+    High), 0.0 when no villages are listed (Normal, Low Flood)."""
+    if category_name not in EXPOSURE_RADIUS_KM:
+        return 0.0
+    return EXPOSURE_RADIUS_KM[category_name]
+
+
+def exposed(distance_km: Optional[float], category_name: str) -> bool:
+    """True when a village at distance_km is listed for a peak of this category."""
+    if category_rank(category_name) < category_rank("Medium Flood"):
+        return False
+    radius = exposure_radius_km(category_name)
+    if radius is None:
+        return True
+    return distance_km is not None and distance_km <= radius
+
+
 def barrage_positions(data: FloodData) -> tuple:
     """({order: km on the villages' scale}, on_centreline).
 
@@ -653,6 +722,8 @@ def village_etas(
             "population_source": v.get("population_source", ""),
             "_eta": eta,
         })
+        if v.get("river_distance_km") is not None:
+            rows[-1]["river_distance_km"] = v["river_distance_km"]
     rows.sort(key=lambda r: (r["_eta"], -(r["population"] or 0), r["id"]))
     for r in rows:
         del r["_eta"]
@@ -1148,6 +1219,10 @@ def load_data(
         geo = json.loads(Path(geojson_path).read_text(encoding="utf-8"))
         river = _river_coords(geo)
         river_km_line = _river_km_line(geo, len(river))
+        if villages and len(river) >= 2:
+            for v in villages:
+                v["river_distance_km"] = round(
+                    river_distance_km(river, float(v["lat"]), float(v["lon"])), 1)
 
     return FloodData(
         barrages=barrages,

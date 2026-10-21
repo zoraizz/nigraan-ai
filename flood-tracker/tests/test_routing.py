@@ -193,7 +193,7 @@ def assert_situation_shape(s: dict) -> None:
         else:
             assert e["observed_time"] is None
     for v in s["at_risk_villages"]:
-        assert set(v) == VILLAGE_KEYS, sorted(v)
+        assert VILLAGE_KEYS <= set(v) <= VILLAGE_KEYS | {"river_distance_km"}, sorted(v)
         for k in ("eta", "eta_low", "eta_high"):
             assert TIME_RE.match(v[k]), v[k]
         assert v["eta_low"] <= v["eta"] <= v["eta_high"]

@@ -317,13 +317,13 @@ not gauge readings or model output.
   "reaches": [{ "from": "", "to": "", "category": "", "coords": [[0, 0]] }],
   "peaks": [{ "barrage": "", "wave_id": "", "wave_label": "Wave 1|null", "status": "forming|passed", "peak_time": "", "peak_outflow_cusecs": 0 }],
   "etas": [{ "wave_id": "", "wave_label": "Wave 1|null", "from_barrage": "", "barrage": "", "status": "estimated|arrived", "eta": "", "eta_low": "", "eta_high": "", "hours_from_now": 0, "observed_time": null }],
-  "at_risk_villages": [{ "id": "", "name": "", "district": "", "lat": 0, "lon": 0, "eta": "", "eta_low": "", "eta_high": "", "hours_to_arrival": 0, "population": 0, "population_source": "" }],
+  "at_risk_villages": [{ "id": "", "name": "", "district": "", "lat": 0, "lon": 0, "eta": "", "eta_low": "", "eta_high": "", "hours_to_arrival": 0, "population": 0, "population_source": "", "river_distance_km": 0.0 }],
   "district_eta_hours": { "<district>": 0.0 },
   "data_provenance": { "flows": "", "etas": "", "villages": "", "population": "" }
 }
 ```
 
-`reaches[].coords` are `[lat, lon]`. `mode` defaults to `replay`; omitted
+`reaches[].coords` are `[lat, lon]`. `at_risk_villages[].river_distance_km` (optional, all modes) is the village's distance in km to the indus.geojson centreline, rounded to 0.1. `mode` defaults to `replay`; omitted
 `as_of` uses the last available reading. `mode=live` is described below. Invalid mode or
 time returns HTTP 422 (`invalid_mode`, `invalid_as_of`,
 `as_of_out_of_range`); missing required data returns HTTP 503
@@ -362,8 +362,24 @@ Returns a situation object with `mode: "what_if"`, `as_of` = `peak_time` + 24 h,
 ```
 
 - Synthetic hydrograph: every barrage at 60% of its Low threshold for the 6 days before `peak_time`; the chosen barrage rises over 3 days to `peak_cusecs` and falls 10% the next day. Routed with the same lag engine.
-- Below Medium Flood, `etas` are kept but `at_risk_villages` is `[]` and `note` is set.
+- Villages follow the exposure bands below. Below Medium Flood, `etas` are kept but `at_risk_villages` is `[]` and `note` is set.
 - 422: `invalid_request` (`peak_cusecs` <= 0 or > 2,000,000, bad body), `invalid_scenario` (unknown barrage, bad `peak_time`).
+
+### Exposure bands (live and what-if)
+
+`at_risk_villages` in live and what-if are 2022-flooded villages within a radius of the river centreline that grows with the peak category (`river_distance_km` <= R):
+
+| Peak category | Villages listed |
+|---|---|
+| Normal, Low Flood | none |
+| Medium Flood | within 3 km |
+| High Flood | within 6 km |
+| Very High Flood | within 10 km |
+| Exceptionally High Flood | all 2022-flooded villages |
+
+- What-if uses `scenario.peak_category`; `scenario.exposure = { "radius_km": 10.0|null, "category": "", "rule": "villages flooded in 2022 within R km of the river centreline; larger floods reach further" }` (`radius_km` null = no limit, 0 = none listed). `district_eta_hours` is recomputed from the kept rows.
+- Live uses, per village, the forecast peak category at the barrage just upstream of the village (by `river_km`); the response adds `exposure: { "rule": "", "bands_km": { "<category>": 0|3|6|10|null } }`.
+- Replay is never filtered: those villages flooded in 2022.
 
 ## `GET /health` (flood fields)
 

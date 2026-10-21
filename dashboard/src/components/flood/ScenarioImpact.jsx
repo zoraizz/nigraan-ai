@@ -29,6 +29,18 @@ function byDistrict(villages) {
   return [...groups.values()].sort((a, b) => (a.first?.eta || '9999').localeCompare(b.first?.eta || '9999'))
 }
 
+// "Exposure: villages within 10 km of the river (Very High Flood)" from
+// scenario.exposure; null below Medium Flood (the response note covers it).
+export function exposureLabel(exposure) {
+  if (!exposure) return null
+  const category = exposure.category || ''
+  if (exposure.radius_km == null) {
+    return `Exposure: all 2022-flooded villages (${category.replace(/ Flood$/, '')})`
+  }
+  if (!(Number(exposure.radius_km) > 0)) return null
+  return `Exposure: villages within ${Number(exposure.radius_km)} km of the river (${category})`
+}
+
 function Tile({ label, value, detail }) {
   return (
     <div className="min-w-0 rounded-lg border border-[#1b4a33]/80 bg-[#04140c] px-2 py-1.5">
@@ -63,6 +75,9 @@ export default function ScenarioImpact({ situation, selectedId, onSelect }) {
         <Tile label="Districts" value={empty ? '—' : formatPeople(districts.length)} />
         <Tile label="Water reaches Kotri" value={kotri ? formatWall(kotri.eta) : '—'} detail={kotriDetail} />
       </div>
+      {exposureLabel(scenario.exposure) && (
+        <p className="mt-2 text-[11px] text-slate-300">{exposureLabel(scenario.exposure)}</p>
+      )}
       {empty && situation.note && <p className="mt-2 text-[11px] text-amber-300">{situation.note}</p>}
 
       {!empty && (

@@ -192,6 +192,79 @@ def test_what_if_422():
         assert "error" in r.json(), r.text
 
 
+def _people(body):
+    return sum(v["population"] for v in body["at_risk_villages"])
+
+
+def _what_if(barrage, peak):
+    r = client.post("/what-if", json={"barrage": barrage, "peak_cusecs": peak, "peak_time": "2026-10-21T06:00"})
+    assert r.status_code == 200, r.text
+    return r.json()
+
+
+def test_river_distance_computed():
+    d = [v["river_distance_km"] for v in main.DATA.villages]
+    assert len(d) == len(main.DATA.villages) and all(isinstance(x, float) for x in d)
+    assert 0 <= min(d) and max(d) <= 16
+
+
+def test_exposure_radius_bands():
+    assert routing.exposure_radius_km("Normal") == 0.0
+    assert routing.exposure_radius_km("Low Flood") == 0.0
+    assert routing.exposure_radius_km("Medium Flood") == 3.0
+    assert routing.exposure_radius_km("High Flood") == 6.0
+    assert routing.exposure_radius_km("Very High Flood") == 10.0
+    assert routing.exposure_radius_km("Exceptionally High Flood") is None
+    assert not routing.exposed(0.0, "Low Flood")
+    assert routing.exposed(2.9, "Medium Flood") and not routing.exposed(3.1, "Medium Flood")
+    assert routing.exposed(15.0, "Exceptionally High Flood")
+
+
+def test_what_if_exposure_scales_with_peak():
+    # Taunsa thresholds: very_high 650000, exceptionally_high 800000.
+    vh = _what_if("Taunsa", 650000)
+    eh = _what_if("Taunsa", 900000)
+    med = _what_if("Guddu", 400000)   # Guddu medium 350000, high 500000
+    assert vh["scenario"]["peak_category"] == "Very High Flood"
+    assert eh["scenario"]["peak_category"] == "Exceptionally High Flood"
+    assert med["scenario"]["peak_category"] == "Medium Flood"
+    assert vh["scenario"]["exposure"]["radius_km"] == 10.0
+    assert eh["scenario"]["exposure"]["radius_km"] is None
+    assert all(v["river_distance_km"] <= 10.0 for v in vh["at_risk_villages"])
+    assert all(v["river_distance_km"] <= 3.0 for v in med["at_risk_villages"])
+    assert 0 < _people(vh) < _people(eh)
+    assert 0 < _people(med) < _people(vh) / 5
+    assert set(vh["district_eta_hours"]) == {v["district"] for v in vh["at_risk_villages"]}
+
+
+def test_replay_not_filtered():
+    s = routing.situation(main.DATA, routing.parse_time("2022-08-31T06:00"), mode="replay")
+    assert len(s["at_risk_villages"]) == 925
+    assert _people(s) == 2980150
+
+
+def test_live_band_uses_forecast_peak_upstream():
+    # Taunsa peaked 2 days ago (700k) and is falling; its forecast peak from
+    # today is 520k (High -> 6 km). Every other barrage is Normal, so only
+    # villages between Taunsa and Guddu within 6 km may be listed.
+    series = _series()
+    today = live.today_clock().date().isoformat()
+    i = next(n for n, r in enumerate(series["Taunsa"]) if r["date"] == today)
+    for offset, q in ((-3, 400000), (-2, 700000), (-1, 600000), (0, 520000)):
+        series["Taunsa"][i + offset]["cusecs"] = float(q)
+    original = _patch_fetch(series)
+    try:
+        body = client.get("/flood-situation", params={"mode": "live"}).json()
+    finally:
+        live.fetch_live = original
+    positions, _ = routing.barrage_positions(main.DATA)
+    km = {v["id"]: v["river_km"] for v in main.DATA.villages}
+    assert body["at_risk_villages"], "expected villages below Taunsa"
+    for v in body["at_risk_villages"]:
+        assert positions[4] <= km[v["id"]] < positions[5], v
+        assert v["river_distance_km"] <= 6.0
+
+
 class _FakeResponse:
     def __init__(self, body):
         self._body = body
