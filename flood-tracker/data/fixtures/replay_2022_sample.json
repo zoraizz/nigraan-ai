@@ -178,13 +178,13 @@
         {"wave_id": "indus-2022-w1", "from_barrage": "Taunsa", "barrage": "Kotri", "status": "estimated", "eta": "2022-09-03T18:00", "eta_low": "2022-09-03T06:00", "eta_high": "2022-09-04T12:00", "hours_from_now": 84, "observed_time": null}
       ],
       "at_risk_villages": [
-        {"id": "rajanpur-rojhan", "name": "Rojhan", "district": "Rajanpur", "lat": 28.69, "lon": 69.95, "eta": "2022-08-31T14:00", "eta_low": "2022-08-31T10:00", "eta_high": "2022-08-31T20:00", "hours_to_arrival": 8, "population": 28000, "population_source": "fixture estimate, not a census extract"},
         {"id": "rajanpur-fazilpur", "name": "Fazilpur", "district": "Rajanpur", "lat": 29.32, "lon": 70.43, "eta": "2022-08-31T18:00", "eta_low": "2022-08-31T12:00", "eta_high": "2022-09-01T00:00", "hours_to_arrival": 12, "population": 22000, "population_source": "fixture estimate, not a census extract"},
+        {"id": "rajanpur-rojhan", "name": "Rojhan", "district": "Rajanpur", "lat": 28.69, "lon": 69.95, "eta": "2022-09-01T12:00", "eta_low": "2022-09-01T06:00", "eta_high": "2022-09-01T18:00", "hours_to_arrival": 30, "population": 28000, "population_source": "fixture estimate, not a census extract"},
         {"id": "kashmore-kashmore", "name": "Kashmore", "district": "Kashmore", "lat": 28.43, "lon": 69.58, "eta": "2022-09-01T18:00", "eta_low": "2022-09-01T06:00", "eta_high": "2022-09-02T06:00", "hours_to_arrival": 36, "population": 45000, "population_source": "fixture estimate, not a census extract"},
         {"id": "kashmore-kandhkot", "name": "Kandhkot", "district": "Kashmore", "lat": 28.24, "lon": 69.18, "eta": "2022-09-02T00:00", "eta_low": "2022-09-01T12:00", "eta_high": "2022-09-02T12:00", "hours_to_arrival": 42, "population": 32000, "population_source": "fixture estimate, not a census extract"},
         {"id": "ghotki-ghotki", "name": "Ghotki", "district": "Ghotki", "lat": 28.01, "lon": 69.32, "eta": "2022-09-02T06:00", "eta_low": "2022-09-01T18:00", "eta_high": "2022-09-02T18:00", "hours_to_arrival": 48, "population": 60000, "population_source": "fixture estimate, not a census extract"}
       ],
-      "district_eta_hours": {"Rajanpur": 8, "Kashmore": 36, "Ghotki": 48},
+      "district_eta_hours": {"Rajanpur": 12, "Kashmore": 36, "Ghotki": 48},
       "data_provenance": {
         "flows": "fixture: same hand-made 2022-08-31T06:00 situation as situation_2022-08-31.json",
         "etas": "fixture: lag windows from a passed Taunsa peak, not a calibrated routing model",

@@ -39,6 +39,12 @@ Thresholds in cusecs (Low/Medium/High/VeryHigh/ExceptionallyHigh), source FFD bu
 
 `reaches[].coords` are `[lat, lon]`.
 
+## Time and category rules
+
+- All times are Asia/Karachi local, format `YYYY-MM-DDTHH:MM`, with no offset.
+- `hours_from_now` and `hours_to_arrival` are negative once the peak or the village arrival has passed.
+- A reach's `category` is the higher of its two end barrages' categories. Order is Normal < Low Flood < Medium Flood < High Flood < Very High Flood < Exceptionally High Flood.
+
 ## `GET /replay/2022`
 
 ```json
