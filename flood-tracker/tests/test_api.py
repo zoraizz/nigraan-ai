@@ -58,6 +58,23 @@ def _assert_error(r, status: int, code: str) -> None:
     assert isinstance(err.get("message"), str) and err["message"]
 
 
+def test_replay_scorecard_main_waves_in_barrage_order():
+    import main
+
+    previous = main._replay_cache
+    try:
+        main._replay_cache = None
+        body = main.replay_2022()
+        rows = body["scorecard"]
+        order = ["Tarbela", "Kalabagh", "Chashma", "Taunsa", "Guddu", "Sukkur", "Kotri"]
+        expected = [("Wave 1", b) for b in order[1:-1]]
+        expected += [("Wave 2", b) for b in order[1:]]
+        assert [(r["wave_label"], r["barrage"]) for r in rows] == expected
+        assert main.replay_2022() == body
+    finally:
+        main._replay_cache = previous
+
+
 def test_health():
     if not _server_up():
         _skip("server not running")
@@ -245,6 +262,7 @@ def test_alert_drafts_errors():
 
 if __name__ == "__main__":
     tests = [
+        test_replay_scorecard_main_waves_in_barrage_order,
         test_health,
         test_flood_situation_replay,
         test_flood_situation_default_as_of,

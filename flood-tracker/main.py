@@ -320,6 +320,11 @@ def replay_2022():
         return _data_unavailable()
     if _replay_cache is None:
         _replay_cache = routing.replay_2022(DATA)
+        barrage_order = {b["name"]: b["order"] for b in DATA.barrages}
+        _replay_cache["scorecard"] = sorted(
+            (row for row in _replay_cache["scorecard"] if row["wave_label"] is not None),
+            key=lambda row: (row["wave_label"], barrage_order[row["barrage"]]),
+        )
         for step in _replay_cache["steps"]:
             _validate_situation(step)
         logger.info(
