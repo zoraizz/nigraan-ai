@@ -8,10 +8,11 @@ const MAX_CUSECS = 2000000
 // POST /what-if body; an empty date leaves peak_time to the server (today 06:00).
 export default function WhatIfForm({ initial, onRun, running }) {
   const [barrage, setBarrage] = useState(initial?.barrage || 'Taunsa')
-  const [peak, setPeak] = useState(String(Math.round(initial?.peak_cusecs || 650000)))
+  // Rounded to the input's 1000-cusec step so a prefilled forecast peak submits.
+  const [peak, setPeak] = useState(String(Math.max(1000, Math.round((initial?.peak_cusecs || 650000) / 1000) * 1000)))
   const [date, setDate] = useState(initial?.date || '')
   const value = Number(peak)
-  const valid = Number.isFinite(value) && value > 0 && value <= MAX_CUSECS
+  const valid = Number.isFinite(value) && value >= 1000 && value <= MAX_CUSECS
 
   function submit(event) {
     event.preventDefault()
@@ -32,7 +33,7 @@ export default function WhatIfForm({ initial, onRun, running }) {
       </label>
       <label className="flex flex-col gap-1 text-[#9dbdac]">
         Peak (cusecs)
-        <input type="number" min={1} max={MAX_CUSECS} step={1000} value={peak} onChange={(e) => setPeak(e.target.value)}
+        <input type="number" min={1000} max={MAX_CUSECS} step={1000} value={peak} onChange={(e) => setPeak(e.target.value)}
           className="w-32 rounded-md border border-[#1b4a33] bg-[#04140c] px-2 py-1 text-sm tabular-nums text-slate-100" />
       </label>
       <div className="flex gap-1">
@@ -45,16 +46,24 @@ export default function WhatIfForm({ initial, onRun, running }) {
           </button>
         ))}
       </div>
-      <label className="flex flex-col gap-1 text-[#9dbdac]">
-        Peak date (optional)
-        <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
+      <div className="flex flex-col gap-1 text-[#9dbdac]">
+        <span className="flex items-center justify-between gap-2">
+          <label htmlFor="what-if-date">Peak date (optional)</label>
+          {date && (
+            <button type="button" onClick={() => setDate('')}
+              className="text-[11px] font-semibold text-emerald-300 underline hover:text-emerald-200">
+              Clear
+            </button>
+          )}
+        </span>
+        <input id="what-if-date" type="date" value={date} onChange={(e) => setDate(e.target.value)}
           className="rounded-md border border-[#1b4a33] bg-[#04140c] px-2 py-1 text-sm text-slate-100 [color-scheme:dark]" />
-      </label>
+      </div>
       <button type="submit" disabled={!valid || running}
         className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-semibold text-white hover:bg-emerald-500 disabled:opacity-40">
         {running ? 'Running…' : 'Run'}
       </button>
-      {!valid && <p className="w-full text-red-300">Peak must be between 1 and 2,000,000 cusecs.</p>}
+      {!valid && <p className="w-full text-red-300">Peak must be between 1,000 and 2,000,000 cusecs.</p>}
     </form>
   )
 }
