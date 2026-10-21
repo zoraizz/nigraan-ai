@@ -30,6 +30,7 @@ export function useFloodReplay() {
         setReplay({
           steps,
           scorecard: Array.isArray(body?.scorecard) ? body.scorecard : [],
+          scorecardNote: typeof body?.scorecard_note === 'string' ? body.scorecard_note : '',
           fixture: body?.fixture === true,
         })
         setIndex(openingIndex(steps))
@@ -82,6 +83,7 @@ export function useFloodReplay() {
     situation: replay?.steps?.[index] ?? null,
     steps: replay?.steps ?? [],
     scorecard: replay?.scorecard ?? [],
+    scorecardNote: replay?.scorecardNote ?? '',
     index,
     playing,
     loading,

@@ -11,6 +11,7 @@ import {
 } from 'react-leaflet'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import { waveName } from '../../api/floodTracker.js'
 import { FLOOD_CATEGORIES, floodCategory } from '../../config/floodCategories.js'
 import { formatCusecs, formatWall } from './timeFormat.js'
 import CategoryBadge from './CategoryBadge.jsx'
@@ -155,7 +156,7 @@ export default function RiverMap({ situation, selectedVillageId, onSelectVillage
   }), [])
 
   return (
-    <div className={`flood-map${BASEMAP.fallback ? ' is-osm-fallback' : ''} relative h-full min-h-[460px] overflow-hidden rounded-xl border border-[#1b4a33]/80`}>
+    <div className={`flood-map${BASEMAP.fallback ? ' is-osm-fallback' : ''} relative h-full min-h-[460px] overflow-hidden lg:min-h-0 rounded-xl border border-[#1b4a33]/80`}>
       <MapContainer
         center={[29.7, 70.4]}
         zoom={6}
@@ -277,6 +278,7 @@ export default function RiverMap({ situation, selectedVillageId, onSelectVillage
                 <p className="font-semibold">
                   {forming ? 'Peak forming' : 'Peak passed'} at {peak.barrage}
                 </p>
+                <p className="text-[12px] text-[#c5d9cc]">{waveName(peak)}</p>
                 <p className="mt-1 font-mono text-[12px]">{formatWall(peak.peak_time)}</p>
                 <p className="font-mono text-[12px]">Peak outflow {formatCusecs(peak.peak_outflow_cusecs)}</p>
                 <p className="mt-1 text-[11px] text-[#9dbdac]">Modelled wave marker, not a gauge.</p>

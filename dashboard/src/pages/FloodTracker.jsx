@@ -114,8 +114,8 @@ export default function FloodTracker() {
         />
         <details open className="mt-2 border-t border-[#1b4a33]/70 pt-2">
           <summary className="cursor-pointer text-xs font-semibold text-slate-200">Predicted vs actual</summary>
-          <div className="pt-2">
-            <ReplayScorecard rows={replay.scorecard} usingFixtures={replay.usingFixtures} />
+          <div className="max-h-48 overflow-auto pt-2">
+            <ReplayScorecard rows={replay.scorecard} note={replay.scorecardNote} usingFixtures={replay.usingFixtures} />
           </div>
         </details>
       </section>

@@ -1,4 +1,4 @@
-import CategoryBadge from './CategoryBadge.jsx'
+import { waveName } from '../../api/floodTracker.js'
 import { formatPeakLine, formatWall } from './timeFormat.js'
 
 function hoursLabel(hours) {
@@ -16,7 +16,9 @@ function EtaRow({ eta }) {
     <li className="border-t border-[#1b4a33]/70 px-3 py-2.5 first:border-t-0">
       <div className="flex items-start justify-between gap-2">
         <p className="text-sm font-medium leading-snug text-slate-100">{formatPeakLine(eta)}</p>
-        {eta.category ? <CategoryBadge category={eta.category} /> : null}
+        <span className="shrink-0 rounded bg-[#0e3a28] px-1.5 py-0.5 text-[10px] font-semibold text-[#c5d9cc]">
+          {waveName(eta)}
+        </span>
       </div>
       <p className="mt-1 text-[11px] text-[#9dbdac]">
         {arrived ? 'Observed peak' : 'Estimate'}

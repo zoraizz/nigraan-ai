@@ -1,6 +1,7 @@
+import { waveName } from '../../api/floodTracker.js'
 import { formatSignedHours, formatWall } from './timeFormat.js'
 
-export default function ReplayScorecard({ rows, usingFixtures }) {
+export default function ReplayScorecard({ rows, note, usingFixtures }) {
   const list = Array.isArray(rows) ? rows : []
   return (
     <div>
@@ -8,8 +9,9 @@ export default function ReplayScorecard({ rows, usingFixtures }) {
         {usingFixtures
           ? 'Fixture scorecard: hand-made predicted and actual times, not a calibrated replay.'
           : 'Predicted times are modelled. Actual times are recorded barrage peaks.'}
-        {' '}Positive error means the actual time is later than the prediction. Hours are Asia/Karachi.
+        {' '}Error is actual minus predicted: positive means the actual time is later than the prediction. Hours are Asia/Karachi.
       </p>
+      {note && <p className="mb-2 text-[11px] leading-snug text-[#8aa898]">{note}</p>}
       {list.length === 0 ? (
         <p className="text-sm text-[#9dbdac]">No scorecard for this replay.</p>
       ) : (
@@ -31,7 +33,17 @@ export default function ReplayScorecard({ rows, usingFixtures }) {
                   <tr key={`${row.wave_id || 'wave'}-${row.barrage}`} className="border-t border-[#1b4a33]/60">
                     <td className="py-1.5 pr-3 font-medium text-slate-100">
                       {row.barrage}
-                      {row.wave_id && <span className="mt-0.5 block font-mono text-[10px] font-normal text-[#7f9c8c]">{row.wave_id}</span>}
+                      <span className="mt-0.5 block text-[10px] font-normal text-[#7f9c8c]">
+                        {waveName(row)}
+                        {row.in_sample === true && (
+                          <span
+                            className="ml-1.5 rounded bg-amber-500/15 px-1 text-amber-300"
+                            title="The reach lags were calibrated on this crest, so this row flatters the model."
+                          >
+                            in-sample
+                          </span>
+                        )}
+                      </span>
                     </td>
                     <td className="py-1.5 pr-3 font-mono text-slate-200">
                       {formatWall(row.predicted_time)}
@@ -48,6 +60,9 @@ export default function ReplayScorecard({ rows, usingFixtures }) {
                         <span className="mt-0.5 block text-[10px] text-[#8aa898]">
                           {hours > 0 ? 'later than predicted' : 'earlier than predicted'}
                         </span>
+                      )}
+                      {row.note && (
+                        <span className="mt-0.5 block max-w-[18rem] font-sans text-[10px] leading-snug text-[#8aa898]">{row.note}</span>
                       )}
                     </td>
                   </tr>

@@ -82,6 +82,13 @@ export async function postAlertDrafts(body) {
   return postJson(ENDPOINTS.floodApi, '/alert-drafts', body ?? {})
 }
 
+// The UI shows wave_label, never the internal wave_id. A null label is a rise
+// that stayed under Medium Flood or reached it at fewer than 2 barrages.
+export function waveName(item) {
+  const label = typeof item?.wave_label === 'string' ? item.wave_label.trim() : ''
+  return label || 'Minor rise'
+}
+
 // source "template" is the fixed label. A model id is shown as "Drafted by <model>".
 export function draftTag(draft) {
   if (!draft || draft.source === 'template') return 'Template'
