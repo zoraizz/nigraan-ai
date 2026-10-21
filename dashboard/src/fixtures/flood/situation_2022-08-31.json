@@ -1,0 +1,49 @@
+{
+  "fixture": true,
+  "note": "Hand-made fixture for the parallel build. Not a 2022 FFD bulletin, not gauge data, and not model output.",
+  "as_of": "2022-08-31T06:00",
+  "mode": "replay",
+  "barrages": [
+    {"name": "Tarbela", "order": 1, "lat": 34.088, "lon": 72.699, "inflow_cusecs": 175000, "outflow_cusecs": 168000, "category": "Normal", "trend": "falling"},
+    {"name": "Kalabagh", "order": 2, "lat": 32.961, "lon": 71.546, "inflow_cusecs": 310000, "outflow_cusecs": 295000, "category": "Low Flood", "trend": "falling"},
+    {"name": "Chashma", "order": 3, "lat": 32.45, "lon": 71.39, "inflow_cusecs": 420000, "outflow_cusecs": 405000, "category": "Medium Flood", "trend": "falling"},
+    {"name": "Taunsa", "order": 4, "lat": 30.703, "lon": 70.746, "inflow_cusecs": 545000, "outflow_cusecs": 520000, "category": "High Flood", "trend": "falling"},
+    {"name": "Guddu", "order": 5, "lat": 28.42, "lon": 69.715, "inflow_cusecs": 265000, "outflow_cusecs": 240000, "category": "Low Flood", "trend": "rising"},
+    {"name": "Sukkur", "order": 6, "lat": 27.699, "lon": 68.859, "inflow_cusecs": 185000, "outflow_cusecs": 178000, "category": "Normal", "trend": "rising"},
+    {"name": "Kotri", "order": 7, "lat": 25.367, "lon": 68.308, "inflow_cusecs": 142000, "outflow_cusecs": 138000, "category": "Normal", "trend": "stable"}
+  ],
+  "reaches": [
+    {"from": "Tarbela", "to": "Kalabagh", "category": "Low Flood", "coords": [[34.088, 72.699], [33.5, 72.1], [32.961, 71.546]]},
+    {"from": "Kalabagh", "to": "Chashma", "category": "Medium Flood", "coords": [[32.961, 71.546], [32.7, 71.46], [32.45, 71.39]]},
+    {"from": "Chashma", "to": "Taunsa", "category": "High Flood", "coords": [[32.45, 71.39], [31.6, 71.05], [30.703, 70.746]]},
+    {"from": "Taunsa", "to": "Guddu", "category": "High Flood", "coords": [[30.703, 70.746], [29.55, 70.3], [28.42, 69.715]]},
+    {"from": "Guddu", "to": "Sukkur", "category": "Low Flood", "coords": [[28.42, 69.715], [28.05, 69.25], [27.699, 68.859]]},
+    {"from": "Sukkur", "to": "Kotri", "category": "Normal", "coords": [[27.699, 68.859], [26.5, 68.55], [25.367, 68.308]]}
+  ],
+  "peaks": [
+    {"barrage": "Taunsa", "wave_id": "indus-2022-w1", "status": "passed", "peak_time": "2022-08-30T18:00", "peak_outflow_cusecs": 580000}
+  ],
+  "etas": [
+    {"wave_id": "indus-2022-w1", "from_barrage": "Taunsa", "barrage": "Guddu", "status": "estimated", "eta": "2022-09-01T18:00", "eta_low": "2022-09-01T06:00", "eta_high": "2022-09-02T06:00", "hours_from_now": 36, "observed_time": null},
+    {"wave_id": "indus-2022-w1", "from_barrage": "Taunsa", "barrage": "Sukkur", "status": "estimated", "eta": "2022-09-02T12:00", "eta_low": "2022-09-02T00:00", "eta_high": "2022-09-03T00:00", "hours_from_now": 54, "observed_time": null},
+    {"wave_id": "indus-2022-w1", "from_barrage": "Taunsa", "barrage": "Kotri", "status": "estimated", "eta": "2022-09-03T18:00", "eta_low": "2022-09-03T06:00", "eta_high": "2022-09-04T12:00", "hours_from_now": 84, "observed_time": null}
+  ],
+  "at_risk_villages": [
+    {"id": "rajanpur-fazilpur", "name": "Fazilpur", "district": "Rajanpur", "lat": 29.32, "lon": 70.43, "eta": "2022-08-31T18:00", "eta_low": "2022-08-31T12:00", "eta_high": "2022-09-01T00:00", "hours_to_arrival": 12, "population": 22000, "population_source": "fixture estimate, not a census extract"},
+    {"id": "rajanpur-rojhan", "name": "Rojhan", "district": "Rajanpur", "lat": 28.69, "lon": 69.95, "eta": "2022-09-01T12:00", "eta_low": "2022-09-01T06:00", "eta_high": "2022-09-01T18:00", "hours_to_arrival": 30, "population": 28000, "population_source": "fixture estimate, not a census extract"},
+    {"id": "kashmore-kashmore", "name": "Kashmore", "district": "Kashmore", "lat": 28.43, "lon": 69.58, "eta": "2022-09-01T18:00", "eta_low": "2022-09-01T06:00", "eta_high": "2022-09-02T06:00", "hours_to_arrival": 36, "population": 45000, "population_source": "fixture estimate, not a census extract"},
+    {"id": "kashmore-kandhkot", "name": "Kandhkot", "district": "Kashmore", "lat": 28.24, "lon": 69.18, "eta": "2022-09-02T00:00", "eta_low": "2022-09-01T12:00", "eta_high": "2022-09-02T12:00", "hours_to_arrival": 42, "population": 32000, "population_source": "fixture estimate, not a census extract"},
+    {"id": "ghotki-ghotki", "name": "Ghotki", "district": "Ghotki", "lat": 28.01, "lon": 69.32, "eta": "2022-09-02T06:00", "eta_low": "2022-09-01T18:00", "eta_high": "2022-09-02T18:00", "hours_to_arrival": 48, "population": 60000, "population_source": "fixture estimate, not a census extract"}
+  ],
+  "district_eta_hours": {
+    "Rajanpur": 12,
+    "Kashmore": 36,
+    "Ghotki": 48
+  },
+  "data_provenance": {
+    "flows": "fixture: hand-made cusecs for 2022-08-31T06:00, not an FFD gauge extract",
+    "etas": "fixture: lag windows from a passed Taunsa peak to Guddu, Sukkur and Kotri, not a calibrated routing model",
+    "villages": "fixture: Rojhan, Fazilpur, Kashmore, Kandhkot and Ghotki placed near the Indus for the contract example",
+    "population": "fixture: rounded headcounts, not a census extract"
+  }
+}

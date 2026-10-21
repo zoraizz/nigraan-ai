@@ -55,6 +55,23 @@ function DamageIcon() {
   )
 }
 
+function FloodIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      aria-hidden="true"
+      className="h-5 w-5 shrink-0"
+    >
+      <path d="M2.5 7.5c1.6-1.8 3.2-1.8 4.8 0s3.2 1.8 4.8 0 3.2-1.8 4.8 0" />
+      <path d="M2.5 12.5c1.6-1.8 3.2-1.8 4.8 0s3.2 1.8 4.8 0 3.2-1.8 4.8 0" />
+    </svg>
+  )
+}
+
 function PriorityIcon() {
   return (
     <svg
@@ -79,6 +96,8 @@ const NAV_ITEMS = [
   { to: '/risk-map', label: 'Risk Map', icon: RiskMapIcon },
   { to: '/damage-assessment', label: 'Damage Assessment', icon: DamageIcon },
   { to: '/aid-priority', label: 'Aid Priority', icon: PriorityIcon },
+  // flood: River Flood Tracker
+  { to: '/flood-tracker', label: 'Flood Tracker', icon: FloodIcon },
 ]
 
 export default function Sidebar({ isCollapsed }) {

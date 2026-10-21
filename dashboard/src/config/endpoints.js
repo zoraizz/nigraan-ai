@@ -13,4 +13,6 @@ export const ENDPOINTS = {
   riskApi: trimTrailingSlash(import.meta.env.VITE_RISK_API_URL || 'http://127.0.0.1:8000'),
   damageApi: trimTrailingSlash(import.meta.env.VITE_DAMAGE_API_URL || 'http://127.0.0.1:8001'),
   priorityApi: trimTrailingSlash(import.meta.env.VITE_PRIORITY_API_URL || 'http://127.0.0.1:8002'),
+  // flood: River Flood Tracker (FastAPI, port 8003)
+  floodApi: trimTrailingSlash(import.meta.env.VITE_FLOOD_API_URL || 'http://127.0.0.1:8003'),
 }
