@@ -118,14 +118,21 @@ eta_high). A village at river_km between barrages a and b (a.km <= km <
 b.km) gets
     t(v) = t(a) + (km - a.km) / (b.km - a.km) * (t(b) - t(a))
 for each of eta, eta_low and eta_high. Below the last barrage, the last
-reach's hours-per-km rate (lag / reach length) is extended. A village is at
-risk while the wave has not passed it: its river_km is downstream of L. (A
-village below the last barrage is at risk until its eta_high once the wave
-has passed the last barrage.) hours_to_arrival = eta - as_of and goes
-negative if the estimated arrival is behind us but no barrage below the
-village has yet confirmed the crest. If several waves threaten a village,
-the earliest eta is reported. Villages are sorted by eta, then population
-descending. district_eta_hours = the minimum hours_to_arrival per district.
+reach's hours-per-km rate (lag / reach length) is extended. A wave threatens
+a village while it has not passed it:
+    * the village's river_km is downstream of L (a barrage at or below the
+      village that confirmed the crest means it has gone by), and
+    * eta_high >= as_of. Once the whole window is behind us the wave is
+      taken to have passed the village, even if no barrage below it has
+      confirmed the crest yet (a stalled or attenuated crest, or a gap in
+      the readings, must not keep a village "at risk" for days).
+hours_to_arrival = eta - as_of. It is negative only inside the window
+(eta < as_of <= eta_high): the crest is due now. If several waves threaten
+a village, the earliest eta among those still threatening it is reported,
+so a wave that has passed never masks the next one. Villages are sorted by
+eta, then population descending. district_eta_hours = the minimum
+hours_to_arrival per district over the villages on the list, so it never
+carries an arrival from a wave that has already passed.
 
 All ETAs are MODELLED (summed historical lags from reaches.json, not a
 hydraulic model) and data_provenance says so in every response.
@@ -506,13 +513,13 @@ def village_etas(
                     t + timedelta(hours=extra * last_reach[key] / last_len)
                     for t, key in zip(base, ("lag_median_h", "lag_min_h", "lag_max_h"))
                 )
-                if L.order == n and L.status == "passed" and as_of > triplet[2]:
-                    continue
             else:
                 a = max(o for o in km if km[o] <= vkm)
                 b = a + 1
                 frac = (vkm - km[a]) / (km[b] - km[a])
                 triplet = tuple(_lerp(times[a][k], times[b][k], frac) for k in range(3))
+            if triplet[2] < as_of:
+                continue
             eta = triplet[0]
             prior = best.get(v["id"])
             if prior is None or eta < prior[0][0]:

@@ -403,14 +403,28 @@ def test_village_ordering_and_district_minimum():
 
 def test_village_drops_off_once_the_wave_passes_it():
     data = make_data(villages=FAKE_VILLAGES)
+    s4 = situation(data, day(4))
+    assert "v-a" in [v["id"] for v in s4["at_risk_villages"]]
     # Day 5: crest confirmed at Kalabagh (km 200), not yet at Chashma (km 300).
+    # A (km 250) has eta_high = Kalabagh's day-4 peak + half the 30 h
+    # Kalabagh-Chashma lag_max = day 4 + 15 h, which is behind as_of: the wave
+    # has passed A even though Chashma has not confirmed it.
     s5 = situation(data, day(5))
-    a = next(v for v in s5["at_risk_villages"] if v["id"] == "v-a")
-    assert a["hours_to_arrival"] == -12.0      # estimated arrival is behind us
-    # Day 6: Chashma confirms its crest, so A (km 250) has been passed.
-    s6 = situation(data, day(6))
-    assert "v-a" not in [v["id"] for v in s6["at_risk_villages"]]
-    assert s6["district_eta_hours"]["X"] == s6["district_eta_hours"]["Y"]
+    assert "v-a" not in [v["id"] for v in s5["at_risk_villages"]]
+    assert s5["district_eta_hours"]["X"] == s5["district_eta_hours"]["Y"]
+
+
+def test_no_village_listed_after_its_window_closes():
+    data = make_data(villages=FAKE_VILLAGES)
+    for d in range(N_DAYS):
+        s = situation(data, day(d))
+        for v in s["at_risk_villages"]:
+            assert v["eta_high"] >= s["as_of"], (s["as_of"], v)
+        expected: dict = {}
+        for v in s["at_risk_villages"]:
+            h = v["hours_to_arrival"]
+            expected[v["district"]] = min(h, expected.get(v["district"], h))
+        assert s["district_eta_hours"] == expected, s["as_of"]
 
 
 def test_missing_villages_file_is_reported():
@@ -509,6 +523,33 @@ def test_real_flows_2022():
     assert rep["scorecard"], "expected at least one scored crest in 2022"
 
 
+def _real_data():
+    needed = [DATA_DIR / n for n in ("flows_2022.csv", "barrages.json", "reaches.json",
+                                     "villages.json")]
+    if not all(p.exists() for p in needed):
+        _skip("real data files (flows_2022.csv, villages.json, ...) not present")
+        return None
+    return routing.load_data(*[DATA_DIR / n for n in (
+        "barrages.json", "reaches.json", "flows_2022.csv")],
+        DATA_DIR / "villages.json", DATA_DIR / "indus.geojson")
+
+
+def test_real_31_aug_lists_villages_ahead_of_the_second_wave():
+    # The first crest passed Sukkur on 25 Aug. On 31 Aug its Sindh villages
+    # must not lead the list at about -143 h; the second crest (Taunsa
+    # 30 Aug) heading for Muzaffargarh and Rajanpur must.
+    data = _real_data()
+    if data is None:
+        return
+    s = situation(data, routing.parse_time("2022-08-31T06:00"))
+    villages = s["at_risk_villages"]
+    assert villages[0]["district"] in ("Muzaffargarh", "Rajanpur"), villages[0]
+    assert all(v["eta_high"] >= s["as_of"] for v in villages)
+    assert all(h > 0 for h in s["district_eta_hours"].values()), s["district_eta_hours"]
+    first_two = sorted(s["district_eta_hours"], key=s["district_eta_hours"].get)[:2]
+    assert set(first_two) == {"Muzaffargarh", "Rajanpur"}, s["district_eta_hours"]
+
+
 # ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
@@ -526,12 +567,14 @@ if __name__ == "__main__":
         test_arrived_replaces_the_estimate,
         test_village_ordering_and_district_minimum,
         test_village_drops_off_once_the_wave_passes_it,
+        test_no_village_listed_after_its_window_closes,
         test_missing_villages_file_is_reported,
         test_as_of_outside_data_raises,
         test_situation_matches_contract,
         test_replay_and_scorecard,
         test_scorecard_uses_only_upstream_data_before_the_peak,
         test_real_flows_2022,
+        test_real_31_aug_lists_villages_ahead_of_the_second_wave,
     ]
 
     passed, failed = 0, 0
