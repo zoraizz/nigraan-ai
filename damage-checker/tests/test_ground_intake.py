@@ -9,7 +9,9 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
@@ -33,10 +35,12 @@ from ground_intake.schema import (  # noqa: E402
     DamageLevel,
     GroundReport,
     ImageKind,
+    ReportStatus,
     SceneType,
     VlmObservation,
     WaterDepth,
 )
+from ground_intake.store import JsonReportStore, StoreWritesPaused  # noqa: E402
 
 DADU = next(item for item in DISTRICTS if item["name"] == "Dadu")
 SUKKUR = next(item for item in DISTRICTS if item["name"] == "Sukkur")
@@ -707,7 +711,9 @@ class TestIntakeRouting(_IntakeBase):
         # The model got an EXIF-free JPEG, and that JPEG is what was stored.
         jpeg = fake.describe.call_args.args[0]
         self.assertTrue(jpeg.startswith(b"\xff\xd8"))
-        self.assertEqual(self.store.photo(report["id"]), jpeg)
+        stored = self.store.photo_path(report["id"])
+        self.assertIsNotNone(stored)
+        self.assertEqual(stored.read_bytes(), jpeg)
         self.assertEqual(self.store.get(report["id"]).id, report["id"])
 
     def test_not_urgent_and_unknown_role_defaults_to_citizen(self):
@@ -749,6 +755,11 @@ class TestIntakeRouting(_IntakeBase):
         self.assertEqual(location["source"], "exif")
         self.assertEqual(location["district"], "Dadu")
         self.assertAlmostEqual(location["lat"], DADU["lat"], places=3)
+        with Image.open(self.store.photo_path(body["report"]["id"])) as saved:
+            saved.load()
+            self.assertEqual(saved.format, "JPEG")
+            self.assertLessEqual(max(saved.size), 1024)
+            self.assertFalse(saved.getexif().get_ifd(0x8825))
 
     def test_rejections_keep_the_classify_damage_message(self):
         cases = [
@@ -873,12 +884,448 @@ class TestIntakeMatchesClassifyDamage(_IntakeBase):
     def test_app_mounts_intake_and_health_reports_ground_fields(self):
         import asyncio
 
-        self.assertIn("/intake", self.main.app.openapi()["paths"])
+        paths = self.main.app.openapi()["paths"]
+        for path in (
+            "/intake",
+            "/ground-reports",
+            "/ground-reports/{report_id}",
+            "/ground-reports/{report_id}/photo",
+            "/ground-reports/{report_id}/review",
+            "/ground-summary",
+        ):
+            self.assertIn(path, paths)
+        self.assertIn("patch", paths["/ground-reports/{report_id}/review"])
         self.vlm.set_providers_for_tests([])
         health = asyncio.run(self.main.health())
         self.assertEqual(health["ground_vlm_providers"], [])
         self.assertFalse(health["ground_vlm_configured"])
         self.assertEqual(health["ground_report_count"], 0)
+
+
+# ---- persistence and officer review ----
+
+_STAMP = re.compile(r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$")
+
+
+def _tiny_jpeg() -> bytes:
+    buffer = io.BytesIO()
+    Image.new("RGB", (8, 8), (10, 20, 30)).save(buffer, format="JPEG", quality=85)
+    return buffer.getvalue()
+
+
+def _endpoint(router, path: str, method: str):
+    for route in router.routes:
+        if getattr(route, "path", None) == path and method in getattr(route, "methods", ()):
+            return route.endpoint
+    found = [getattr(route, "path", None) for route in router.routes]
+    raise AssertionError(f"{method} {path} is not routed; have {found}")
+
+
+def _json(endpoint, **kwargs):
+    import asyncio
+
+    response = asyncio.run(endpoint(**kwargs))
+    return response.status_code, json.loads(response.body)
+
+
+class _StoreBase(unittest.TestCase):
+    """GROUND_REPORTS_DIR points at a temp directory for the whole test."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self._env = patch.dict(os.environ, {"GROUND_REPORTS_DIR": self.tmp.name})
+        self._env.start()
+        self.addCleanup(self._env.stop)
+        from ground_intake import router as router_module
+        self.router_module = router_module
+        # Constructed with no path so it has to read GROUND_REPORTS_DIR.
+        self.store = router_module.set_store_for_tests(JsonReportStore())
+        self.addCleanup(router_module.set_store_for_tests)
+
+    def _save(self, district: str = "Dadu", **overrides) -> GroundReport:
+        report = _report(district, **overrides)
+        self.store.add(report, _tiny_jpeg())
+        return report
+
+
+class TestReportStore(_StoreBase):
+    def test_add_reload_and_update_round_trip(self):
+        jpeg = _tiny_jpeg()
+        report = _report("Dadu", summary="گھر گر گیا۔")
+        self.store.add(report, jpeg)
+
+        again = JsonReportStore()
+        self.assertEqual(again.root, Path(self.tmp.name).resolve())
+        self.assertEqual(again.count(), 1)
+        self.assertEqual(again.get(report.id).model_dump(), report.model_dump())
+        photo = again.photo_path(report.id)
+        self.assertIsNotNone(photo)
+        self.assertEqual(photo.name, f"{report.id}.jpg")
+        self.assertEqual(photo.read_bytes(), jpeg)
+        saved = json.loads((again.root / "reports.json").read_text(encoding="utf-8"))
+        self.assertEqual(saved[0]["summary"], "گھر گر گیا۔")
+
+        report.status = ReportStatus.verified
+        self.store.update(report)
+        self.assertEqual(JsonReportStore().get(report.id).status, ReportStatus.verified)
+        self.assertEqual(JsonReportStore().photo_path(report.id).read_bytes(), jpeg)
+        self.assertIsNone(self.store.photo_path("../" + "ab" * 16))
+        self.assertIsNone(self.store.photo_path("a" * 31))
+        missing = _report("Sukkur")
+        with self.assertRaises(KeyError):
+            self.store.update(missing)
+
+    def test_corrupt_file_is_not_overwritten(self):
+        path = Path(self.tmp.name) / "reports.json"
+        path.write_text("{not json", encoding="utf-8")
+        store = JsonReportStore()
+        self.assertEqual(store.count(), 0)
+        with self.assertRaises(StoreWritesPaused):
+            store.add(_report("Dadu"), _tiny_jpeg())
+        self.assertEqual(path.read_text(encoding="utf-8"), "{not json")
+
+    def test_schema_invalid_row_pauses_writes(self):
+        good = _report("Dadu", summary="street is blocked")
+        path = Path(self.tmp.name) / "reports.json"
+        path.write_text(json.dumps([
+            good.model_dump(mode="json"),
+            {"id": "not-a-report"},
+        ]), encoding="utf-8")
+        store = JsonReportStore()
+        self.assertEqual(store.count(), 1)
+        self.assertEqual(store.get(good.id).summary, "street is blocked")
+        with self.assertRaises(StoreWritesPaused):
+            store.add(_report("Sukkur"), _tiny_jpeg())
+        self.assertIn("not-a-report", path.read_text(encoding="utf-8"))
+
+    def test_relative_directory_is_next_to_the_service(self):
+        import shutil
+
+        name = "ground_reports_rel_test"
+        target = SERVICE_ROOT / name
+        with tempfile.TemporaryDirectory() as cwd, \
+                patch.dict(os.environ, {"GROUND_REPORTS_DIR": name}):
+            previous = os.getcwd()
+            os.chdir(cwd)
+            try:
+                store = JsonReportStore()
+            finally:
+                os.chdir(previous)
+        try:
+            self.assertEqual(store.root, target.resolve())
+            self.assertFalse((target / "reports.json").exists())
+        finally:
+            shutil.rmtree(target, ignore_errors=True)
+
+    def test_concurrent_adds_keep_every_report(self):
+        from concurrent.futures import ThreadPoolExecutor
+
+        reports = [_report("Dadu", summary=f"photo {index}") for index in range(12)]
+        jpeg = _tiny_jpeg()
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            list(pool.map(lambda report: self.store.add(report, jpeg), reports))
+        reloaded = JsonReportStore()
+        self.assertEqual(reloaded.count(), 12)
+        self.assertEqual({item.id for item in reloaded.list()}, {item.id for item in reports})
+        for report in reports:
+            self.assertEqual(reloaded.photo_path(report.id).read_bytes(), jpeg)
+
+
+class TestGroundReportApi(_StoreBase):
+    def setUp(self):
+        super().setUp()
+        self.router = self.router_module.build_router(lambda _image: None)
+        self.list_reports = _endpoint(self.router, "/ground-reports", "GET")
+        self.get_one = _endpoint(self.router, "/ground-reports/{report_id}", "GET")
+        self.photo = _endpoint(self.router, "/ground-reports/{report_id}/photo", "GET")
+        self.review_report = _endpoint(self.router, "/ground-reports/{report_id}/review", "PATCH")
+        self.summary = _endpoint(self.router, "/ground-summary", "GET")
+
+    def _review(self, report_id: str, action: str, **kwargs):
+        body = self.router_module.ReviewRequest(action=action, **kwargs)
+        return _json(self.review_report, report_id=report_id, body=body)
+
+    def _summary(self, district: str | None = None) -> dict:
+        status, body = _json(self.summary, district=district)
+        self.assertEqual(status, 200)
+        return body["districts"]
+
+    def test_list_orders_urgent_unverified_first(self):
+        # Inserted out of order on purpose. Reviewed rows stay last even if urgent.
+        specs = [
+            ("verified-old", {"status": "verified", "created_at": "2026-01-01T00:00:00Z"}),
+            ("urgent-old", {"urgent": True, "urgent_reasons": ["people_trapped"],
+                            "created_at": "2026-03-01T00:00:00Z"}),
+            ("rejected-mid", {"status": "rejected", "created_at": "2026-01-15T00:00:00Z"}),
+            ("plain-old", {"created_at": "2026-02-01T00:00:00Z"}),
+            ("corrected-urgent", {"status": "corrected", "urgent": True,
+                                  "urgent_reasons": ["people_injured"],
+                                  "created_at": "2026-05-01T00:00:00Z"}),
+            ("urgent-new", {"urgent": True, "urgent_reasons": ["people_injured"],
+                            "created_at": "2026-03-03T00:00:00Z"}),
+            ("corrected-new", {"status": "corrected", "created_at": "2026-04-01T00:00:00Z"}),
+            ("plain-new", {"created_at": "2026-02-02T00:00:00Z"}),
+        ]
+        saved = {name: self._save(**fields) for name, fields in specs}
+        expected = [
+            "urgent-new", "urgent-old", "plain-new", "plain-old",
+            "corrected-urgent", "corrected-new", "rejected-mid", "verified-old",
+        ]
+        status, body = _json(self.list_reports)
+        self.assertEqual(status, 200)
+        self.assertEqual([row["id"] for row in body], [saved[name].id for name in expected])
+
+        _, urgent_rows = _json(self.list_reports, urgent=True)
+        self.assertEqual(
+            [row["id"] for row in urgent_rows],
+            [saved[name].id for name in ("urgent-new", "urgent-old", "corrected-urgent")],
+        )
+        _, unverified = _json(self.list_reports, status="unverified")
+        self.assertEqual(
+            [row["id"] for row in unverified],
+            [saved[name].id for name in ("urgent-new", "urgent-old", "plain-new", "plain-old")],
+        )
+        _, rejected = _json(self.list_reports, status="rejected")
+        self.assertEqual([row["id"] for row in rejected], [saved["rejected-mid"].id])
+        self.assertEqual(_json(self.list_reports, district=" Sukkur ")[1], [])
+        _, dadu = _json(self.list_reports, district=" Dadu ")
+        self.assertEqual(len(dadu), len(expected))
+        status, bad = _json(self.list_reports, status="nope")
+        self.assertEqual((status, bad["code"]), (422, "invalid_status"))
+
+    def test_duplicates_fold_under_the_first_report(self):
+        urgent = self._save(urgent=True, urgent_reasons=["people_on_rooftop"],
+                            created_at="2026-04-01T00:00:00Z")
+        sukkur = self._save("Sukkur", created_at="2026-05-01T00:00:00Z")
+        canonical = self._save(created_at="2026-01-01T00:00:00Z")
+        copies = [
+            self._save(created_at="2026-06-01T00:00:00Z", duplicate_of=canonical.id),
+            self._save(created_at="2026-06-02T00:00:00Z", duplicate_of=canonical.id),
+        ]
+        status, folded = _json(self.list_reports)
+        self.assertEqual(status, 200)
+        self.assertEqual(_json(self.list_reports, include_duplicates=False)[1], folded)
+        self.assertEqual(
+            [row["id"] for row in folded],
+            [urgent.id, sukkur.id, canonical.id],
+        )
+        by_id = {row["id"]: row for row in folded}
+        self.assertEqual(by_id[canonical.id]["duplicate_count"], 2)
+        self.assertEqual(by_id[urgent.id]["duplicate_count"], 0)
+        self.assertEqual(by_id[sukkur.id]["duplicate_count"], 0)
+        self.assertTrue(all(row["id"] not in {item.id for item in copies} for row in folded))
+
+        _, expanded = _json(self.list_reports, include_duplicates=True)
+        self.assertEqual(
+            [row["id"] for row in expanded],
+            [urgent.id, copies[1].id, copies[0].id, sukkur.id, canonical.id],
+        )
+        expanded_by_id = {row["id"]: row for row in expanded}
+        self.assertEqual(expanded_by_id[copies[0].id]["duplicate_of"], canonical.id)
+        self.assertEqual(expanded_by_id[canonical.id]["duplicate_count"], 0)
+        self.assertEqual(JsonReportStore().get(canonical.id).duplicate_count, 0)
+
+        _, sukkur_rows = _json(self.list_reports, district="Sukkur")
+        self.assertEqual([row["id"] for row in sukkur_rows], [sukkur.id])
+        _, urgent_rows = _json(self.list_reports, urgent=True)
+        self.assertEqual([row["id"] for row in urgent_rows], [urgent.id])
+
+    def test_photo_is_the_stored_jpeg(self):
+        import asyncio
+
+        jpeg = _tiny_jpeg()
+        report = _report("Dadu")
+        self.store.add(report, jpeg)
+        response = asyncio.run(self.photo(report_id=report.id))
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.media_type, "image/jpeg")
+        self.assertEqual(Path(response.path).read_bytes(), jpeg)
+
+    def test_first_correction_snapshots_the_observation_once(self):
+        report = self._save("Larkana", damage_level="none")
+        self.assertIsNone(self.store.get(report.id).review.ai_original)
+        status, body = self._review(
+            report.id, "correct", corrections={"damage_level": "destroyed"}, officer="A",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "corrected")
+        self.assertEqual(body["damage_level"], "destroyed")
+        self.assertEqual(body["review"]["ai_original"]["damage_level"], "none")
+        status, body = self._review(
+            report.id, "correct", corrections={"damage_level": "partial"}, officer="A",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["damage_level"], "partial")
+        self.assertEqual(body["review"]["ai_original"]["damage_level"], "none")
+        self.assertEqual(JsonReportStore().get(report.id).review.ai_original.damage_level,
+                         DamageLevel.none)
+
+    def test_review_actions_recompute_urgent_and_drop_rejected(self):
+        # other: no damage. copy: destroyed AND urgent, but it is a duplicate,
+        # so it must not move the share or urgent_open. main: destroyed, person
+        # on a roof, with a stale urgent=False so verify must not recompute.
+        other = self._save(damage_level="none")
+        self._save(
+            damage_level="destroyed",
+            urgent=True,
+            urgent_reasons=["people_trapped"],
+            duplicate_of=other.id,
+        )
+        main = _report(
+            "Dadu",
+            damage_level="destroyed",
+            people={"visible": True, "on_rooftop": True},
+            urgent=False,
+            urgent_reasons=[],
+        )
+        main.review.ai_original = VlmObservation.model_validate(main.model_dump())
+        self.store.add(main, _tiny_jpeg())
+
+        dadu = self._summary()["Dadu"]
+        self.assertEqual(dadu["report_count"], 2)
+        self.assertEqual(dadu["photo_count"], 3)
+        self.assertEqual(dadu["urgent_open"], 0)
+        self.assertAlmostEqual(dadu["ground_score"], 0.5)
+
+        status, body = self._review(
+            main.id, "verify", officer="Sana", note="checked on site",
+            corrections={"damage_level": "partial"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "verified")
+        self.assertEqual(body["damage_level"], "destroyed")
+        self.assertFalse(body["urgent"])
+        self.assertEqual(body["urgent_reasons"], [])
+        self.assertEqual(body["review"]["ai_original"]["damage_level"], "destroyed")
+        self.assertEqual(body["review"]["ai_original"]["people"]["on_rooftop"], True)
+        self.assertEqual(len(body["review"]["history"]), 1)
+        self.assertEqual(body["review"]["history"][0]["action"], "verify")
+        self.assertEqual(body["review"]["history"][0]["officer"], "Sana")
+        self.assertEqual(body["review"]["history"][0]["note"], "checked on site")
+        self.assertRegex(body["review"]["history"][0]["at"], _STAMP)
+        self.assertEqual(self._summary()["Dadu"]["verified_count"], 1)
+        self.assertEqual(self._summary()["Dadu"]["urgent_open"], 0)
+
+        status, body = self._review(
+            main.id, "correct", officer="Sana", note="partial, still on the roof",
+            corrections={"damage_level": "partial"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "corrected")
+        self.assertEqual(body["damage_level"], "partial")
+        self.assertTrue(body["urgent"])
+        self.assertEqual(body["urgent_reasons"], ["people_on_rooftop"])
+        self.assertEqual(body["review"]["ai_original"]["damage_level"], "destroyed")
+        self.assertEqual(
+            [event["action"] for event in body["review"]["history"]],
+            ["verify", "correct"],
+        )
+        dadu = self._summary()["Dadu"]
+        self.assertEqual(dadu["report_count"], 2)
+        self.assertEqual(dadu["photo_count"], 3)
+        self.assertEqual(dadu["urgent_open"], 1)
+        self.assertEqual(dadu["verified_count"], 1)
+        self.assertEqual(dadu["severity_mix"], {"none": 1, "partial": 1, "destroyed": 0})
+        self.assertAlmostEqual(dadu["ground_score"], 0.25)
+        self.assertAlmostEqual(dadu["share_destroyed"], 0.0)
+        self.assertAlmostEqual(dadu["share_damaged"], 0.5)
+        self.assertEqual(
+            JsonReportStore().get(main.id).urgent_reasons,
+            ["people_on_rooftop"],
+        )
+
+        status, body = self._review(
+            main.id, "correct", officer="Sana", note="cleared the rooftop",
+            corrections={
+                "people": {"visible": False, "on_rooftop": False},
+                "district": " Sukkur ",
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["location"]["district"], "Sukkur")
+        self.assertFalse(body["urgent"])
+        self.assertEqual(body["urgent_reasons"], [])
+        self.assertEqual(body["damage_level"], "partial")
+        self.assertFalse(body["people"]["on_rooftop"])
+        self.assertTrue(body["review"]["ai_original"]["people"]["on_rooftop"])
+        self.assertEqual(body["review"]["ai_original"]["damage_level"], "destroyed")
+        districts = self._summary()
+        self.assertEqual(districts["Dadu"]["report_count"], 1)
+        self.assertEqual(districts["Dadu"]["photo_count"], 2)
+        self.assertAlmostEqual(districts["Dadu"]["ground_score"], 0.0)
+        self.assertEqual(districts["Dadu"]["urgent_open"], 0)
+        self.assertEqual(districts["Sukkur"]["report_count"], 1)
+        self.assertEqual(districts["Sukkur"]["photo_count"], 1)
+        self.assertAlmostEqual(districts["Sukkur"]["ground_score"], 0.5)
+        self.assertEqual(districts["Sukkur"]["verified_count"], 1)
+        self.assertEqual(districts["Sukkur"]["urgent_open"], 0)
+        self.assertEqual(set(self._summary(" Sukkur ")), {"Sukkur"})
+
+        status, body = self._review(
+            main.id, "reject", officer="Sana", note="not this scene",
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(body["status"], "rejected")
+        self.assertEqual(body["damage_level"], "partial")
+        self.assertFalse(body["urgent"])
+        self.assertEqual(
+            [event["action"] for event in body["review"]["history"]],
+            ["verify", "correct", "correct", "reject"],
+        )
+        self.assertEqual(body["review"]["history"][-1]["note"], "not this scene")
+        self.assertRegex(body["review"]["history"][-1]["at"], _STAMP)
+        districts = self._summary()
+        self.assertNotIn("Sukkur", districts)
+        self.assertEqual(districts["Dadu"]["report_count"], 1)
+        self.assertEqual(districts["Dadu"]["photo_count"], 2)
+        self.assertAlmostEqual(districts["Dadu"]["ground_score"], 0.0)
+        self.assertEqual(districts["Dadu"]["urgent_open"], 0)
+        self.assertEqual(self._summary("Sukkur"), {})
+
+        status, fetched = _json(self.get_one, report_id=main.id)
+        self.assertEqual(status, 200)
+        self.assertEqual(fetched["status"], "rejected")
+        saved = JsonReportStore().get(main.id)
+        self.assertEqual(saved.status, ReportStatus.rejected)
+        self.assertEqual(len(saved.review.history), 4)
+        self.assertEqual(saved.review.ai_original.damage_level, DamageLevel.destroyed)
+
+    def test_invalid_action_and_missing_reports(self):
+        report = self._save(damage_level="partial")
+        status, body = self._review(report.id, "approve", officer="Sana", note="no")
+        self.assertEqual(status, 422)
+        self.assertEqual(body, {
+            "error": "Review action must be verify, correct, or reject.",
+            "code": "invalid_action",
+        })
+        status, body = self._review(
+            report.id, "correct", corrections={"damage_level": "nope"}, officer="Sana",
+        )
+        self.assertEqual(status, 422)
+        self.assertEqual(body["code"], "invalid_corrections")
+        status, body = self._review(
+            report.id, "correct", corrections={"summary": "officer text"}, officer="Sana",
+        )
+        self.assertEqual(status, 422)
+        self.assertEqual(body["code"], "invalid_corrections")
+        stored = self.store.get(report.id)
+        self.assertEqual(stored.status, ReportStatus.unverified)
+        self.assertEqual(stored.damage_level, DamageLevel.partial)
+        self.assertEqual(stored.review.history, [])
+
+        missing = "0" * 32
+        for call in (
+            lambda: _json(self.get_one, report_id=missing),
+            lambda: _json(self.photo, report_id=missing),
+            lambda: self._review(missing, "verify", officer="Sana"),
+        ):
+            status, body = call()
+            self.assertEqual(status, 404)
+            self.assertEqual(body, {
+                "error": self.router_module.NOT_FOUND_MESSAGE,
+                "code": "not_found",
+            })
 
 
 if __name__ == "__main__":

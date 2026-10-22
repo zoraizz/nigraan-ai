@@ -26,32 +26,54 @@ coordinates. The first one within GROUND_DUPLICATE_MAX_HAMMING bits wins and
 duplicate_of points at that group's first report, so a group is always one
 canonical report plus copies. Scoring later counts the canonical only.
 
-Storage is an in-memory list behind add/list/get. Step 5 replaces it with a
-persistent store; nothing else here should need to change.
+Reports and their JPEGs live in a ReportStore. The default is the JSON
+directory in ground_intake.store, so a restart keeps officer reviews. The
+stored photo is the upright JPEG the model saw: EXIF removed, long side at
+most 1024 px.
+
+Officer review does not call the vision model again. verify, correct, and
+reject change status, the allowed correction fields, and review.history.
+correct recomputes urgent from the edited observation. The first model
+output stays in review.ai_original; a later correction does not replace it.
+
+GET /ground-reports hides copies under the group's first report unless
+include_duplicates is true, and sets duplicate_count to how many stored
+reports point at that first id. Rows are ordered urgent-and-unverified,
+then other unverified, then already-reviewed, newest first inside each
+group. GET /ground-summary is rules.district_summary over the store.
 """
 
 from __future__ import annotations
 
+import copy
 import io
 import os
-from threading import Lock
+import tempfile
+from datetime import datetime, timezone
 from typing import Callable, Optional
 
 from fastapi import APIRouter, File, Query, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from PIL import Image, ImageOps
+from pydantic import BaseModel, ValidationError
 
 from ground_intake.geo import haversine_km, read_exif_gps, resolve_location
 from ground_intake.phash import dhash, hamming
-from ground_intake.rules import urgent_reasons
+from ground_intake.rules import district_summary, urgent_reasons
 from ground_intake.schema import (
+    DamageLevel,
     GroundReport,
     ImageKind,
+    Need,
     ReportStatus,
     Review,
+    ReviewAction,
+    SceneType,
     VlmObservation,
+    WaterDepth,
 )
+from ground_intake.store import JsonReportStore, ReportStore, open_store
 from ground_intake.vlm import (
     VlmUnavailable,
     _configured_chain,
@@ -103,46 +125,32 @@ def _env_float(name: str, default: float) -> float:
 
 
 # ---------------------------------------------------------------------------
-# In-memory store (Step 5 replaces this)
+# Store (JSON directory by default; tests swap in a temp directory)
 # ---------------------------------------------------------------------------
-class MemoryStore:
-    """Reports in insertion order, photos keyed by report id. Not persistent."""
-
-    def __init__(self) -> None:
-        self._reports: list[GroundReport] = []
-        self._photos: dict[str, bytes] = {}
-        self._lock = Lock()
-
-    def add(self, report: GroundReport, photo_jpeg: bytes) -> GroundReport:
-        with self._lock:
-            self._reports.append(report)
-            self._photos[report.id] = photo_jpeg
-        return report
-
-    def list(self) -> list[GroundReport]:
-        with self._lock:
-            return list(self._reports)
-
-    def get(self, report_id: str) -> Optional[GroundReport]:
-        with self._lock:
-            return next((r for r in self._reports if r.id == report_id), None)
-
-    def photo(self, report_id: str) -> Optional[bytes]:
-        with self._lock:
-            return self._photos.get(report_id)
+_store: ReportStore = open_store()
+_owned_test_dir: Optional[tempfile.TemporaryDirectory] = None
 
 
-_store = MemoryStore()
-
-
-def get_store() -> MemoryStore:
+def get_store() -> ReportStore:
     return _store
 
 
-def set_store_for_tests(store: Optional[MemoryStore] = None) -> MemoryStore:
-    """Swap in a fresh store (or the one given) and return it."""
-    global _store
-    _store = store if store is not None else MemoryStore()
+def set_store_for_tests(store: Optional[ReportStore] = None) -> ReportStore:
+    """Point the process at `store`, or at a fresh throwaway directory.
+
+    The no-arg form is isolated from GROUND_REPORTS_DIR so intake tests do
+    not write the service's real reports folder. Passing a store leaves
+    that directory alone; the caller owns its cleanup.
+    """
+    global _store, _owned_test_dir
+    previous = _owned_test_dir
+    _owned_test_dir = None
+    if store is None:
+        _owned_test_dir = tempfile.TemporaryDirectory(prefix="ground-reports-")
+        store = JsonReportStore(_owned_test_dir.name)
+    _store = store
+    if previous is not None:
+        previous.cleanup()
     return _store
 
 
@@ -152,7 +160,7 @@ def ground_health() -> dict:
     return {
         "ground_vlm_providers": [provider.name for provider in chain],
         "ground_vlm_configured": any(provider.configured for provider in chain),
-        "ground_report_count": len(_store.list()),
+        "ground_report_count": get_store().count(),
     }
 
 
@@ -232,6 +240,248 @@ def find_duplicate(
 def _error(status_code: int, code: str, message: str) -> JSONResponse:
     return JSONResponse(status_code=status_code,
                         content={"error": message, "code": code})
+
+
+NOT_FOUND_MESSAGE = "Ground report not found."
+
+
+def _not_found() -> JSONResponse:
+    return _error(404, "not_found", NOT_FOUND_MESSAGE)
+
+
+def _utc_now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _created_epoch(stamp: str) -> float:
+    """Unix time for an ISO stamp. Unparseable stamps sort as the oldest."""
+    if not stamp:
+        return float("-inf")
+    text = stamp[:-1] + "+00:00" if stamp.endswith("Z") else stamp
+    try:
+        parsed = datetime.fromisoformat(text)
+    except ValueError:
+        return float("-inf")
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.timestamp()
+
+
+def _review_bucket(report: GroundReport) -> int:
+    """0 urgent+unverified, 1 other unverified, 2 already reviewed."""
+    if report.status == ReportStatus.unverified:
+        return 0 if report.urgent else 1
+    return 2
+
+
+def present_reports(
+    reports: list[GroundReport],
+    *,
+    district: Optional[str] = None,
+    status: Optional[ReportStatus] = None,
+    urgent: Optional[bool] = None,
+    include_duplicates: bool = False,
+) -> list[dict]:
+    """JSON reports for GET /ground-reports.
+
+    Folding hides a row whose duplicate_of points at another id in this
+    list, and stamps the parent's duplicate_count. A copy whose parent is
+    missing stays visible so the photo is not dropped. Filters apply to the
+    rows that remain. duplicate_count is not written back to the store.
+    """
+    known = {report.id for report in reports}
+    counts: dict[str, int] = {}
+    for report in reports:
+        parent = (report.duplicate_of or "").strip()
+        if parent and parent in known:
+            counts[parent] = counts.get(parent, 0) + 1
+
+    chosen: list[tuple[int, GroundReport]] = []
+    for index, report in enumerate(reports):
+        parent = (report.duplicate_of or "").strip()
+        if not include_duplicates and parent and parent in known:
+            continue
+        if district is not None and (report.location.district or "").strip() != district:
+            continue
+        if status is not None and report.status != status:
+            continue
+        if urgent is not None and report.urgent != urgent:
+            continue
+        if not include_duplicates:
+            report = report.model_copy(update={"duplicate_count": counts.get(report.id, 0)})
+        chosen.append((index, report))
+
+    chosen.sort(key=lambda pair: (
+        _review_bucket(pair[1]),
+        -_created_epoch(pair[1].created_at),
+        -pair[0],
+    ))
+    return [report.model_dump(mode="json") for _, report in chosen]
+
+
+# ---------------------------------------------------------------------------
+# Officer review
+# ---------------------------------------------------------------------------
+_CORRECTION_FIELDS = {"damage_level", "scene_type", "needs", "people", "water", "district"}
+_PEOPLE_FIELDS = {"visible", "count_estimate", "stranded_or_trapped", "on_rooftop", "injured"}
+_PEOPLE_FLAGS = ("visible", "stranded_or_trapped", "on_rooftop", "injured")
+_WATER_FIELDS = {"present", "flowing", "depth"}
+_OBSERVATION_FIELDS = tuple(VlmObservation.model_fields)
+
+
+class ReviewRejected(Exception):
+    """A review body the officer can fix. code is the API machine code."""
+
+    def __init__(self, code: str, message: str) -> None:
+        super().__init__(message)
+        self.code = code
+
+
+class ReviewRequest(BaseModel):
+    """PATCH /ground-reports/{id}/review. corrections is only applied for correct."""
+
+    action: str
+    corrections: Optional[dict] = None
+    note: Optional[str] = None
+    officer: Optional[str] = None
+
+
+def _exact_enum(enum_cls: type, value: object, label: str) -> str:
+    """Accept the closed value, including a different case. Unknown strings fail."""
+    if isinstance(value, enum_cls):
+        return value.value  # type: ignore[attr-defined]
+    if isinstance(value, str):
+        text = value.strip()
+        for candidate in (text, text.lower()):
+            try:
+                return enum_cls(candidate).value  # type: ignore[attr-defined]
+            except ValueError:
+                continue
+    raise ReviewRejected("invalid_corrections", f"Invalid {label}.")
+
+
+def _apply_corrections(data: dict, corrections: object) -> None:
+    """Write the officer's fields onto a JSON report dict. Unknown keys fail."""
+    if not isinstance(corrections, dict):
+        raise ReviewRejected("invalid_corrections", "Corrections must be an object.")
+    unknown = set(corrections) - _CORRECTION_FIELDS
+    if unknown:
+        names = ", ".join(sorted(unknown))
+        raise ReviewRejected("invalid_corrections", f"Unknown correction fields: {names}.")
+
+    if "damage_level" in corrections:
+        data["damage_level"] = _exact_enum(
+            DamageLevel, corrections["damage_level"], "damage_level"
+        )
+    if "scene_type" in corrections:
+        data["scene_type"] = _exact_enum(SceneType, corrections["scene_type"], "scene_type")
+    if "needs" in corrections:
+        needs = corrections["needs"]
+        if not isinstance(needs, list):
+            raise ReviewRejected("invalid_corrections", "Invalid needs.")
+        data["needs"] = [_exact_enum(Need, item, "needs") for item in needs]
+    if "people" in corrections:
+        data["people"] = _merge_people(data.get("people") or {}, corrections["people"])
+    if "water" in corrections:
+        data["water"] = _merge_water(data.get("water") or {}, corrections["water"])
+    if "district" in corrections:
+        district = corrections["district"]
+        location = data.get("location")
+        if not isinstance(location, dict):
+            location = {}
+            data["location"] = location
+        if district is None:
+            location["district"] = None
+        elif isinstance(district, str):
+            location["district"] = district.strip() or None
+        else:
+            raise ReviewRejected("invalid_corrections", "Invalid district.")
+
+
+def _merge_people(current: dict, patch: object) -> dict:
+    if not isinstance(patch, dict):
+        raise ReviewRejected("invalid_corrections", "Invalid people.")
+    unknown = set(patch) - _PEOPLE_FIELDS
+    if unknown:
+        raise ReviewRejected("invalid_corrections", "Invalid people.")
+    merged = dict(current)
+    for key, value in patch.items():
+        if key == "count_estimate":
+            if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value < 0):
+                raise ReviewRejected("invalid_corrections", "Invalid people.")
+        elif key in _PEOPLE_FLAGS and not isinstance(value, bool):
+            raise ReviewRejected("invalid_corrections", "Invalid people.")
+        merged[key] = value
+    return merged
+
+
+def _merge_water(current: dict, patch: object) -> dict:
+    if not isinstance(patch, dict):
+        raise ReviewRejected("invalid_corrections", "Invalid water.")
+    unknown = set(patch) - _WATER_FIELDS
+    if unknown:
+        raise ReviewRejected("invalid_corrections", "Invalid water.")
+    merged = dict(current)
+    if "present" in patch and not isinstance(patch["present"], bool):
+        raise ReviewRejected("invalid_corrections", "Invalid water.")
+    if "flowing" in patch and not isinstance(patch["flowing"], bool):
+        raise ReviewRejected("invalid_corrections", "Invalid water.")
+    if "depth" in patch:
+        merged["depth"] = _exact_enum(WaterDepth, patch["depth"], "water.depth")
+    for key in ("present", "flowing"):
+        if key in patch:
+            merged[key] = patch[key]
+    return merged
+
+
+def apply_review(report: GroundReport, request: ReviewRequest, *, at: Optional[str] = None) -> GroundReport:
+    """Return the reviewed report. The caller's object is left unchanged.
+
+    correct snapshots the observation into review.ai_original the first time
+    that field is empty, then applies corrections and recomputes urgent.
+    verify and reject only change status. Every action appends history.
+    """
+    try:
+        action = ReviewAction(request.action.strip())
+    except (AttributeError, ValueError):
+        raise ReviewRejected(
+            "invalid_action",
+            "Review action must be verify, correct, or reject.",
+        ) from None
+
+    data = report.model_dump(mode="json")
+    if action == ReviewAction.correct:
+        original = data["review"].get("ai_original")
+        if original is None:
+            data["review"]["ai_original"] = copy.deepcopy(
+                {key: data[key] for key in _OBSERVATION_FIELDS}
+            )
+        if request.corrections:
+            _apply_corrections(data, request.corrections)
+        try:
+            draft = GroundReport.model_validate(data)
+        except ValidationError:
+            raise ReviewRejected("invalid_corrections", "Corrections could not be applied.") from None
+        reasons = urgent_reasons(draft)
+        data = draft.model_dump(mode="json")
+        data["urgent"] = bool(reasons)
+        data["urgent_reasons"] = reasons
+        data["status"] = ReportStatus.corrected.value
+    elif action == ReviewAction.verify:
+        data["status"] = ReportStatus.verified.value
+    else:
+        data["status"] = ReportStatus.rejected.value
+
+    data["review"]["history"].append({
+        "action": action.value,
+        "officer": request.officer,
+        "note": request.note,
+        "at": at or _utc_now(),
+    })
+    try:
+        return GroundReport.model_validate(data)
+    except ValidationError:
+        raise ReviewRejected("invalid_corrections", "Corrections could not be applied.") from None
 
 
 # ---------------------------------------------------------------------------
@@ -341,11 +591,84 @@ def build_router(
             "vlm_source": vlm_source,
             "vlm_model": vlm_model,
         })
-        # The stored photo is the EXIF-free JPEG the model saw.
+        # Upright, EXIF-free JPEG the model saw. prepare_image caps the long side at 1024.
         store.add(report, jpeg)
         return JSONResponse(
             content={"route": "ground", "report": report.model_dump(mode="json")},
             headers=_headers(),
         )
+
+    @router.get("/ground-reports")
+    async def list_ground_reports(
+        district: Optional[str] = None,
+        status: Optional[str] = None,
+        urgent: Optional[bool] = None,
+        include_duplicates: bool = False,
+    ):
+        """List reports. Copies are folded unless include_duplicates is true."""
+        parsed_status: Optional[ReportStatus] = None
+        if status is not None and status.strip():
+            try:
+                parsed_status = ReportStatus(status.strip())
+            except ValueError:
+                return _error(
+                    422,
+                    "invalid_status",
+                    "Status must be unverified, verified, corrected, or rejected.",
+                )
+        district_name = district.strip() if district and district.strip() else None
+        payload = present_reports(
+            get_store().list(),
+            district=district_name,
+            status=parsed_status,
+            urgent=urgent,
+            include_duplicates=include_duplicates,
+        )
+        return JSONResponse(content=payload)
+
+    @router.get("/ground-reports/{report_id}")
+    async def get_ground_report(report_id: str):
+        """One report, including duplicates and rejected rows."""
+        report = get_store().get(report_id)
+        if report is None:
+            return _not_found()
+        return JSONResponse(content=report.model_dump(mode="json"))
+
+    @router.get("/ground-reports/{report_id}/photo")
+    async def get_ground_photo(report_id: str):
+        """The stored JPEG, already stripped of EXIF at intake."""
+        path = get_store().photo_path(report_id)
+        if path is None:
+            return _not_found()
+        return FileResponse(path, media_type="image/jpeg")
+
+    @router.patch("/ground-reports/{report_id}/review")
+    async def review_ground_report(report_id: str, body: ReviewRequest):
+        """verify, correct, or reject. correct recomputes urgent."""
+        store = get_store()
+        current = store.get(report_id)
+        if current is None:
+            return _not_found()
+        try:
+            updated = apply_review(current, body)
+        except ReviewRejected as exc:
+            return _error(422, exc.code, str(exc))
+        try:
+            store.update(updated)
+        except KeyError:
+            return _not_found()
+        return JSONResponse(content=updated.model_dump(mode="json"))
+
+    @router.get("/ground-summary")
+    async def ground_summary(district: Optional[str] = None):
+        """Per-district shares. Rejected reports and duplicates stay out of the score."""
+        reports = get_store().list()
+        if district and district.strip():
+            name = district.strip()
+            reports = [
+                report for report in reports
+                if (report.location.district or "").strip() == name
+            ]
+        return JSONResponse(content=district_summary(reports))
 
     return router
