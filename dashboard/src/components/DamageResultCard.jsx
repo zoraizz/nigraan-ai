@@ -38,6 +38,7 @@ export default function DamageResultCard({ result, loading = false }) {
                 <span className="warn-chip">Out of domain</span>
               </div>
               <p className="text-sm text-muted">{result.message}</p>
+              <a href="#/ground-reports" className="mt-2 block text-sm text-emerald-400 underline">Looks like a ground photo? Send it to Ground Reports.</a>
             </div>
           )}
 
