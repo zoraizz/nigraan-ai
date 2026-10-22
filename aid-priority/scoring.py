@@ -93,6 +93,17 @@ OPTIONAL SIGNALS -- extra, auditable ranking terms:
     signal with its weight, curve, note and whether it was active, so the
     extra terms are as auditable as risk and damage.
 
+    "ground" (Ground Photo Intake) is registered at import, same as any
+    other signal, so PRIORITY_GROUND_WEIGHT is read once at startup.
+    ground_evidence is {none, partial, destroyed} plus optional
+    verified_count and urgent_open, counts of unique non-rejected reports.
+    ground_score returns (0.5 * partial + 1.0 * destroyed) / (none +
+    partial + destroyed), the same severity weights as satellite damage.
+    Photo counts never enter that fraction, and neither do verified_count
+    or urgent_open. missing_policy is "skip": a district without ground
+    photos keeps the score it would have without the signal. Default
+    weight is 0.2.
+
 FLOOD SIGNAL ("flood") -- hours until a river flood peak:
     Registered at import (see the bottom of this module) so the serving
     layer reads PRIORITY_FLOOD_WEIGHT during startup. A later registration
@@ -476,5 +487,82 @@ register_signal(
     note=(
         "Hours until the river flood peak reaches the district "
         "(River Flood Tracker estimate)."
+    ),
+)
+
+
+# --- ground signal ---
+
+def _ground_count(evidence: dict, key: str, *, required: bool):
+    """Non-negative int count, or None when an optional key is absent."""
+    if key not in evidence:
+        if required:
+            raise ValueError(
+                "ground_evidence."
+                f"{key} is required (unique non-rejected report count)"
+            )
+        return None
+    value = evidence[key]
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        raise ValueError(
+            f"ground_evidence.{key} must be an integer >= 0, got {value!r}"
+        )
+    return value
+
+
+def ground_score(evidence):
+    """Damage share in [0, 1] from unique non-rejected ground reports.
+
+    Same severity weights as satellite damage_score:
+
+        (DAMAGE_SEVERITY_SCORES["partial"] * partial
+         + DAMAGE_SEVERITY_SCORES["destroyed"] * destroyed)
+        / (none + partial + destroyed)
+
+    verified_count and urgent_open may be present and must be integers
+    >= 0 when they are, but they do not enter the fraction. Two mixes
+    with the same shares score the same however many reports they hold.
+    A non-object, a zero total, or a bad count raises ValueError.
+    Absence is not a score: the ranker skips a missing field and does
+    not call this function for it.
+    """
+    if not isinstance(evidence, dict):
+        raise ValueError(
+            "ground_evidence must be an object of report counts, "
+            f"got {type(evidence).__name__}"
+        )
+    none_count = _ground_count(evidence, "none", required=True)
+    partial_count = _ground_count(evidence, "partial", required=True)
+    destroyed_count = _ground_count(evidence, "destroyed", required=True)
+    _ground_count(evidence, "verified_count", required=False)
+    _ground_count(evidence, "urgent_open", required=False)
+    classified = none_count + partial_count + destroyed_count
+    if classified <= 0:
+        raise ValueError(
+            "ground_evidence needs at least one unique non-rejected report "
+            "(none + partial + destroyed >= 1); omit the field when there "
+            "is no evidence"
+        )
+    return (
+        DAMAGE_SEVERITY_SCORES["partial"] * partial_count
+        + DAMAGE_SEVERITY_SCORES["destroyed"] * destroyed_count
+    ) / classified
+
+
+register_signal(
+    "ground",
+    request_field="ground_evidence",
+    weight_env="PRIORITY_GROUND_WEIGHT",
+    default_weight=0.2,
+    score_fn=ground_score,
+    missing_policy="skip",
+    curve=(
+        "(0.5*partial + 1.0*destroyed) / unique reports, "
+        "same severity weights as satellite damage"
+    ),
+    note=(
+        "Share of severe ground photos (unique, non-rejected reports). "
+        "Photo counts never enter the score. Districts without ground "
+        "photos are skipped, not scored as zero."
     ),
 )

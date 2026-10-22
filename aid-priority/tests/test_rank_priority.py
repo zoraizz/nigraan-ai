@@ -594,6 +594,155 @@ def test_flood_signal_through_rank_priority():
     assert "sum_k" in body.scoring.formula
 
 
+# ---------------------------------------------------------------------------
+# Ground signal (Ground Photo Intake) -- share of unique reports, skip if absent
+# ---------------------------------------------------------------------------
+
+def test_ground_absent_matches_score_without_the_signal():
+    """Omitting ground_evidence (or sending null on every district) leaves
+    scores and ranks identical to a registry with no signals."""
+    entries = [
+        _entry("Sukkur", "flood", "low", 0.10),
+        _entry("Swat", "flood", "high", 0.70),
+        _entry("Dadu", "flood", "medium", 0.35, ground_evidence=None),
+    ]
+    before = rank_districts(entries, signals={})
+    after = rank_districts(entries)
+    assert [(r["district"], r["priority_score"], r["rank"]) for r in before] == [
+        (r["district"], r["priority_score"], r["rank"]) for r in after
+    ]
+    assert all(r["signals"] == {} for r in after)
+
+
+def test_ground_signal_score_and_skip():
+    """X is scored from the registry formula. Y, with no ground photos,
+    keeps the priority it would have without the signal, and its
+    signals.ground.score stays null."""
+    import main
+    from scoring import DAMAGE_SEVERITY_SCORES, OPTIONAL_SIGNALS, ground_score
+
+    spec = OPTIONAL_SIGNALS["ground"]
+    assert spec["request_field"] == "ground_evidence"
+    assert spec["weight_env"] == "PRIORITY_GROUND_WEIGHT"
+    assert spec["default_weight"] == 0.2
+    assert spec["missing_policy"] == "skip"
+    assert spec["score_fn"] is ground_score
+    assert spec["curve"] == (
+        "(0.5*partial + 1.0*destroyed) / unique reports, "
+        "same severity weights as satellite damage"
+    )
+    assert spec["note"] == (
+        "Share of severe ground photos (unique, non-rejected reports). "
+        "Photo counts never enter the score. Districts without ground "
+        "photos are skipped, not scored as zero."
+    )
+    assert main.SIGNAL_WEIGHTS["ground"] == 0.2
+
+    evidence = {
+        "none": 1, "partial": 2, "destroyed": 1,
+        "verified_count": 4, "urgent_open": 9,
+    }
+    share = (
+        DAMAGE_SEVERITY_SCORES["partial"] * 2
+        + DAMAGE_SEVERITY_SCORES["destroyed"] * 1
+    ) / 4
+    assert ground_score(evidence) == share
+    # Display counts are not inputs: a second object with the same mix
+    # and different verified/urgent totals scores the same.
+    assert ground_score({"none": 1, "partial": 2, "destroyed": 1}) == share
+
+    payload = [
+        {"district": "X", "hazard_type": "flood", "risk_level": "high",
+         "overall_damage_level": "partial", "ground_evidence": evidence},
+        {"district": "Y", "hazard_type": "flood", "risk_level": "high",
+         "overall_damage_level": "partial"},
+    ]
+    body = main.rank_priority(main.RankPriorityRequest(districts=payload))
+    by_name = {d.district: d for d in body.ranked_districts}
+    assert by_name["X"].signals["ground"].value == evidence
+    assert by_name["X"].signals["ground"].score == round(share, 4)
+    assert by_name["Y"].signals["ground"].value is None
+    assert by_name["Y"].signals["ground"].score is None
+
+    rw, dw, gw = main.RISK_WEIGHT, main.DAMAGE_WEIGHT, 0.2
+    y_without = (rw * 1.0 + dw * 0.5) / (rw + dw)
+    x_with = (rw * 1.0 + dw * 0.5 + gw * share) / (rw + dw + gw)
+    assert by_name["Y"].priority_score == round(y_without, 4)
+    assert by_name["X"].priority_score == round(x_with, 4)
+
+    info = {s.name: s for s in body.scoring.signals}
+    assert info["ground"].weight == 0.2
+    assert info["ground"].missing_policy == "skip"
+    assert info["ground"].active is True
+
+
+def test_ground_forty_at_25_percent_ranks_below_three_at_66_percent():
+    """40 reports, 10 destroyed (25%) score 0.25. 3 reports, 2 destroyed
+    (66%) score 2/3. Rank follows the share, not the photo count.
+    verified_count and urgent_open on the larger set do not change that."""
+    from scoring import ground_score
+
+    many = {
+        "none": 30, "partial": 0, "destroyed": 10,
+        "verified_count": 40, "urgent_open": 40,
+    }
+    few = {
+        "none": 1, "partial": 0, "destroyed": 2,
+        "verified_count": 0, "urgent_open": 1,
+    }
+    assert ground_score(many) == 0.25
+    assert abs(ground_score(few) - (2 / 3)) < 1e-12
+    entries = [
+        _entry("Forty", "flood", "medium", 0.4, ground_evidence=many),
+        _entry("Three", "flood", "medium", 0.4, ground_evidence=few),
+    ]
+    by_name = {r["district"]: r for r in rank_districts(entries)}
+    assert by_name["Forty"]["signals"]["ground"] == {"value": many, "score": 0.25}
+    assert by_name["Three"]["signals"]["ground"]["score"] == round(2 / 3, 4)
+    assert by_name["Three"]["rank"] < by_name["Forty"]["rank"]
+
+
+def test_ground_zero_or_negative_is_invalid_signal_value():
+    import main
+
+    base = {
+        "district": "X", "hazard_type": "flood", "risk_level": "low",
+        "overall_damage_level": "none",
+    }
+    for evidence in (
+        {"none": 0, "partial": 0, "destroyed": 0},
+        {"none": -1, "partial": 0, "destroyed": 1},
+        {"none": 0, "partial": -1, "destroyed": 1},
+        {"none": 1, "partial": 0, "destroyed": -2},
+    ):
+        resp = main.rank_priority(main.RankPriorityRequest(
+            districts=[dict(base, ground_evidence=evidence)]
+        ))
+        assert resp.status_code == 422, evidence
+        assert b"invalid_signal_value" in resp.body
+
+
+def test_ground_weight_env_before_import():
+    """PRIORITY_GROUND_WEIGHT is applied when main is imported."""
+    import os
+    import subprocess
+    import sys
+
+    env = os.environ.copy()
+    env["PRIORITY_GROUND_WEIGHT"] = "0.55"
+    proc = subprocess.run(
+        [sys.executable, "-c",
+         "import main\n"
+         "w = main.SIGNAL_WEIGHTS['ground']\n"
+         "assert w == 0.55, w\n"],
+        cwd=str(Path(__file__).parent.parent),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+
+
 def test_signal_weights_loaded_from_env():
     import os
     import main
@@ -828,6 +977,11 @@ if __name__ == "__main__":
         test_flood_urgency_boundaries_at_12_and_120,
         test_flood_request_without_field_is_unchanged,
         test_flood_signal_through_rank_priority,
+        test_ground_absent_matches_score_without_the_signal,
+        test_ground_signal_score_and_skip,
+        test_ground_forty_at_25_percent_ranks_below_three_at_66_percent,
+        test_ground_zero_or_negative_is_invalid_signal_value,
+        test_ground_weight_env_before_import,
         test_signal_weights_loaded_from_env,
     ]
     if not unit_only:
