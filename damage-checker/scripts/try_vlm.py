@@ -1,8 +1,8 @@
 """Throwaway probe for Gemini's ground-photo JSON and latency.
 
-Step 1 only. The prompt and the Pydantic model stay in this file so we can
-see what gemini-3.8-flash actually returns, and how long it takes, before
-the intake package exists. Step 3 moves both into damage-checker/ground_intake/.
+The shared prompt and Pydantic model are imported from ground_intake so we can
+see what gemini-3.8-flash actually returns, and how long it takes, while
+using the same observation contract as the production provider layer.
 
 The model fills observation fields only (image_kind through confidence).
 Urgent, scores, ids, locations, and review state are decided later in code
@@ -32,13 +32,12 @@ import re
 import sys
 import time
 from pathlib import Path
-from typing import Literal
 
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 from PIL import Image
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import ValidationError
 
 # ---- config ----
 
@@ -51,84 +50,11 @@ _JPEG_QUALITY = 85
 _LOW_THINKING_BUDGET = 256
 _THINKING_LEVEL_MIN = (3, 5)
 
-# ---- schema (fields the model fills) ----
+# ---- shared observation schema and prompt ----
 
-ImageKind = Literal["ground_disaster", "aerial_or_satellite", "irrelevant"]
-SceneType = Literal[
-    "flooded_street",
-    "flooded_farmland",
-    "collapsed_house",
-    "damaged_building",
-    "damaged_road",
-    "broken_bridge",
-    "landslide",
-    "debris",
-    "relief_camp",
-    "other_disaster",
-]
-DamageLevel = Literal["none", "partial", "destroyed"]
-WaterDepth = Literal["none", "ankle", "knee", "waist", "chest", "above_head"]
-Hazard = Literal[
-    "blocked_road",
-    "downed_power_lines",
-    "unstable_structure",
-    "fast_water",
-    "fire",
-]
-Need = Literal["rescue", "shelter", "medical", "food_water", "road_clearance"]
-
-
-class WaterObservation(BaseModel):
-    present: bool
-    flowing: bool
-    depth: WaterDepth
-
-
-class PeopleObservation(BaseModel):
-    visible: bool
-    count_estimate: int | None = Field(
-        ge=0,
-        description="Integer headcount, or null when nobody is visible or the count is unclear.",
-    )
-    stranded_or_trapped: bool
-    on_rooftop: bool
-    injured: bool
-
-
-class AnimalsObservation(BaseModel):
-    livestock_visible: bool
-    livestock_at_risk: bool
-
-
-class GroundObservation(BaseModel):
-    """Closed observation the vision model is allowed to fill."""
-
-    image_kind: ImageKind
-    image_confidence: float = Field(ge=0.0, le=1.0)
-    scene_type: SceneType
-    damage_level: DamageLevel
-    water: WaterObservation
-    hazards: list[Hazard]
-    people: PeopleObservation
-    animals: AnimalsObservation
-    needs: list[Need]
-    summary: str = Field(
-        description="One or two sentences on damage and needs only.",
-    )
-    confidence: float = Field(ge=0.0, le=1.0)
-
-
-PROMPT = """Return JSON only, matching the response schema. No markdown and no extra keys.
-
-Decide image_kind:
-- ground_disaster: a ground-level photograph of a disaster (flood, collapse, debris, landslide, damaged road or bridge, relief camp).
-- aerial_or_satellite: an overhead, drone, aerial, or satellite view.
-- irrelevant: anything else.
-
-Describe damage, hazards, and needs only. Never identify, name, or describe the faces of individuals. If people are visible, record only a count and whether anyone appears stranded, on a rooftop, or injured. Do not describe appearance, clothing, or identity.
-
-Use false, "none", an empty list, or null when you are unsure. Do not guess. image_confidence and confidence are numbers from 0 to 1. summary is one or two sentences about damage and needs only.
-"""
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from ground_intake.prompts import PROMPT
+from ground_intake.schema import VlmObservation as GroundObservation
 
 
 # ---- image prep ----

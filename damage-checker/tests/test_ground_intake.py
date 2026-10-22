@@ -7,9 +7,12 @@ Run from anywhere:
 from __future__ import annotations
 
 import io
+import json
+import os
 import sys
 import unittest
 from pathlib import Path
+from unittest.mock import Mock, patch
 
 SERVICE_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(SERVICE_ROOT))
@@ -458,6 +461,139 @@ class TestGeo(unittest.TestCase):
         self.assertEqual(unknown["source"], "unknown")
         self.assertIsNone(unknown["district"])
         self.assertIsNone(unknown["lat"])
+
+
+class VisionLayerTests(unittest.TestCase):
+    def setUp(self):
+        from ground_intake import vlm
+        self.vlm = vlm
+        self.env = patch.dict(os.environ, {}, clear=True)
+        self.env.start()
+        self.addCleanup(self.env.stop)
+        self.addCleanup(vlm.set_providers_for_tests, None)
+
+    def fake(self, name, *results, configured=True):
+        provider = Mock()
+        provider.name = name
+        provider.model = "fake-model"
+        provider.configured = configured
+        provider.describe.side_effect = results
+        return provider
+
+    def test_parse_plain_fenced_and_first_object(self):
+        raw = _obs(summary='Damage near a wall marked "}".').model_dump_json()
+        for text in (raw, f"```json\n{raw}\n```", f"Result: {raw} {{}} trailing"):
+            with self.subTest(text=text):
+                self.assertEqual(self.vlm.parse_observation(text), _obs(summary='Damage near a wall marked "}".'))
+
+    def test_parse_unknown_enums_and_invalid_output(self):
+        data = _obs().model_dump(mode="json")
+        data.update(image_kind="unknown", scene_type="unknown", damage_level="unknown",
+                    hazards=["unknown"], needs=["unknown"])
+        data["water"]["depth"] = "unknown"
+        result = self.vlm.parse_observation(json.dumps(data))
+        self.assertEqual(result.image_kind, ImageKind.irrelevant)
+        self.assertEqual(result.scene_type, SceneType.other_disaster)
+        self.assertEqual(result.damage_level, DamageLevel.none)
+        self.assertEqual(result.water.depth, WaterDepth.none)
+        self.assertEqual(result.hazards, [])
+        self.assertEqual(result.needs, [])
+        for text in ("bad", "{}", '{"broken":', None):
+            with self.assertRaises(self.vlm.InvalidObservation):
+                self.vlm.parse_observation(text)
+
+    def test_prepare_image(self):
+        original = Image.new("RGBA", (2400, 1200), "red")
+        with Image.open(io.BytesIO(self.vlm.prepare_image(original))) as result:
+            self.assertEqual(result.mode, "RGB")
+            self.assertEqual(result.size, (1024, 512))
+            self.assertEqual(result.format, "JPEG")
+        self.assertEqual(original.size, (2400, 1200))
+        with Image.open(io.BytesIO(self.vlm.prepare_image(Image.new("L", (20, 10))))) as result:
+            self.assertEqual(result.size, (20, 10))
+
+    def test_chain_skips_and_falls_through(self):
+        skip = self.fake("skip", configured=False)
+        fail = self.fake("fail", RuntimeError("transport failure"))
+        bad = self.fake("bad", self.vlm.InvalidObservation(), self.vlm.InvalidObservation())
+        good = self.fake("good", _obs())
+        self.vlm.set_providers_for_tests([skip, fail, bad, good])
+        self.assertEqual(self.vlm.describe_with_chain(b"jpeg"), (_obs(), "good", "fake-model"))
+        skip.describe.assert_not_called()
+        self.assertEqual(fail.describe.call_count, 1)
+        self.assertEqual(bad.describe.call_count, 2)
+        good.describe.assert_called_once_with(b"jpeg")
+
+    def test_retry_can_succeed_and_does_not_override_irrelevant(self):
+        result = _obs(image_kind="irrelevant")
+        first = self.fake("first", self.vlm.InvalidObservation(), result)
+        later = self.fake("later", _obs())
+        self.vlm.set_providers_for_tests([first, later])
+        self.assertEqual(self.vlm.describe_with_chain(b"jpeg")[0], result)
+        self.assertEqual(first.describe.call_count, 2)
+        later.describe.assert_not_called()
+
+    def test_unavailable(self):
+        for providers in ([], [self.fake("skip", configured=False)],
+                          [self.fake("bad", self.vlm.InvalidObservation(), self.vlm.InvalidObservation())]):
+            self.vlm.set_providers_for_tests(providers)
+            with self.assertRaises(self.vlm.VlmUnavailable):
+                self.vlm.describe_with_chain(b"jpeg")
+
+    def test_environment_order_and_no_keys(self):
+        with patch.object(self.vlm, "_providers", {}):
+            self.assertEqual([p.name for p in self.vlm._configured_chain()], ["gemini"])
+            with self.assertRaises(self.vlm.VlmUnavailable):
+                self.vlm.describe_with_chain(b"jpeg")
+            os.environ["GROUND_VLM_PROVIDERS"] = "qwen,unknown,gemini,qwen"
+            self.assertEqual([p.name for p in self.vlm._configured_chain()], ["qwen", "gemini"])
+
+    def test_gemini_mocked_client_is_lazy_and_reused(self):
+        with patch.dict(os.environ, {"GEMINI_API_KEY": "test-only", "GROUND_VLM_TIMEOUT_SECONDS": "2.5"}), \
+                patch("google.genai.Client") as client:
+            provider = self.vlm.GeminiProvider()
+            client.assert_not_called()
+            client.return_value.models.generate_content.return_value.text = _obs().model_dump_json()
+            self.assertEqual(provider.describe(b"jpeg"), _obs())
+            provider.describe(b"jpeg")
+            client.assert_called_once()
+            self.assertEqual(client.call_args.kwargs["http_options"].timeout, 2500)
+            args = client.return_value.models.generate_content.call_args.kwargs
+            self.assertEqual(args["model"], "gemini-3.8-flash")
+            self.assertEqual(args["contents"][0].inline_data.data, b"jpeg")
+            self.assertEqual(args["contents"][0].inline_data.mime_type, "image/jpeg")
+            self.assertEqual(args["contents"][1], self.vlm.PROMPT)
+            self.assertEqual(args["config"].response_mime_type, "application/json")
+            self.assertIs(args["config"].response_schema, VlmObservation)
+            self.assertEqual(args["config"].temperature, 0.2)
+
+    def test_qwen_request_and_bad_json_retry(self):
+        with patch.dict(os.environ, {"DASHSCOPE_API_KEY": "test-only",
+                                   "DASHSCOPE_BASE_URL": "https://example.test/v1/",
+                                   "DASHSCOPE_VL_MODEL": "test-model"}), \
+                patch.object(self.vlm.requests, "post") as post:
+            provider = self.vlm.QwenDashScopeProvider()
+            post.return_value.json.return_value = {"choices": [{"message": {"content": _obs().model_dump_json()}}]}
+            self.assertEqual(provider.describe(b"jpeg"), _obs())
+            self.assertEqual(post.call_args.args[0], "https://example.test/v1/chat/completions")
+            args = post.call_args.kwargs
+            self.assertEqual(args["headers"]["Authorization"], "Bearer test-only")
+            self.assertEqual(args["timeout"], 20)
+            self.assertEqual(args["json"]["model"], "test-model")
+            content = args["json"]["messages"][0]["content"]
+            self.assertEqual(content[0], {"type": "text", "text": self.vlm.PROMPT})
+            self.assertEqual(content[1]["image_url"]["url"], "data:image/jpeg;base64,anBlZw==")
+            post.return_value.raise_for_status.assert_called_once()
+            post.reset_mock()
+            post.return_value.json.return_value = {"choices": [{"message": {"content": "bad JSON"}}]}
+            self.vlm.set_providers_for_tests([provider, self.fake("fallback", _obs())])
+            self.assertEqual(self.vlm.describe_with_chain(b"jpeg")[1], "fallback")
+            self.assertEqual(post.call_count, 2)
+
+    def test_timeout_safe_defaults(self):
+        for value in ("", "invalid", "0", "-1", "nan", "inf"):
+            os.environ["GROUND_VLM_TIMEOUT_SECONDS"] = value
+            self.assertEqual(self.vlm._timeout_seconds(), 20)
 
 
 if __name__ == "__main__":
