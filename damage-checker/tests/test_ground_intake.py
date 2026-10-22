@@ -596,5 +596,290 @@ class VisionLayerTests(unittest.TestCase):
             self.assertEqual(self.vlm._timeout_seconds(), 20)
 
 
+# ---- POST /intake ----
+
+SAMPLE_DIR = SERVICE_ROOT / "sample-images"
+_FORCED_OOD = {
+    "cosine": 0.5,
+    "mahalanobis": 30.0,
+    "cosine_threshold": 0.3,
+    "mahalanobis_threshold": 20.0,
+    "photo_cosine": 0.6,
+    "photo_mahalanobis": 40.0,
+    "photo_score": 3.1,
+    "photo_score_threshold": 2.0,
+    "signals": ["photo_content"],
+    "is_out_of_domain": True,
+}
+
+
+def _forced_ood_classify(_pil):
+    return {"damage_level": "partial", "confidence": 0.41, "ood": dict(_FORCED_OOD)}
+
+
+def _photo_bytes(fmt: str = "PNG", seed: int = 0) -> bytes:
+    image = Image.new("RGB", (64, 48))
+    image.putdata([((x * 4 + seed) % 256, (y * 5) % 256, (x * y + seed) % 256)
+                   for y in range(48) for x in range(64)])
+    buffer = io.BytesIO()
+    image.save(buffer, format=fmt)
+    return buffer.getvalue()
+
+
+def _call_intake(intake, data: bytes, **query):
+    import asyncio
+
+    from fastapi import UploadFile
+
+    params = {"district": None, "village": None, "lat": None, "lon": None,
+              "reporter_role": None}
+    params.update(query)
+    response = asyncio.run(intake(
+        image=UploadFile(file=io.BytesIO(data), filename="upload.png"), **params))
+    return response.status_code, json.loads(response.body), response.headers
+
+
+def _intake_endpoint(router):
+    return next(route.endpoint for route in router.routes if route.path == "/intake")
+
+
+class _IntakeBase(unittest.TestCase):
+    def setUp(self):
+        from ground_intake import router as router_module
+        from ground_intake import vlm
+        self.router_module = router_module
+        self.vlm = vlm
+        self.store = router_module.set_store_for_tests()
+        self.addCleanup(router_module.set_store_for_tests)
+        self.addCleanup(vlm.set_providers_for_tests, None)
+        env = patch.dict(os.environ, {}, clear=False)
+        env.start()
+        self.addCleanup(env.stop)
+        for name in ("GROUND_MAX_UPLOAD_BYTES", "GROUND_MIN_CONFIDENCE",
+                     "GROUND_DISTRICT_MAX_KM", "GROUND_DUPLICATE_MAX_HAMMING"):
+            os.environ.pop(name, None)
+
+    def provider(self, *results):
+        fake = Mock()
+        fake.name = "fake"
+        fake.model = "fake-vl"
+        fake.configured = True
+        fake.describe.side_effect = results
+        self.vlm.set_providers_for_tests([fake])
+        return fake
+
+
+class TestIntakeRouting(_IntakeBase):
+    """Stubbed classify_pil and a fake provider. No torch model needed."""
+
+    def setUp(self):
+        super().setUp()
+        self.intake = _intake_endpoint(
+            self.router_module.build_router(_forced_ood_classify))
+
+    def test_forced_ood_ground_disaster_becomes_an_urgent_report(self):
+        fake = self.provider(_obs(
+            image_confidence=0.9,
+            damage_level="destroyed",
+            water={"present": True, "flowing": True, "depth": "waist"},
+            people={"visible": True, "count_estimate": 3, "on_rooftop": True},
+        ))
+        status, body, headers = _call_intake(
+            self.intake, _photo_bytes(), district=" Dadu ", village="Johi",
+            reporter_role="rescue_team")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["route"], "ground")
+        report = body["report"]
+        self.assertTrue(report["urgent"])
+        self.assertEqual(report["urgent_reasons"],
+                         ["people_on_rooftop", "rising_water_near_people"])
+        self.assertEqual(report["status"], "unverified")
+        self.assertEqual(report["damage_level"], "destroyed")
+        self.assertEqual(report["location"]["district"], "Dadu")
+        self.assertEqual(report["location"]["village"], "Johi")
+        self.assertEqual(report["location"]["source"], "manual")
+        self.assertEqual(report["reporter_role"], "rescue_team")
+        self.assertEqual((report["vlm_source"], report["vlm_model"]), ("fake", "fake-vl"))
+        self.assertEqual(len(report["phash"]), 16)
+        self.assertIsNone(report["duplicate_of"])
+        self.assertEqual(report["review"]["ai_original"]["damage_level"], "destroyed")
+        self.assertNotIn("x-model-warning", headers)
+        # The model got an EXIF-free JPEG, and that JPEG is what was stored.
+        jpeg = fake.describe.call_args.args[0]
+        self.assertTrue(jpeg.startswith(b"\xff\xd8"))
+        self.assertEqual(self.store.photo(report["id"]), jpeg)
+        self.assertEqual(self.store.get(report["id"]).id, report["id"])
+
+    def test_not_urgent_and_unknown_role_defaults_to_citizen(self):
+        self.provider(_obs())
+        _, body, _ = _call_intake(self.intake, _photo_bytes(), reporter_role="mayor")
+        self.assertFalse(body["report"]["urgent"])
+        self.assertEqual(body["report"]["urgent_reasons"], [])
+        self.assertEqual(body["report"]["reporter_role"], "citizen")
+        self.assertEqual(body["report"]["location"]["source"], "unknown")
+
+    def test_duplicates_point_at_the_group_first_report(self):
+        self.provider(_obs(), _obs(), _obs(), _obs())
+        _, first, _ = _call_intake(self.intake, _photo_bytes(), district="Dadu")
+        _, second, _ = _call_intake(self.intake, _photo_bytes("JPEG"), district="Dadu")
+        _, third, _ = _call_intake(self.intake, _photo_bytes(), district="Dadu")
+        _, elsewhere, _ = _call_intake(self.intake, _photo_bytes(), district="Sukkur")
+        first_id = first["report"]["id"]
+        self.assertIsNone(first["report"]["duplicate_of"])
+        self.assertEqual(second["report"]["duplicate_of"], first_id)
+        self.assertEqual(third["report"]["duplicate_of"], first_id)
+        self.assertIsNone(elsewhere["report"]["duplicate_of"])
+
+    def test_duplicates_within_one_km_across_districts(self):
+        self.provider(_obs(), _obs())
+        _, first, _ = _call_intake(self.intake, _photo_bytes(), lat=24.0, lon=62.0)
+        _, second, _ = _call_intake(self.intake, _photo_bytes(), lat=24.005, lon=62.0)
+        self.assertIsNone(first["report"]["location"]["district"])
+        self.assertEqual(second["report"]["location"]["source"], "device")
+        self.assertEqual(second["report"]["duplicate_of"], first["report"]["id"])
+
+    def test_exif_gps_from_the_original_upload_picks_the_district(self):
+        self.provider(_obs())
+        image = _jpeg_with_gps(((26, 1), (43, 1), (4919, 100)), "N",
+                               ((67, 1), (46, 1), (3684, 100)), "E")
+        buffer = io.BytesIO()
+        image.save(buffer, format="JPEG", exif=image.getexif().tobytes())
+        _, body, _ = _call_intake(self.intake, buffer.getvalue(), district="Sukkur")
+        location = body["report"]["location"]
+        self.assertEqual(location["source"], "exif")
+        self.assertEqual(location["district"], "Dadu")
+        self.assertAlmostEqual(location["lat"], DADU["lat"], places=3)
+
+    def test_rejections_keep_the_classify_damage_message(self):
+        cases = [
+            ("vlm_irrelevant", [_obs(image_kind="irrelevant", image_confidence=0.95)]),
+            ("vlm_aerial", [_obs(image_kind="aerial_or_satellite", image_confidence=0.95)]),
+            ("vlm_low_confidence", [_obs(image_confidence=0.4)]),
+            ("vlm_unavailable", None),
+            ("vlm_unavailable", [self.vlm.InvalidObservation(), self.vlm.InvalidObservation()]),
+            ("vlm_unavailable", [TimeoutError("slow")]),
+        ]
+        expected_ood = {key: value for key, value in _FORCED_OOD.items()
+                        if key != "is_out_of_domain"}
+        for reason, results in cases:
+            with self.subTest(reason=reason, results=results):
+                if results is None:
+                    self.vlm.set_providers_for_tests([])
+                else:
+                    self.provider(*results)
+                status, body, _ = _call_intake(self.intake, _photo_bytes(), district="Dadu")
+                self.assertEqual(status, 200)
+                self.assertEqual(body, {
+                    "route": "irrelevant",
+                    "message": self.router_module.OOD_MESSAGE,
+                    "reason": reason,
+                    "ood": expected_ood,
+                })
+        self.assertEqual(self.store.list(), [])
+
+    def test_min_confidence_env(self):
+        os.environ["GROUND_MIN_CONFIDENCE"] = "0.3"
+        self.provider(_obs(image_confidence=0.4))
+        self.assertEqual(_call_intake(self.intake, _photo_bytes())[1]["route"], "ground")
+
+    def test_oversize_is_413_and_bad_bytes_is_400(self):
+        os.environ["GROUND_MAX_UPLOAD_BYTES"] = "100"
+        fake = self.provider(_obs())
+        status, body, _ = _call_intake(self.intake, _photo_bytes())
+        self.assertEqual((status, body["code"]), (413, "image_too_large"))
+        os.environ.pop("GROUND_MAX_UPLOAD_BYTES")
+        status, body, _ = _call_intake(self.intake, b"not an image")
+        self.assertEqual(status, 400)
+        self.assertEqual(body, {"error": self.router_module.INVALID_IMAGE_MESSAGE,
+                                "code": "invalid_image"})
+        fake.describe.assert_not_called()
+
+    def test_untrained_weights_header(self):
+        self.provider(_obs())
+        intake = _intake_endpoint(self.router_module.build_router(
+            _forced_ood_classify, model_loaded=lambda: False))
+        _, _, headers = _call_intake(intake, _photo_bytes())
+        self.assertEqual(headers["x-model-warning"], "untrained-weights")
+
+    def test_health_fields_hold_names_only(self):
+        self.vlm.set_providers_for_tests([])
+        self.assertEqual(self.router_module.ground_health(), {
+            "ground_vlm_providers": [],
+            "ground_vlm_configured": False,
+            "ground_report_count": 0,
+        })
+
+
+class TestIntakeMatchesClassifyDamage(_IntakeBase):
+    """Real model: the satellite route must equal /classify-damage."""
+
+    @classmethod
+    def setUpClass(cls):
+        import asyncio
+
+        cls._cwd = os.getcwd()
+        os.chdir(SERVICE_ROOT)
+        import main
+        cls.main = main
+        asyncio.run(main.startup())
+
+    @classmethod
+    def tearDownClass(cls):
+        os.chdir(cls._cwd)
+
+    def _classify_damage(self, data: bytes, area: str):
+        import asyncio
+
+        from fastapi import UploadFile
+
+        response = asyncio.run(self.main.classify_damage(
+            image=UploadFile(file=io.BytesIO(data), filename="upload.png"), area=area))
+        return response.status_code, json.loads(response.body), response.headers
+
+    def test_sample_routes_to_satellite_with_identical_fields(self):
+        intake = _intake_endpoint(self.router_module.build_router(
+            self.main._classify_pil, model_loaded=lambda: self.main._model_loaded))
+        fake = self.provider(_obs())
+        for name in ("joplin-tornado_00000120_post_disaster.png",
+                     "PAKISTAN-FLOODING_014695_post_disaster.png"):
+            with self.subTest(sample=name):
+                data = (SAMPLE_DIR / name).read_bytes()
+                status, body, headers = _call_intake(intake, data, district="Dadu")
+                expected_status, expected, expected_headers = self._classify_damage(data, "Dadu")
+                self.assertEqual(status, expected_status)
+                self.assertEqual(body["route"], "satellite")
+                self.assertEqual(body["satellite"], expected)
+                self.assertEqual(json.dumps(body["satellite"]), json.dumps(expected))
+                self.assertEqual(headers.get("x-model-warning"),
+                                 expected_headers.get("x-model-warning"))
+        # No area given: /classify-damage's default is "unknown".
+        data = (SAMPLE_DIR / "joplin-tornado_00000120_post_disaster.png").read_bytes()
+        self.assertEqual(_call_intake(intake, data)[1]["satellite"],
+                         self._classify_damage(data, "unknown")[1])
+        fake.describe.assert_not_called()
+
+    def test_rejection_message_and_ood_match_classify_damage(self):
+        with patch.object(self.main, "_classify_pil", _forced_ood_classify):
+            _, expected, _ = self._classify_damage(_photo_bytes(), "Dadu")
+        self.assertEqual(expected["message"], self.router_module.OOD_MESSAGE)
+        self.vlm.set_providers_for_tests([])
+        intake = _intake_endpoint(self.router_module.build_router(_forced_ood_classify))
+        _, body, _ = _call_intake(intake, _photo_bytes(), district="Dadu")
+        self.assertEqual(body["message"], expected["message"])
+        self.assertEqual(body["ood"], expected["ood"])
+        _, bad, _ = self._classify_damage(b"not an image", "Dadu")
+        self.assertEqual(bad["error"], self.router_module.INVALID_IMAGE_MESSAGE)
+
+    def test_app_mounts_intake_and_health_reports_ground_fields(self):
+        import asyncio
+
+        self.assertIn("/intake", self.main.app.openapi()["paths"])
+        self.vlm.set_providers_for_tests([])
+        health = asyncio.run(self.main.health())
+        self.assertEqual(health["ground_vlm_providers"], [])
+        self.assertFalse(health["ground_vlm_configured"])
+        self.assertEqual(health["ground_report_count"], 0)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
