@@ -433,3 +433,282 @@ Body: `{ "village_ids"?: [], "district"?: "", "as_of": "", "mode"?: "replay|live
 ```json
 { "error": { "code": "<machine>", "message": "<human>" } }
 ```
+
+## Ground Photo Intake (damage-checker)
+
+Turns ground-level disaster photos into structured, officer-reviewed reports.
+Same base URL as `/classify-damage` (dashboard `ENDPOINTS.damageApi`).
+`/classify-damage` and `/classify-scene` are unchanged. Errors use the
+damage-checker shape:
+
+```json
+{ "error": "<human text>", "code": "<machine_code>" }
+```
+
+### Report object
+
+The vision model fills the closed enums (`image_kind` through `confidence`).
+Code adds the rest. `urgent`, `urgent_reasons` and every summary number come
+from Python rules, never from the model.
+
+```json
+{
+  "image_kind": "ground_disaster|aerial_or_satellite|irrelevant",
+  "image_confidence": 0.93,
+  "scene_type": "flooded_street|flooded_farmland|collapsed_house|damaged_building|damaged_road|broken_bridge|landslide|debris|relief_camp|other_disaster",
+  "damage_level": "none|partial|destroyed",
+  "water": { "present": true, "flowing": false, "depth": "none|ankle|knee|waist|chest|above_head" },
+  "hazards": ["blocked_road|downed_power_lines|unstable_structure|fast_water|fire"],
+  "people": { "visible": true, "count_estimate": 4, "stranded_or_trapped": false, "on_rooftop": true, "injured": false },
+  "animals": { "livestock_visible": true, "livestock_at_risk": true },
+  "needs": ["rescue|shelter|medical|food_water|road_clearance"],
+  "summary": "1-2 sentences, damage and needs only",
+  "confidence": 0.81,
+  "id": "<uuid4 hex>",
+  "created_at": "2026-10-22T09:14:03Z",
+  "urgent": true,
+  "urgent_reasons": ["people_trapped|people_on_rooftop|people_injured|rising_water_near_people"],
+  "location": { "lat": 26.73, "lon": 67.78, "source": "exif|device|manual|unknown", "district": "Dadu", "village": "Johi" },
+  "phash": "<64-bit dHash, hex>",
+  "duplicate_of": null,
+  "duplicate_count": 0,
+  "status": "unverified|verified|corrected|rejected",
+  "review": {
+    "history": [{ "action": "verify|correct|reject", "officer": null, "note": null, "at": "2026-10-22T10:02:11Z" }],
+    "ai_original": { "<the model's first observation: image_kind ... confidence>": "" }
+  },
+  "reporter_role": "field_worker|rescue_team|citizen",
+  "vlm_source": "gemini|qwen",
+  "vlm_model": "gemini-3.8-flash"
+}
+```
+
+- `duplicate_of` is the id of the group's first report when the photo's
+  perceptual hash is within `GROUND_DUPLICATE_MAX_HAMMING` bits (default 8)
+  of a non-rejected report in the same district, or within 1 km when both
+  have coordinates. Copies never count twice.
+- `duplicate_count` is only filled in folded lists (`GET /ground-reports`
+  without `include_duplicates`). It is 0 elsewhere.
+- `rising_water_near_people` needs a visible person plus waist-deep or
+  deeper, or flowing, water.
+
+### `POST /intake`
+
+Request: multipart/form-data, field `image`. Query, all optional:
+`district`, `village`, `lat` (-90..90), `lon` (-180..180),
+`reporter_role` (`field_worker|rescue_team|citizen`, default `citizen`).
+
+The upload first goes through the same classifier and OOD guard as
+`/classify-damage`. If the guard does not flag it, `route` is `satellite` and
+the vision model is not called. If it does, the vision model looks at it,
+and it becomes a ground report only when the model says `ground_disaster`
+with `image_confidence` >= `GROUND_MIN_CONFIDENCE` (default 0.6). Every
+other case is rejected the way `/classify-damage` rejects it, plus a
+`reason`.
+
+Satellite tile (`satellite` holds the same fields `/classify-damage` returns):
+
+```json
+{
+  "route": "satellite",
+  "satellite": {
+    "damage_level": "partial", "confidence": 0.74, "area": "Dadu",
+    "is_out_of_domain": false,
+    "ood": { "cosine": 0.0312, "mahalanobis": 8.2041, "cosine_threshold": 0.15568, "mahalanobis_threshold": 19.044245,
+             "photo_cosine": 0.14, "photo_mahalanobis": 21.3, "photo_score": 0.9932, "photo_score_threshold": 1.65,
+             "signals": [] }
+  }
+}
+```
+
+Ground photo (`report` is the stored report object, `status` `unverified`):
+
+```json
+{
+  "route": "ground",
+  "report": {
+    "id": "3f2a9c0e7b6d4e1f9a8b7c6d5e4f3a2b", "created_at": "2026-10-22T09:14:03Z",
+    "image_kind": "ground_disaster", "image_confidence": 0.93,
+    "scene_type": "flooded_street", "damage_level": "partial",
+    "water": { "present": true, "flowing": true, "depth": "waist" },
+    "hazards": ["fast_water"],
+    "people": { "visible": true, "count_estimate": 4, "stranded_or_trapped": false, "on_rooftop": true, "injured": false },
+    "animals": { "livestock_visible": false, "livestock_at_risk": false },
+    "needs": ["rescue", "food_water"],
+    "summary": "Waist-deep flowing water through a village street; a family is waiting on a rooftop.",
+    "confidence": 0.81,
+    "urgent": true, "urgent_reasons": ["people_on_rooftop", "rising_water_near_people"],
+    "location": { "lat": 26.73, "lon": 67.78, "source": "exif", "district": "Dadu", "village": "Johi" },
+    "phash": "c3e1f0f8781c0e07", "duplicate_of": null, "duplicate_count": 0,
+    "status": "unverified",
+    "review": { "history": [], "ai_original": { "image_kind": "ground_disaster", "...": "..." } },
+    "reporter_role": "field_worker", "vlm_source": "gemini", "vlm_model": "gemini-3.8-flash"
+  }
+}
+```
+
+Irrelevant (same `message` and `ood` fields as a flagged `/classify-damage`):
+
+```json
+{
+  "route": "irrelevant",
+  "message": "This image doesn't resemble a satellite disaster-imagery tile -- the damage result may be unreliable.",
+  "reason": "vlm_irrelevant|vlm_aerial|vlm_low_confidence|vlm_unavailable",
+  "ood": { "cosine": 0.3104, "mahalanobis": 27.9, "cosine_threshold": 0.15568, "mahalanobis_threshold": 19.044245,
+           "photo_cosine": 0.52, "photo_mahalanobis": 48.1, "photo_score": 2.8167, "photo_score_threshold": 1.65,
+           "signals": ["texture", "photo_content"] }
+}
+```
+
+- `vlm_unavailable` covers no provider configured, timeout, provider error
+  and unparseable model output. Provider errors are never echoed.
+- Location source: EXIF GPS (`exif`), else the `lat`/`lon` query
+  (`device`), else a `district` query only (`manual`), else `unknown`. With
+  coordinates, `district` becomes the nearest district centre within
+  `GROUND_DISTRICT_MAX_KM` (default 60). Beyond that the sent district is
+  kept.
+- The stored photo is upright, EXIF-stripped, long side at most 1024 px.
+- 400 `invalid_image`. 413 `image_too_large` (over `GROUND_MAX_UPLOAD_BYTES`,
+  default 10485760, or too many pixels). `X-Model-Warning: untrained-weights`
+  as on `/classify-damage`.
+
+### `GET /ground-reports`
+
+Query, all optional: `district`, `status`
+(`unverified|verified|corrected|rejected`), `urgent` (`true|false`),
+`include_duplicates` (default `false`).
+
+Response: a JSON array of report objects. Order: urgent and unverified
+first, then other unverified, then reviewed; newest first inside each group.
+Without `include_duplicates`, copies are hidden and their first report
+carries `duplicate_count`.
+
+```json
+[
+  { "id": "3f2a9c0e7b6d4e1f9a8b7c6d5e4f3a2b", "status": "unverified", "urgent": true,
+    "scene_type": "flooded_street", "damage_level": "partial", "duplicate_of": null, "duplicate_count": 1,
+    "location": { "lat": 26.73, "lon": 67.78, "source": "exif", "district": "Dadu", "village": "Johi" },
+    "...": "every other report field" }
+]
+```
+
+422 `invalid_status` for an unknown `status`.
+
+### `GET /ground-reports/{id}`
+
+One report object, duplicates and rejected reports included. 404:
+
+```json
+{ "error": "Ground report not found.", "code": "not_found" }
+```
+
+### `GET /ground-reports/{id}/photo`
+
+The stored JPEG (`Content-Type: image/jpeg`). 404 `not_found` as above.
+
+### `PATCH /ground-reports/{id}/review`
+
+Request: JSON body
+
+```json
+{
+  "action": "verify|correct|reject",
+  "corrections": {
+    "damage_level": "destroyed",
+    "scene_type": "collapsed_house",
+    "needs": ["shelter", "medical"],
+    "people": { "injured": true },
+    "water": { "depth": "knee" },
+    "district": "Dadu"
+  },
+  "note": "Checked with the Johi field team",
+  "officer": "PDMA Sindh duty officer"
+}
+```
+
+- `corrections` is applied only for `correct`. Every key is optional,
+  `people` and `water` merge into the stored values, unknown keys fail.
+- `correct` keeps the model's first output in `review.ai_original` (set
+  once, never overwritten) and recomputes `urgent` / `urgent_reasons`.
+- Every action appends `{action, officer, note, at}` to `review.history`.
+- `reject` drops the report from `/ground-summary` and from duplicate
+  matching.
+
+Response: the updated report object.
+
+```json
+{ "id": "3f2a9c0e7b6d4e1f9a8b7c6d5e4f3a2b", "status": "corrected", "damage_level": "destroyed",
+  "urgent": true, "urgent_reasons": ["people_on_rooftop", "people_injured", "rising_water_near_people"],
+  "review": { "history": [{ "action": "correct", "officer": "PDMA Sindh duty officer", "note": "Checked with the Johi field team", "at": "2026-10-22T10:02:11Z" }],
+              "ai_original": { "damage_level": "partial", "...": "..." } },
+  "...": "every other report field" }
+```
+
+404 `not_found`. 422 `invalid_action` or `invalid_corrections`.
+
+### `GET /ground-summary`
+
+Query, optional: `district`.
+
+More photos != more damage: `share_destroyed`, `share_damaged` and
+`ground_score` are shares over unique (non-duplicate), non-rejected reports.
+`report_count`, `photo_count`, `verified_count`, `severity_mix`,
+`top_scene_types` counts, `urgent_open` and `low_sample_warning` are display
+only. Reports with no district are left out. Districts with no surviving
+report are omitted.
+
+```json
+{
+  "districts": {
+    "Dadu": {
+      "report_count": 4,
+      "photo_count": 5,
+      "verified_count": 2,
+      "severity_mix": { "none": 1, "partial": 2, "destroyed": 1 },
+      "share_destroyed": 0.25,
+      "share_damaged": 0.75,
+      "ground_score": 0.5,
+      "top_scene_types": [{ "scene_type": "flooded_street", "count": 2 }, { "scene_type": "collapsed_house", "count": 1 }],
+      "urgent_open": 1,
+      "low_sample_warning": null
+    }
+  }
+}
+```
+
+- `ground_score = (0.5 * partial + 1.0 * destroyed) / report_count`.
+- `photo_count` includes duplicates. `verified_count` counts `verified` and
+  `corrected`. `urgent_open` counts unique reports that are urgent.
+- `low_sample_warning` is `"low sample — based on N report(s)"` below 3
+  unique reports, else `null`.
+
+### `GET /health` (ground fields)
+
+`ground_vlm_providers` (names, e.g. `["gemini"]`), `ground_vlm_configured`
+(bool), `ground_report_count`. Never a key or an env value.
+
+### `POST /rank-priority`: optional `ground_evidence` (aid-priority)
+
+Registered as the `ground` optional signal: `missing_policy` `skip`, weight
+`PRIORITY_GROUND_WEIGHT` (default 0.2). Per district, optional:
+
+```json
+{
+  "district": "Dadu", "hazard_type": "flood", "risk_level": "high",
+  "overall_damage_level": "partial", "confidence": 0.74,
+  "ground_evidence": { "none": 1, "partial": 2, "destroyed": 1, "verified_count": 2, "urgent_open": 1 }
+}
+```
+
+- `none`, `partial`, `destroyed` are required integers >= 0 with a sum >= 1
+  (the district's `severity_mix` from `/ground-summary`). `verified_count`
+  and `urgent_open` are optional integers >= 0, validated but not scored.
+- Score: `(0.5 * partial + 1.0 * destroyed) / (none + partial + destroyed)`.
+  The same shares score the same however many reports they hold.
+- Omit the field (or send `null`) for a district with no ground reports: it
+  is skipped, not scored as zero.
+- Echoed per district:
+  `"signals": { "ground": { "value": { "none": 1, "partial": 2, "destroyed": 1, "verified_count": 2, "urgent_open": 1 }, "score": 0.5 } }`.
+  `score` is `null` for a skipped district.
+- A bad value is 422 `invalid_signal_value` in the aid-priority error shape
+  (`{"error": {"code", "message"}}`).
