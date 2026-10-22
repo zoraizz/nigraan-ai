@@ -82,6 +82,7 @@ from PIL import Image
 from torchvision import transforms
 
 from data_loader import IDX_TO_LABEL, NUM_CLASSES
+from ground_intake.router import build_router, ground_health
 from model import DamageClassifier
 
 # ---------------------------------------------------------------------------
@@ -578,6 +579,7 @@ async def health():
         "checkpoint": str(CHECKPOINT_PATH),
         "ood_enabled": _ood_reference is not None,
         "photo_detector_loaded": _imagenet_loaded,
+        **ground_health(),
     }
 
 
@@ -808,3 +810,9 @@ async def classify_scene(
     if not _model_loaded:
         headers["X-Model-Warning"] = "untrained-weights"
     return JSONResponse(content=response, headers=headers)
+
+
+# ---------------------------------------------------------------------------
+# POST /intake -- ground photo intake (ground_intake/router.py)
+# ---------------------------------------------------------------------------
+app.include_router(build_router(_classify_pil, model_loaded=lambda: _model_loaded))
