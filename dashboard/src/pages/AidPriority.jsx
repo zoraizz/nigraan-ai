@@ -88,6 +88,11 @@ export default function AidPriority() {
           />
           Include ground reports
         </label>
+        {live.groundError ? (
+          <span className="text-xs text-muted" title={live.groundError}>
+            Ground reports unavailable, ranked without them
+          </span>
+        ) : null}
 
         <details className="ml-auto max-w-md text-xs">
           <summary className="cursor-pointer text-muted hover:text-text">

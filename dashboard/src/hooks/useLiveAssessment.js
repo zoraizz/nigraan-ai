@@ -48,13 +48,15 @@ function assessmentPlan(sceneDamage) {
 // - progress: per-district status. damage_source is 'scene' | 'sample'.
 // - phase: 'idle' | 'assembling' | 'done' | 'error'
 // - includeGround: also fetch GET /ground-summary and add ground_evidence to
-//   each planned district with report_count >= 1.
+//   each planned district with report_count >= 1. If that request fails the
+//   run still ranks without ground_evidence and `groundError` holds the reason.
 export function useLiveAssessment(sceneDamage, { includeGround = false } = {}) {
   const [phase, setPhase] = useState('idle')
   const [progress, setProgress] = useState([])
   const [payload, setPayload] = useState(null)
   const [error, setError] = useState(null)
   const [elapsed, setElapsed] = useState(0)
+  const [groundError, setGroundError] = useState(null)
   const runId = useRef(0)
 
   useEffect(() => {
@@ -71,6 +73,7 @@ export function useLiveAssessment(sceneDamage, { includeGround = false } = {}) {
     const plan = assessmentPlan(sceneDamage)
     setPhase('assembling')
     setError(null)
+    setGroundError(null)
     setPayload(null)
     setProgress(plan.map((entry) => ({
       district: entry.district,
@@ -145,11 +148,12 @@ export function useLiveAssessment(sceneDamage, { includeGround = false } = {}) {
     const failures = results
       .map((result, index) => ({ result, district: plan[index].district }))
       .filter((item) => item.result.status === 'rejected')
+    // ground: a failed summary never fails the run; rank without it.
     const [groundResult] = await Promise.allSettled([groundPromise])
-    if (groundResult.status === 'rejected') {
-      failures.push({ result: groundResult, district: 'Ground summary' })
-    }
     if (runId.current !== id) return
+    setGroundError(groundResult.status === 'rejected'
+      ? String(groundResult.reason?.message ?? groundResult.reason)
+      : null)
     if (failures.length > 0) {
       const details = failures
         .map((item) => `${item.district}: ${item.result.reason?.message ?? item.result.reason}`)
@@ -159,7 +163,7 @@ export function useLiveAssessment(sceneDamage, { includeGround = false } = {}) {
       return
     }
 
-    const groundSummary = groundResult.value
+    const groundSummary = groundResult.status === 'fulfilled' ? groundResult.value : null
     setPayload(results.map((item) => {
       const row = assessmentRow(item.value)
       const ground = groundEvidenceFor(groundSummary, row.district)
@@ -197,7 +201,8 @@ export function useLiveAssessment(sceneDamage, { includeGround = false } = {}) {
     setProgress([])
     setPayload(null)
     setError(null)
+    setGroundError(null)
   }, [])
 
-  return { phase, progress, payload, error, elapsed, run, reset }
+  return { phase, progress, payload, error, groundError, elapsed, run, reset }
 }
