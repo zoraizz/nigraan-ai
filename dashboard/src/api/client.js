@@ -79,3 +79,12 @@ export function postJson(baseUrl, path, payload) {
 export function postForm(baseUrl, path, formData) {
   return request(baseUrl, path, { method: 'POST', body: formData })
 }
+
+// JSON PATCH. Ground report review uses this; callers own the body shape.
+export function patchJson(baseUrl, path, payload) {
+  return request(baseUrl, path, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}

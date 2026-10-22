@@ -9,6 +9,7 @@ import RiskMap from './pages/RiskMap.jsx'
 import DamageAssessment from './pages/DamageAssessment.jsx'
 import AidPriority from './pages/AidPriority.jsx'
 import FloodTracker from './pages/FloodTracker.jsx'
+import GroundReports from './pages/GroundReports.jsx'
 import { SceneDamageProvider } from './scene/SceneDamageProvider.jsx'
 
 // Console shell: persistent sidebar rail + header around the 4 console pages.
@@ -62,6 +63,15 @@ function ConsoleShell() {
               element={
                 <ProtectedRoute>
                   <FloodTracker />
+                </ProtectedRoute>
+              }
+            />
+            {/* ground: Ground Reports */}
+            <Route
+              path="/ground-reports"
+              element={
+                <ProtectedRoute>
+                  <GroundReports />
                 </ProtectedRoute>
               }
             />
