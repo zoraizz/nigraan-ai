@@ -1,7 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { predictRisk } from '../api/riskFlag.js'
 import { classifyDamage } from '../api/damageChecker.js'
+import { getGroundSummary } from '../api/groundIntake.js'
 import { SAMPLE_PAIRING, hazardTypeFor } from '../config/samplePairing.js'
+
+// ground: /rank-priority ground_evidence from GET /ground-summary, or null
+// when the district has no unique non-rejected report (field then omitted).
+function groundEvidenceFor(summary, district) {
+  const row = summary?.districts?.[district]
+  if (!row || !(row.report_count >= 1)) return null
+  const mix = row.severity_mix ?? {}
+  return {
+    none: mix.none ?? 0,
+    partial: mix.partial ?? 0,
+    destroyed: mix.destroyed ?? 0,
+    verified_count: row.verified_count ?? 0,
+    urgent_open: row.urgent_open ?? 0,
+  }
+}
 
 // Districts the live ranking will assess. A stored scene replaces that
 // district's sample tile. A district outside the demo pairing is added.
@@ -31,7 +47,9 @@ function assessmentPlan(sceneDamage) {
 //   holds the /rank-priority districts array.
 // - progress: per-district status. damage_source is 'scene' | 'sample'.
 // - phase: 'idle' | 'assembling' | 'done' | 'error'
-export function useLiveAssessment(sceneDamage) {
+// - includeGround: also fetch GET /ground-summary and add ground_evidence to
+//   each planned district with report_count >= 1.
+export function useLiveAssessment(sceneDamage, { includeGround = false } = {}) {
   const [phase, setPhase] = useState('idle')
   const [progress, setProgress] = useState([])
   const [payload, setPayload] = useState(null)
@@ -72,6 +90,8 @@ export function useLiveAssessment(sceneDamage) {
         (row) => (row.district === district ? { ...row, ...patch } : row),
       ))
     }
+
+    const groundPromise = includeGround ? getGroundSummary() : Promise.resolve(null)
 
     const results = await Promise.allSettled(plan.map(async (entry) => {
       const riskPromise = predictRisk(entry.district)
@@ -125,6 +145,10 @@ export function useLiveAssessment(sceneDamage) {
     const failures = results
       .map((result, index) => ({ result, district: plan[index].district }))
       .filter((item) => item.result.status === 'rejected')
+    const [groundResult] = await Promise.allSettled([groundPromise])
+    if (groundResult.status === 'rejected') {
+      failures.push({ result: groundResult, district: 'Ground summary' })
+    }
     if (runId.current !== id) return
     if (failures.length > 0) {
       const details = failures
@@ -135,8 +159,15 @@ export function useLiveAssessment(sceneDamage) {
       return
     }
 
+    const groundSummary = groundResult.value
     setPayload(results.map((item) => {
-      const { entry, risk, damage } = item.value
+      const row = assessmentRow(item.value)
+      const ground = groundEvidenceFor(groundSummary, row.district)
+      return ground ? { ...row, ground_evidence: ground } : row
+    }))
+    setPhase('done')
+
+    function assessmentRow({ entry, risk, damage }) {
       if (entry.source === 'scene') {
         return {
           district: entry.district,
@@ -157,9 +188,8 @@ export function useLiveAssessment(sceneDamage) {
         overall_damage_level: damage.damage_level,
         confidence: damage.confidence,
       }
-    }))
-    setPhase('done')
-  }, [sceneDamage])
+    }
+  }, [sceneDamage, includeGround])
 
   const reset = useCallback(() => {
     runId.current += 1
