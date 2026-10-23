@@ -1,39 +1,53 @@
 import React from 'react'
 
 /**
- * Modern Logo component for Nigraan AI.
- * Displays official uploaded logo image + crisp typography.
+ * NigraanLogo — matches the official wordmark:
+ *   Icon: green crescent arc + white dot (eye/sentinel mark)
+ *   Text: "NIGRAAN AI" — wide-tracked, bold, all-caps white
  */
 export default function Logo({ size = 'md', className = '', showText = true }) {
-  const isSm = size === 'sm'
-  const isLg = size === 'lg'
-
-  const iconSize = isSm ? 'h-8 w-8' : isLg ? 'h-11 w-11' : 'h-9 w-9'
-  const textSize = isSm ? 'text-sm' : isLg ? 'text-xl' : 'text-base'
+  // Scale: sm = sidebar collapsed, md = sidebar open, lg = hero
+  const iconH = size === 'sm' ? 28 : size === 'lg' ? 44 : 34
+  const textCls =
+    size === 'sm'
+      ? 'text-[13px] tracking-[0.18em]'
+      : size === 'lg'
+      ? 'text-[22px] tracking-[0.2em]'
+      : 'text-[15px] tracking-[0.18em]'
 
   return (
-    <div className={`inline-flex items-center gap-2.5 ${className}`}>
-      {/* Emblem Container with soft shadow/glow */}
-      <div className={`relative flex ${iconSize} shrink-0 items-center justify-center rounded-lg bg-[#0a3a24] p-0.5 shadow-md shadow-emerald-950/40 border border-emerald-600/30 overflow-hidden`}>
-        <img
-          src="/logo.png"
-          alt="Nigraan AI Logo"
-          className="h-full w-full object-contain rounded-md"
+    <div className={`inline-flex items-center gap-2.5 select-none ${className}`}>
+      {/* ── Icon Mark ── */}
+      <svg
+        width={iconH}
+        height={iconH}
+        viewBox="0 0 40 40"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        aria-hidden="true"
+        style={{ flexShrink: 0 }}
+      >
+        {/* Green crescent / bowl arc */}
+        <path
+          d="M6 26 C6 14 34 14 34 26"
+          stroke="#3ddc84"
+          strokeWidth="4"
+          strokeLinecap="round"
+          fill="none"
         />
-      </div>
+        {/* White sentinel dot sitting on the arc apex */}
+        <circle cx="20" cy="15" r="5.5" fill="white" />
+      </svg>
 
-      {/* Brand Name */}
+      {/* ── Wordmark ── */}
       {showText && (
-        <div className="flex items-center leading-none">
-          <span className={`font-heading font-extrabold tracking-tight text-white ${textSize}`}>
-            NIGRAAN{' '}
-          </span>
-          <span className={`font-heading font-extrabold tracking-tight text-[#3ddc84] ${textSize}`}>
-            AI
-          </span>
-        </div>
+        <span
+          className={`font-bold uppercase leading-none text-white ${textCls}`}
+          style={{ fontFamily: "'Public Sans', system-ui, sans-serif", letterSpacing: '0.18em' }}
+        >
+          NIGRAAN AI
+        </span>
       )}
     </div>
   )
 }
-
