@@ -228,6 +228,71 @@ classifier.
 labels.csv format; `train_v3.py` runs the combined fine-tune (seed=42,
 splits in `data/splits_v3.json`, full metrics in `v3_training_report.md`).
 
+## Ground Photo Intake
+
+The satellite classifier rejects phone photos as "irrelevant". Ground Photo
+Intake (`POST /intake` on damage-checker, code in
+`damage-checker/ground_intake/`) turns ground-level disaster photos into
+structured reports that an officer verifies, corrects or rejects in the
+dashboard under Damage Assessment > Ground photos (not a separate page;
+`#/damage-assessment?tab=ground` opens it directly). Truly irrelevant images
+are still rejected.
+`/classify-damage` and `/classify-scene` are unchanged. Endpoints are in
+`API_CONTRACT.md`.
+
+Two roles: **Field worker** (uploads, no PIN, sent as `reporter_role=field_worker`, the
+default) and **Officer** (upload and review, sent as `officer`). `citizen` and `rescue_team` are
+accepted for old stored reports only.
+
+Officer review needs the PIN in OFFICER_REVIEW_KEY (demo default 2026, to be removed after the hackathon).
+Officers can also delete a report and its photo permanently; Reject keeps the record instead.
+
+Every upload goes through the existing classifier and OOD guard first, then
+takes one of three routes:
+
+- **satellite**: the guard does not flag it. Same result as
+  `/classify-damage`; the vision model is not called.
+- **ground**: the guard flags it and the vision model says it is a
+  ground-level disaster photo with enough confidence. A report is stored as
+  `unverified`.
+- **irrelevant**: everything else (model says irrelevant or aerial, low
+  confidence, timeout, bad output, no provider). Rejected as today, with a
+  `reason`.
+
+The model observes, code decides. The vision model only fills closed enums
+(scene type, damage level, water depth, people, needs). URGENT, duplicates,
+district summaries and scores are plain Python rules with unit tests. Like
+satellite damage, the ground score is a share over unique, non-rejected
+reports, so more photos never means more damage. Aid Priority can add it as
+the optional `ground` signal (`ground_evidence`, weight
+`PRIORITY_GROUND_WEIGHT`, default 0.2); the "Include ground reports" toggle
+is off by default.
+
+**Model:** Gemini 3.8 Flash (`gemini-3.8-flash`) via the google-genai SDK,
+the same LLM risk-flag uses. The provider is swappable: set
+`GROUND_VLM_PROVIDERS=qwen` (or `gemini,qwen` for a fallback chain) and
+`DASHSCOPE_API_KEY` to use Qwen-VL on Alibaba DashScope.
+
+**Env vars** (damage-checker; defaults in `damage-checker/.env.example`):
+`GEMINI_API_KEY`, `GEMINI_VL_MODEL`, `GROUND_VLM_PROVIDERS`,
+`GROUND_VLM_TIMEOUT_SECONDS`, `DASHSCOPE_API_KEY`, `DASHSCOPE_BASE_URL`,
+`DASHSCOPE_VL_MODEL`, `GROUND_MAX_UPLOAD_BYTES`, `GROUND_MIN_CONFIDENCE`,
+`GROUND_DISTRICT_MAX_KM`, `GROUND_DUPLICATE_MAX_HAMMING`,
+`GROUND_REPORTS_DIR`. Keys live only in `.env` locally and in Render's
+environment settings, never in the repo. On Render, damage-checker needs its
+own `GEMINI_API_KEY`.
+
+**Limitations:**
+
+- AI descriptions can be wrong. Every report starts `unverified` until an
+  officer reviews it.
+- Water depth and severity are rough visual estimates, not measurements.
+- Location can be missing or wrong (no EXIF GPS, wrong typed district).
+- One photo shows one spot, not a whole district.
+- Reports are lost on a Render restart (ephemeral disk) until OSS storage
+  lands. `scripts/seed_ground_reports.py` re-posts a local demo folder.
+- Photos are used only for disaster assessment.
+
 ## Aid Priority -- Scoring & Ranking
 
 Ranks affected districts by aid urgency, combining Risk Flag's forecast risk

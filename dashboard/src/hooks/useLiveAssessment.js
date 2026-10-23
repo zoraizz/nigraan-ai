@@ -1,7 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { predictRisk } from '../api/riskFlag.js'
 import { classifyDamage } from '../api/damageChecker.js'
+import { getGroundSummary } from '../api/groundIntake.js'
 import { SAMPLE_PAIRING, hazardTypeFor } from '../config/samplePairing.js'
+
+// ground: /rank-priority ground_evidence from GET /ground-summary, or null
+// when the district has no unique non-rejected report (field then omitted).
+function groundEvidenceFor(summary, district) {
+  const row = summary?.districts?.[district]
+  if (!row || !(row.report_count >= 1)) return null
+  const mix = row.severity_mix ?? {}
+  return {
+    none: mix.none ?? 0,
+    partial: mix.partial ?? 0,
+    destroyed: mix.destroyed ?? 0,
+    verified_count: row.verified_count ?? 0,
+    urgent_open: row.urgent_open ?? 0,
+  }
+}
 
 // Districts the live ranking will assess. A stored scene replaces that
 // district's sample tile. A district outside the demo pairing is added.
@@ -31,12 +47,16 @@ function assessmentPlan(sceneDamage) {
 //   holds the /rank-priority districts array.
 // - progress: per-district status. damage_source is 'scene' | 'sample'.
 // - phase: 'idle' | 'assembling' | 'done' | 'error'
-export function useLiveAssessment(sceneDamage) {
+// - includeGround: also fetch GET /ground-summary and add ground_evidence to
+//   each planned district with report_count >= 1. If that request fails the
+//   run still ranks without ground_evidence and `groundError` holds the reason.
+export function useLiveAssessment(sceneDamage, { includeGround = false } = {}) {
   const [phase, setPhase] = useState('idle')
   const [progress, setProgress] = useState([])
   const [payload, setPayload] = useState(null)
   const [error, setError] = useState(null)
   const [elapsed, setElapsed] = useState(0)
+  const [groundError, setGroundError] = useState(null)
   const runId = useRef(0)
 
   useEffect(() => {
@@ -53,6 +73,7 @@ export function useLiveAssessment(sceneDamage) {
     const plan = assessmentPlan(sceneDamage)
     setPhase('assembling')
     setError(null)
+    setGroundError(null)
     setPayload(null)
     setProgress(plan.map((entry) => ({
       district: entry.district,
@@ -72,6 +93,8 @@ export function useLiveAssessment(sceneDamage) {
         (row) => (row.district === district ? { ...row, ...patch } : row),
       ))
     }
+
+    const groundPromise = includeGround ? getGroundSummary() : Promise.resolve(null)
 
     const results = await Promise.allSettled(plan.map(async (entry) => {
       const riskPromise = predictRisk(entry.district)
@@ -125,7 +148,12 @@ export function useLiveAssessment(sceneDamage) {
     const failures = results
       .map((result, index) => ({ result, district: plan[index].district }))
       .filter((item) => item.result.status === 'rejected')
+    // ground: a failed summary never fails the run; rank without it.
+    const [groundResult] = await Promise.allSettled([groundPromise])
     if (runId.current !== id) return
+    setGroundError(groundResult.status === 'rejected'
+      ? String(groundResult.reason?.message ?? groundResult.reason)
+      : null)
     if (failures.length > 0) {
       const details = failures
         .map((item) => `${item.district}: ${item.result.reason?.message ?? item.result.reason}`)
@@ -135,8 +163,15 @@ export function useLiveAssessment(sceneDamage) {
       return
     }
 
+    const groundSummary = groundResult.status === 'fulfilled' ? groundResult.value : null
     setPayload(results.map((item) => {
-      const { entry, risk, damage } = item.value
+      const row = assessmentRow(item.value)
+      const ground = groundEvidenceFor(groundSummary, row.district)
+      return ground ? { ...row, ground_evidence: ground } : row
+    }))
+    setPhase('done')
+
+    function assessmentRow({ entry, risk, damage }) {
       if (entry.source === 'scene') {
         return {
           district: entry.district,
@@ -157,9 +192,8 @@ export function useLiveAssessment(sceneDamage) {
         overall_damage_level: damage.damage_level,
         confidence: damage.confidence,
       }
-    }))
-    setPhase('done')
-  }, [sceneDamage])
+    }
+  }, [sceneDamage, includeGround])
 
   const reset = useCallback(() => {
     runId.current += 1
@@ -167,7 +201,8 @@ export function useLiveAssessment(sceneDamage) {
     setProgress([])
     setPayload(null)
     setError(null)
+    setGroundError(null)
   }, [])
 
-  return { phase, progress, payload, error, elapsed, run, reset }
+  return { phase, progress, payload, error, groundError, elapsed, run, reset }
 }

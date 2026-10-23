@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import PageContainer from '../components/layout/PageContainer.jsx'
 import ImageUploadBox from '../components/ImageUploadBox.jsx'
 import DamageResultCard from '../components/DamageResultCard.jsx'
 import SceneAssessment from '../components/SceneAssessment.jsx'
+import GroundPhotosPanel from '../components/ground/GroundPhotosPanel.jsx'
 import { useDamageClassification } from '../hooks/useDamageClassification.js'
 import { DISTRICT_NAMES } from '../config/districts.js'
 import { ENDPOINTS } from '../config/endpoints.js'
@@ -75,13 +77,20 @@ function TileAssessment() {
   )
 }
 
+const MODES = ['tile', 'scene', 'ground']
+
+// The tab lives in the hash route query (#/damage-assessment?tab=ground), so
+// links can open a tab directly and switch it when already on this page.
 export default function DamageAssessment() {
-  const [mode, setMode] = useState('tile')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requested = searchParams.get('tab')
+  const mode = MODES.includes(requested) ? requested : 'tile'
+  const setMode = (next) => setSearchParams(next === 'tile' ? {} : { tab: next }, { replace: true })
 
   return (
     <PageContainer
       title="Damage Assessment"
-      lead="Classify a single satellite tile, or a larger scene cut into tiles, as none / partial / destroyed."
+      lead="Classify satellite tiles or a larger scene as none / partial / destroyed, and add ground photos from the field for officer review."
     >
       <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label="Assessment mode">
         <button
@@ -106,6 +115,17 @@ export default function DamageAssessment() {
         >
           Scene
         </button>
+        <button
+          type="button"
+          role="tab"
+          id="mode-ground"
+          aria-selected={mode === 'ground'}
+          aria-controls="panel-ground"
+          className={mode === 'ground' ? 'btn btn-primary' : 'btn'}
+          onClick={() => setMode('ground')}
+        >
+          Ground photos
+        </button>
       </div>
 
       <div
@@ -125,6 +145,15 @@ export default function DamageAssessment() {
         className={mode === 'scene' ? undefined : 'hidden'}
       >
         <SceneAssessment active={mode === 'scene'} />
+      </div>
+      <div
+        id="panel-ground"
+        role="tabpanel"
+        aria-labelledby="mode-ground"
+        hidden={mode !== 'ground'}
+        className={mode === 'ground' ? undefined : 'hidden'}
+      >
+        <GroundPhotosPanel />
       </div>
     </PageContainer>
   )

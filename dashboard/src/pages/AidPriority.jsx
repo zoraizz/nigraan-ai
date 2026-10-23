@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import PageContainer from '../components/layout/PageContainer.jsx'
 import PriorityTable from '../components/PriorityTable.jsx'
 import ScoringExplainer from '../components/ScoringExplainer.jsx'
@@ -35,7 +36,9 @@ function withFloodEtas(payload, etas) {
 
 export default function AidPriority() {
   const { sceneDamage, clearSceneDamage } = useSceneDamage()
-  const live = useLiveAssessment(sceneDamage)
+  // ground: off by default; applies on the next live run
+  const [includeGround, setIncludeGround] = useState(false)
+  const live = useLiveAssessment(sceneDamage, { includeGround })
   // flood: wait for the ETA request (5 s cap) so the ranking posts once.
   const flood = useFloodEtas()
   const payload = flood.settled ? withFloodEtas(live.payload, flood.etas) : null
@@ -74,6 +77,21 @@ export default function AidPriority() {
           >
             Re-post same payload
           </button>
+        ) : null}
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
+          <input
+            type="checkbox"
+            checked={includeGround}
+            onChange={(event) => setIncludeGround(event.target.checked)}
+            disabled={running}
+            className="accent-emerald-500"
+          />
+          Include ground reports
+        </label>
+        {live.groundError ? (
+          <span className="text-xs text-muted" title={live.groundError}>
+            Ground reports unavailable, ranked without them
+          </span>
         ) : null}
 
         <details className="ml-auto max-w-md text-xs">
@@ -216,7 +234,7 @@ export default function AidPriority() {
       )}
 
       <div className="mt-5">
-        <ScoringExplainer scoring={scoring} />
+        <ScoringExplainer scoring={scoring} rows={ranking} />
       </div>
     </PageContainer>
   )

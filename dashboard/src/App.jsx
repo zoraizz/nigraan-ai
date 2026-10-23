@@ -64,6 +64,11 @@ function ConsoleShell() {
                 </ProtectedRoute>
               }
             />
+            {/* ground: old Ground Reports page now lives in Damage Assessment */}
+            <Route
+              path="/ground-reports"
+              element={<Navigate to="/damage-assessment?tab=ground" replace />}
+            />
             <Route path="*" element={<Navigate to="/overview" replace />} />
           </Routes>
         </main>

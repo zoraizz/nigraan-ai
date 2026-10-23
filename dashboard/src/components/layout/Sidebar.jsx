@@ -112,10 +112,10 @@ function HomeIcon() {
 const NAV_ITEMS = [
   { to: '/overview', label: 'Overview', icon: OverviewIcon },
   { to: '/risk-map', label: 'Risk Map', icon: RiskMapIcon },
-  { to: '/damage-assessment', label: 'Damage Assessment', icon: DamageIcon },
-  { to: '/aid-priority', label: 'Aid Priority', icon: PriorityIcon },
   // flood: River Flood Tracker
   { to: '/flood-tracker', label: 'Flood Tracker', icon: FloodIcon },
+  { to: '/damage-assessment', label: 'Damage Assessment', icon: DamageIcon },
+  { to: '/aid-priority', label: 'Aid Priority', icon: PriorityIcon },
 ]
 
 export default function Sidebar({ isCollapsed }) {

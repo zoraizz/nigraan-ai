@@ -9,3 +9,5 @@ __pycache__/
 venv/
 .env
 predictions_log.csv
+# Officer-reviewed ground photos (local JSON + JPEGs). Ephemeral on Render.
+ground_reports/
