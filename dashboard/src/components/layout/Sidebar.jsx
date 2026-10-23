@@ -91,6 +91,24 @@ function PriorityIcon() {
   )
 }
 
+function HomeIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+      className="h-5 w-5 shrink-0"
+    >
+      <path d="M3 9.5 10 3l7 6.5V17a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9.5z" />
+      <path d="M7 18v-7h6v7" />
+    </svg>
+  )
+}
+
 const NAV_ITEMS = [
   { to: '/overview', label: 'Overview', icon: OverviewIcon },
   { to: '/risk-map', label: 'Risk Map', icon: RiskMapIcon },
@@ -118,6 +136,16 @@ export default function Sidebar({ isCollapsed }) {
 
       {/* Nav list */}
       <nav className="flex-1 space-y-1.5 p-2.5" aria-label="Primary Navigation">
+        {/* Return to landing page */}
+        <a
+          href="#home"
+          title="Return to Landing Page"
+          className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 hover:bg-[#0a2418]/60 hover:text-slate-200 border border-transparent transition-all ${isCollapsed ? 'justify-center px-0' : ''}`}
+        >
+          <HomeIcon />
+          {!isCollapsed && <span className="truncate">Landing Page</span>}
+        </a>
+        <div className="my-1.5 border-t border-[#1b4a33]/60" />
         {NAV_ITEMS.map((item) => (
           <NavLink
             key={item.to}

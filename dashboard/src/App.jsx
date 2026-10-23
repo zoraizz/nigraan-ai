@@ -1,9 +1,8 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import Sidebar from './components/layout/Sidebar.jsx'
 import Header from './components/layout/Header.jsx'
 import ProtectedRoute from './auth/ProtectedRoute.jsx'
-import Landing from './pages/Landing.jsx'
 import Overview from './pages/Overview.jsx'
 import RiskMap from './pages/RiskMap.jsx'
 import DamageAssessment from './pages/DamageAssessment.jsx'
@@ -65,7 +64,7 @@ function ConsoleShell() {
                 </ProtectedRoute>
               }
             />
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/overview" replace />} />
           </Routes>
         </main>
       </div>
@@ -73,16 +72,38 @@ function ConsoleShell() {
   )
 }
 
-// Top level: the public landing page at "/" (no sidebar), everything else
-// inside the console shell.
+// Top level: hash-based routing coordination between the WebGL landing page
+// (rendered directly in index.html) and the React console.
+// When hash starts with #/ the console is active; otherwise React yields to
+// the landing page and returns null so the HTML landing view stays visible.
 export default function App() {
+  const [inConsole, setInConsole] = useState(() =>
+    window.location.hash.startsWith('#/')
+  )
+
+  // Keep state in sync whenever the hash changes (landing <-> console nav).
+  useEffect(() => {
+    function onHash() {
+      const active = window.location.hash.startsWith('#/')
+      setInConsole(active)
+      if (active) {
+        document.body.classList.add('dashboard-active')
+      } else {
+        document.body.classList.remove('dashboard-active')
+      }
+    }
+    onHash()
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+
+  if (!inConsole) return null
+
   return (
     <SceneDamageProvider>
       <Routes>
-        <Route path="/" element={<Landing />} />
         <Route path="/*" element={<ConsoleShell />} />
       </Routes>
     </SceneDamageProvider>
   )
 }
-

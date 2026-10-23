@@ -48,6 +48,12 @@ export default function Header({ toggleSidebar }) {
       </div>
 
       <div className="flex items-center gap-4 text-xs text-slate-400">
+        <a
+          href="#home"
+          className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-semibold text-emerald-400 hover:border-emerald-500/60 hover:bg-emerald-500/20 transition-colors"
+        >
+          ← Landing Page
+        </a>
         <span className="flex items-center gap-1.5 rounded-full border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-[11px] font-mono text-emerald-400">
           <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
           PKT {clock}
