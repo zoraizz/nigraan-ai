@@ -239,6 +239,7 @@ dashboard's Ground Reports page. Truly irrelevant images are still rejected.
 `API_CONTRACT.md`.
 
 Officer review needs the PIN in OFFICER_REVIEW_KEY (demo default 2026, to be removed after the hackathon).
+Officers can also delete a report and its photo permanently; Reject keeps the record instead.
 
 Every upload goes through the existing classifier and OOD guard first, then
 takes one of three routes:

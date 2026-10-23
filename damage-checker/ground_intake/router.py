@@ -42,11 +42,17 @@ reports point at that first id. Rows are ordered urgent-and-unverified,
 then other unverified, then already-reviewed, newest first inside each
 group. GET /ground-summary is rules.district_summary over the store.
 
-Officer access: the four /ground-reports routes need the shared officer PIN
+Officer access: the five /ground-reports routes need the shared officer PIN
 (OFFICER_REVIEW_KEY) in the X-Officer-Key header, or in an officer_key query
 param for the photo, because <img src> cannot send headers. POST /intake and
 GET /ground-summary stay open: anyone may upload, and the summary is
-aggregate counts only. This is a demo-grade shared PIN, not real accounts.
+aggregate counts only. The one exception is reporter_role=officer on
+/intake, which needs the same PIN so a citizen cannot claim to be an
+officer. This is a demo-grade shared PIN, not real accounts.
+
+DELETE /ground-reports/{id} removes the report and its photo for good;
+reject is the way to keep a record that a report was false. Copies of a
+deleted report are re-pointed by the store, so duplicate_count stays right.
 """
 
 from __future__ import annotations
@@ -74,6 +80,7 @@ from ground_intake.schema import (
     GroundReport,
     ImageKind,
     Need,
+    ReporterRole,
     ReportStatus,
     Review,
     ReviewAction,
@@ -161,10 +168,17 @@ def require_officer(
 ) -> None:
     """Pass when the header (or else the query param) equals OFFICER_REVIEW_KEY."""
     supplied = x_officer_key if x_officer_key is not None else officer_key
-    if supplied is None or not hmac.compare_digest(
-        supplied.strip().encode("utf-8"), officer_review_key().encode("utf-8")
-    ):
+    if not officer_key_matches(supplied):
         raise OfficerPinRequired()
+
+
+def officer_key_matches(supplied: object) -> bool:
+    """True when supplied is a string equal to OFFICER_REVIEW_KEY."""
+    if not isinstance(supplied, str):
+        return False
+    return hmac.compare_digest(
+        supplied.strip().encode("utf-8"), officer_review_key().encode("utf-8")
+    )
 
 
 class _GroundRoute(APIRoute):
@@ -570,10 +584,17 @@ def build_router(
         lon: Optional[float] = Query(default=None, ge=-180, le=180),
         reporter_role: Optional[str] = Query(
             default=None,
-            description="field_worker | rescue_team | citizen (unknown -> citizen)",
+            description="citizen | field_worker | officer (unknown -> citizen). "
+                        "officer needs X-Officer-Key.",
         ),
+        x_officer_key: Optional[str] = Header(default=None),
     ):
         """Route an upload: satellite result, ground report, or irrelevant."""
+        # Checked first, so a failed claim never reaches the models.
+        if ((reporter_role or "").strip().lower() == ReporterRole.officer.value
+                and not officer_key_matches(x_officer_key)):
+            return _error(401, OFFICER_PIN_CODE, OFFICER_PIN_MESSAGE)
+
         max_bytes = (_env_int("GROUND_MAX_UPLOAD_BYTES", DEFAULT_MAX_UPLOAD_BYTES)
                      or DEFAULT_MAX_UPLOAD_BYTES)
         contents = await image.read(max_bytes + 1)
@@ -722,6 +743,15 @@ def build_router(
         except KeyError:
             return _not_found()
         return JSONResponse(content=updated.model_dump(mode="json"))
+
+    @router.delete("/ground-reports/{report_id}", dependencies=_OFFICER_ONLY)
+    async def delete_ground_report(report_id: str):
+        """Remove the report and its photo. Copies get a new first report."""
+        try:
+            get_store().delete(report_id)
+        except KeyError:
+            return _not_found()
+        return JSONResponse(content={"deleted": report_id})
 
     @router.get("/ground-summary")
     async def ground_summary(district: Optional[str] = None):

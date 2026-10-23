@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { reviewGroundReport } from '../../api/groundIntake.js'
+import { deleteGroundReport, reviewGroundReport } from '../../api/groundIntake.js'
 import { DISTRICTS } from '../../config/districts.js'
 import { DEPTHS, NEEDS, SCENES, words } from './groundLabels.js'
 
@@ -11,6 +11,21 @@ export default function ReviewActions({ report, refetch, onReviewed }) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+
+  // Delete removes the report and photo for good; reject keeps the record.
+  async function remove() {
+    setPending(true)
+    setError('')
+    setMessage('')
+    try {
+      await deleteGroundReport(report.id)
+      refetch()
+    } catch (err) {
+      setError(err.message || 'Could not delete this report.')
+      setPending(false)
+    }
+  }
 
   function startCorrection() {
     setDraft({ damage_level: report.damage_level, scene_type: report.scene_type, needs: [...(report.needs ?? [])], water: { ...report.water }, people: { ...report.people }, district: report.location?.district ?? '' })
@@ -19,6 +34,7 @@ export default function ReviewActions({ report, refetch, onReviewed }) {
   }
 
   async function review(action) {
+    setConfirmingDelete(false)
     setPending(true)
     setError('')
     setMessage('')
@@ -55,10 +71,14 @@ export default function ReviewActions({ report, refetch, onReviewed }) {
           <label className="text-xs text-muted">Officer name (optional)<input className="field mt-1" value={officer} onChange={(event) => setOfficer(event.target.value)} /></label>
         </div>
         <div className="flex flex-wrap gap-2">
-          {editing ? <><button className="btn btn-primary" type="submit">Save correction</button><button className="btn" type="button" onClick={() => setEditing(false)}>Cancel</button></> : <><button className="btn btn-primary" type="button" onClick={() => review('verify')}>Verify</button><button className="btn" type="button" onClick={startCorrection}>Correct</button><button className="btn text-risk-high-bright" type="button" onClick={() => review('reject')}>Reject</button></>}
+          {editing ? <><button className="btn btn-primary" type="submit">Save correction</button><button className="btn" type="button" onClick={() => setEditing(false)}>Cancel</button></> : <><button className="btn btn-primary" type="button" onClick={() => review('verify')}>Verify</button><button className="btn" type="button" onClick={startCorrection}>Correct</button><button className="btn text-risk-high-bright" type="button" onClick={() => review('reject')}>Reject</button><button className="ml-auto rounded-md px-3 py-1.5 text-sm text-muted hover:text-risk-high-bright" type="button" aria-expanded={confirmingDelete} onClick={() => { setConfirmingDelete(true); setMessage('') }}>Delete</button></>}
         </div>
+        {confirmingDelete && !editing && <div className="rounded-md border border-risk-high p-3" role="alertdialog" aria-label="Confirm delete">
+          <p className="text-sm text-text">Delete this report and its photo permanently? Use Reject instead to keep a record that it was false.</p>
+          <div className="mt-3 flex flex-wrap gap-2"><button className="btn text-risk-high-bright" type="button" onClick={remove}>Delete</button><button className="btn" type="button" onClick={() => setConfirmingDelete(false)}>Keep</button></div>
+        </div>}
       </fieldset>
-      {pending && <p className="mt-2 text-sm text-muted" role="status">Saving review…</p>}
+      {pending && <p className="mt-2 text-sm text-muted" role="status">{confirmingDelete ? 'Deleting report…' : 'Saving review…'}</p>}
       {message && <p className="mt-2 text-sm text-emerald-400" role="status">{message}</p>}
       {error && <p className="alert-error mt-3 p-3 text-sm" role="alert">{error}</p>}
     </form>

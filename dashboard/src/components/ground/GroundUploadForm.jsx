@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { submitGroundPhoto } from '../../api/groundIntake.js'
 import { DISTRICTS } from '../../config/districts.js'
 import DamageResultCard from '../DamageResultCard.jsx'
-import { LEVELS, NOT_DISASTER_MESSAGE, REJECTION_REASONS, SATELLITE_NOTE, words } from './groundLabels.js'
+import { LEVELS, NOT_DISASTER_MESSAGE, PUBLIC_ROLES, REJECTION_REASONS, ROLES, SATELLITE_NOTE, words } from './groundLabels.js'
 
 // Short confirmation for a ground report. Review happens in the officer queue,
 // never here. onViewQueue is only passed in officer mode.
@@ -19,12 +19,15 @@ function ReportReceipt({ report, onViewQueue }) {
   </div>
 }
 
-export default function GroundUploadForm({ refetch, onViewQueue }) {
+// asOfficer: officer mode. No role picker; the upload is sent as officer
+// with the stored PIN.
+export default function GroundUploadForm({ refetch, onViewQueue, asOfficer = false }) {
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState('')
   const [district, setDistrict] = useState('')
   const [village, setVillage] = useState('')
-  const [reporterRole, setReporterRole] = useState('field_worker')
+  const [pickedRole, setReporterRole] = useState(PUBLIC_ROLES[0])
+  const reporterRole = asOfficer ? 'officer' : pickedRole
   const [location, setLocation] = useState(null)
   const [locating, setLocating] = useState(false)
   const [locationError, setLocationError] = useState('')
@@ -73,7 +76,8 @@ export default function GroundUploadForm({ refetch, onViewQueue }) {
         <div className="grid gap-3 sm:grid-cols-3">
           <label className="text-xs text-muted">District<select className="field mt-1" value={district} onChange={(event) => setDistrict(event.target.value)}><option value="">Unknown / select district</option>{DISTRICTS.map(({ name }) => <option key={name}>{name}</option>)}</select></label>
           <label className="text-xs text-muted">Village (optional)<input className="field mt-1" value={village} onChange={(event) => setVillage(event.target.value)} /></label>
-          <label className="text-xs text-muted">Reporter role<select className="field mt-1" value={reporterRole} onChange={(event) => setReporterRole(event.target.value)}><option value="field_worker">Field worker</option><option value="rescue_team">Rescue team</option><option value="citizen">Citizen</option></select></label>
+          {asOfficer ? <p className="self-end pb-2 text-sm text-text">Submitting as Officer</p>
+            : <label className="text-xs text-muted">Reporter role<select className="field mt-1" value={pickedRole} onChange={(event) => setReporterRole(event.target.value)}>{PUBLIC_ROLES.map((role) => <option key={role} value={role}>{ROLES[role]}</option>)}</select></label>}
         </div>
         <div className="flex flex-wrap items-center gap-3"><button className="btn" type="button" disabled={locating} onClick={locate}>{locating ? 'Getting location…' : 'Use my location'}</button>{location && <><span className="data text-xs text-muted">{location.lat.toFixed(5)}, {location.lon.toFixed(5)}</span><button type="button" className="text-xs text-muted underline" onClick={() => setLocation(null)}>Remove location</button></>}</div>
         {locationError && <p className="text-sm text-risk-medium-bright" role="status">{locationError}</p>}

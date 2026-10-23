@@ -18,8 +18,9 @@ const TABS = [
   { key: 'submit', label: 'Submit photo' },
 ]
 
-// Citizen / Field worker | PDMA Officer. Officer opens an inline PIN form;
-// the role only changes once the server accepts the PIN.
+// Citizen / Field worker | Officer. Officer opens an inline PIN form; the
+// role only changes once the server accepts the PIN, but the highlight
+// follows the click. Cancel or a failed PIN moves it back to Citizen.
 function ModeSwitch() {
   const { isOfficer, enterOfficerMode, exitOfficerMode, notice, clearNotice } = useAuth()
   const [pinOpen, setPinOpen] = useState(false)
@@ -37,6 +38,7 @@ function ModeSwitch() {
   function chooseOfficer() {
     if (isOfficer) return
     clearNotice()
+    setError('')
     setPinOpen(true)
   }
 
@@ -47,17 +49,16 @@ function ModeSwitch() {
     setError('')
     const result = await enterOfficerMode(pin)
     setChecking(false)
-    if (result.ok) {
-      setPinOpen(false)
-      setPin('')
-    } else {
-      setError(result.error)
-    }
+    setPinOpen(false)
+    setPin('')
+    // A failed PIN closes the form; the error stays under the toggle.
+    if (!result.ok) setError(result.error)
   }
 
+  const officerChosen = isOfficer || pinOpen
   const options = [
-    { key: 'citizen', label: 'Citizen / Field worker', active: !isOfficer, onClick: chooseCitizen },
-    { key: 'officer', label: 'PDMA Officer', active: isOfficer, onClick: chooseOfficer },
+    { key: 'citizen', label: 'Citizen / Field worker', active: !officerChosen, onClick: chooseCitizen },
+    { key: 'officer', label: 'Officer', active: officerChosen, onClick: chooseOfficer },
   ]
   return <div className="space-y-3">
     <div className="flex flex-wrap items-center gap-3">
@@ -68,10 +69,10 @@ function ModeSwitch() {
       {isOfficer && <><span className="rounded border border-emerald-500 px-2 py-0.5 text-xs font-semibold text-emerald-400">Officer mode</span><button type="button" className="btn" onClick={chooseCitizen}>Exit officer mode</button></>}
     </div>
     {notice && <div className="alert-error p-3 text-sm" role="alert">{notice}</div>}
+    {error && !pinOpen && !isOfficer && <p className="text-sm text-risk-high-bright" role="alert">{error}</p>}
     {pinOpen && !isOfficer && <form onSubmit={submitPin} className="panel max-w-sm p-4"><fieldset disabled={checking} className="space-y-3">
       <label className="block text-xs text-muted">Officer PIN<input type="password" inputMode="numeric" autoComplete="off" autoFocus required className="field mt-1" value={pin} onChange={(event) => { setPin(event.target.value); setError('') }} /></label>
       <p className="text-xs text-muted">{DEMO_PIN_HINT}</p>
-      {error && <p className="text-sm text-risk-high-bright" role="alert">{error}</p>}
       <div className="flex flex-wrap gap-2"><button type="submit" className="btn btn-primary">{checking ? 'Checking…' : 'Enter officer mode'}</button><button type="button" className="btn" onClick={chooseCitizen}>Cancel</button></div>
     </fieldset></form>}
   </div>
@@ -111,7 +112,7 @@ function OfficerWorkspace() {
         {controls}
         {status ?? <DistrictGroundSummary summary={summary} />}
       </>}
-      {tab === 'submit' && <GroundUploadForm refetch={refetch} onViewQueue={() => setTab('queue')} />}
+      {tab === 'submit' && <GroundUploadForm asOfficer refetch={refetch} onViewQueue={() => setTab('queue')} />}
     </div>
   </div>
 }

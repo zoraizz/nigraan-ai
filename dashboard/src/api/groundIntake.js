@@ -1,5 +1,6 @@
 // Ground Photo Intake on the Damage Checker service (port 8001).
-// POST /intake, GET /ground-reports, GET /ground-summary, PATCH .../review.
+// POST /intake, GET /ground-reports, GET /ground-summary, PATCH .../review,
+// DELETE /ground-reports/{id}.
 // Base URL is ENDPOINTS.damageApi. Satellite classify routes are not called here.
 //
 // The /ground-reports routes need the shared officer PIN in X-Officer-Key
@@ -36,7 +37,8 @@ function withQuery(path, params) {
 // Same error shape as client.js's request, plus the officer header.
 // pin defaults to the stored one; verifyOfficerPin passes a candidate PIN
 // with notify: false so a wrong guess does not end a live session.
-async function officerRequest(path, { method = 'GET', payload, pin = officerPin, notify = true } = {}) {
+// form is a FormData body sent as-is (the browser sets its Content-Type).
+async function officerRequest(path, { method = 'GET', payload, form, pin = officerPin, notify = true } = {}) {
   const url = `${ENDPOINTS.damageApi.replace(/\/+$/, '')}${path}`
   const headers = {}
   if (pin) headers['X-Officer-Key'] = pin
@@ -47,7 +49,7 @@ async function officerRequest(path, { method = 'GET', payload, pin = officerPin,
     response = await fetch(url, {
       method,
       headers,
-      body: payload === undefined ? undefined : JSON.stringify(payload),
+      body: form ?? (payload === undefined ? undefined : JSON.stringify(payload)),
     })
   } catch (err) {
     throw new ApiError(`Network error contacting ${url}: ${err.message}`, 0, null)
@@ -75,7 +77,8 @@ async function officerRequest(path, { method = 'GET', payload, pin = officerPin,
 
 // POST /intake — multipart field "image". Location and role are query params.
 // Response is one of route satellite | ground | irrelevant. See API contract.
-// Open to everyone: no officer PIN.
+// Open to everyone, except reporterRole 'officer', which sends the stored
+// officer PIN (the server answers 401 without it).
 export function submitGroundPhoto(file, { district, village, lat, lon, reporterRole } = {}) {
   const path = withQuery('/intake', {
     district,
@@ -86,6 +89,7 @@ export function submitGroundPhoto(file, { district, village, lat, lon, reporterR
   })
   const form = new FormData()
   form.append('image', file)
+  if (reporterRole === 'officer') return officerRequest(path, { method: 'POST', form })
   return postForm(ENDPOINTS.damageApi, path, form)
 }
 
@@ -118,6 +122,12 @@ export function reviewGroundReport(id, body) {
     method: 'PATCH',
     payload: body,
   })
+}
+
+// DELETE /ground-reports/{id} — removes the report and its photo for good.
+// Resolves to { deleted: id }. Reject is the way to keep a record instead.
+export function deleteGroundReport(id) {
+  return officerRequest(`/ground-reports/${encodeURIComponent(id)}`, { method: 'DELETE' })
 }
 
 // GET /ground-summary — { districts: { <name>: { report_count, ... } } }

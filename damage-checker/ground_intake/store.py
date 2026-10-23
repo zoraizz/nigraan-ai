@@ -29,8 +29,13 @@ The in-memory list is guarded by one lock that also covers the file writes.
 get/list return copies, so a caller can edit a report and only the update()
 call persists it.
 
+delete removes a report and then its JPEG (a missing file is fine). Copies
+that pointed at the deleted report are re-pointed in the same index write:
+the oldest remaining copy becomes the group's first report and the rest
+point at it.
+
 ReportStore is the whole surface an Alibaba OSS (or any other) backend needs:
-add, get, list, update, photo_path, count. photo_path returns a local JPEG
+add, get, list, update, delete, photo_path, count. photo_path returns a local JPEG
 path or None; an object-storage implementation can satisfy that by caching
 the object into a temp file. Ids that are not 32 hex characters never become
 a path, so a photo URL cannot climb out of the photos directory.
@@ -63,7 +68,7 @@ class StoreWritesPaused(RuntimeError):
 
 
 class ReportStore(Protocol):
-    """The six operations a ground-report backend has to provide."""
+    """The seven operations a ground-report backend has to provide."""
 
     def add(self, report: GroundReport, photo_jpeg: bytes) -> GroundReport: ...
 
@@ -72,6 +77,8 @@ class ReportStore(Protocol):
     def list(self) -> list[GroundReport]: ...
 
     def update(self, report: GroundReport) -> GroundReport: ...
+
+    def delete(self, report_id: str) -> None: ...
 
     def photo_path(self, report_id: str) -> Optional[Path]: ...
 
@@ -186,6 +193,43 @@ class JsonReportStore:
                         raise
                     return _clone(report)
         raise KeyError(report.id)
+
+    def delete(self, report_id: str) -> None:
+        """Remove the report and its JPEG. Unknown ids raise KeyError.
+
+        Copies of the deleted report are re-pointed at the oldest remaining
+        copy (created_at, then insertion order), which becomes the group's
+        first report. The JPEG is unlinked only after the index write lands.
+        """
+        with self._lock:
+            self._require_writable()
+            if self._find(report_id) is None:
+                raise KeyError(report_id)
+            previous = self._reports
+            kept = [_clone(report) for report in previous if report.id != report_id]
+            copies = [
+                (report.created_at or "", index, report)
+                for index, report in enumerate(kept)
+                if report.duplicate_of == report_id
+            ]
+            if copies:
+                _, _, head = min(copies, key=lambda item: (item[0], item[1]))
+                head.duplicate_of = None
+                for _, _, report in copies:
+                    if report is not head:
+                        report.duplicate_of = head.id
+            self._reports = kept
+            try:
+                self._write_index()
+            except Exception:
+                self._reports = previous
+                raise
+            photo_file = self._photo_file(report_id)
+            if photo_file is not None:
+                try:
+                    photo_file.unlink(missing_ok=True)
+                except OSError:
+                    logger.warning("Could not remove photo for deleted report %s", report_id)
 
     def photo_path(self, report_id: str) -> Optional[Path]:
         """Local JPEG path, or None when the id is unsafe or the file is missing."""

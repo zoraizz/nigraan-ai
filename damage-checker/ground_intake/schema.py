@@ -100,9 +100,16 @@ class ReportStatus(str, Enum):
 
 
 class ReporterRole(str, Enum):
-    field_worker = "field_worker"
-    rescue_team = "rescue_team"
+    """citizen, field_worker, or officer. officer needs the PIN at intake.
+
+    rescue_team is no longer offered anywhere. It stays so older stored
+    reports still load.
+    """
+
     citizen = "citizen"
+    field_worker = "field_worker"
+    officer = "officer"
+    rescue_team = "rescue_team"
 
 
 class ReviewAction(str, Enum):

@@ -446,12 +446,14 @@ damage-checker shape:
 ```
 
 **Officer PIN.** `GET /ground-reports`, `GET /ground-reports/{id}`,
-`GET /ground-reports/{id}/photo` and `PATCH /ground-reports/{id}/review`
-require the header `X-Officer-Key: <OFFICER_REVIEW_KEY>`. The photo route
-also accepts `?officer_key=<OFFICER_REVIEW_KEY>`, because `<img src>` cannot
-send headers. `OFFICER_REVIEW_KEY` defaults to the demo value `2026` when
-unset (to be removed after the hackathon). `POST /intake` and
-`GET /ground-summary` stay open. A missing or wrong key on a protected route:
+`GET /ground-reports/{id}/photo`, `PATCH /ground-reports/{id}/review` and
+`DELETE /ground-reports/{id}` require the header
+`X-Officer-Key: <OFFICER_REVIEW_KEY>`. The photo route also accepts
+`?officer_key=<OFFICER_REVIEW_KEY>`, because `<img src>` cannot send headers.
+`OFFICER_REVIEW_KEY` defaults to the demo value `2026` when unset (to be
+removed after the hackathon). `POST /intake` and `GET /ground-summary` stay
+open, except that `POST /intake` with `reporter_role=officer` needs the same
+header. A missing or wrong key on a protected route:
 
 ```json
 401 { "error": "Officer PIN required or wrong.", "code": "officer_pin_required" }
@@ -489,7 +491,7 @@ from Python rules, never from the model.
     "history": [{ "action": "verify|correct|reject", "officer": null, "note": null, "at": "2026-10-22T10:02:11Z" }],
     "ai_original": { "<the model's first observation: image_kind ... confidence>": "" }
   },
-  "reporter_role": "field_worker|rescue_team|citizen",
+  "reporter_role": "citizen|field_worker|officer",
   "vlm_source": "gemini|qwen",
   "vlm_model": "gemini-3.8-flash"
 }
@@ -503,12 +505,21 @@ from Python rules, never from the model.
   without `include_duplicates`). It is 0 elsewhere.
 - `rising_water_near_people` needs a visible person plus waist-deep or
   deeper, or flowing, water.
+- `reporter_role` is one of three roles: `citizen`, `field_worker`,
+  `officer`. Older stored reports may still read `rescue_team`; it is no
+  longer offered.
 
 ### `POST /intake`
 
 Request: multipart/form-data, field `image`. Query, all optional:
 `district`, `village`, `lat` (-90..90), `lon` (-180..180),
-`reporter_role` (`field_worker|rescue_team|citizen`, default `citizen`).
+`reporter_role` (`citizen|field_worker|officer`, default `citizen`; an
+unknown value becomes `citizen`).
+
+`citizen` and `field_worker` need no PIN. `officer` is accepted only with a
+valid `X-Officer-Key` header, so a citizen cannot claim to be an officer.
+Without it (or with a wrong key) the upload is refused before any model
+runs: 401 `officer_pin_required`.
 
 The upload first goes through the same classifier and OOD guard as
 `/classify-damage`. If the guard does not flag it, `route` is `satellite` and
@@ -666,6 +677,26 @@ Response: the updated report object.
 ```
 
 404 `not_found`. 422 `invalid_action` or `invalid_corrections`.
+
+### `DELETE /ground-reports/{id}`
+
+Requires `X-Officer-Key`. 401 `officer_pin_required` without it.
+
+Removes the report from the store and deletes its stored photo (a photo
+that is already missing is ignored). This cannot be undone. Use `reject`
+instead to keep a record that a report was false: a rejected report stays
+stored with `status: rejected`, a deleted one is gone.
+
+If other reports were copies of the deleted one, the oldest remaining copy
+(by `created_at`) becomes the group's first report (`duplicate_of: null`)
+and the rest point at it, so `duplicate_count` stays right. Deleted reports
+drop out of `/ground-reports` and `/ground-summary`.
+
+```json
+{ "deleted": "3f2a9c0e7b6d4e1f9a8b7c6d5e4f3a2b" }
+```
+
+404 `not_found` for an unknown id.
 
 ### `GET /ground-summary`
 

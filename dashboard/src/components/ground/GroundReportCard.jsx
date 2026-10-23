@@ -1,5 +1,5 @@
 import { groundPhotoUrl } from '../../api/groundIntake.js'
-import { LEVELS, words } from './groundLabels.js'
+import { LEVELS, ROLES, words } from './groundLabels.js'
 
 const STATUS = { unverified: 'AI only, unverified', verified: 'Verified by officer', corrected: 'Corrected', rejected: 'Rejected' }
 
@@ -32,7 +32,7 @@ export default function GroundReportCard({ report, children }) {
           <div className="text-xs leading-relaxed text-muted">
             <p>{[location.district, location.village].filter(Boolean).join(' · ') || (!coordinates ? 'location unknown' : 'District unknown')} · Source: {words(location.source)}</p>
             {coordinates && <a className="text-emerald-400 underline" href={`https://www.openstreetmap.org/?mlat=${location.lat}&mlon=${location.lon}#map=16/${location.lat}/${location.lon}`} target="_blank" rel="noreferrer">{location.lat}, {location.lon} · OpenStreetMap</a>}
-            <p className="mt-2">Confidence: {Number.isFinite(report.confidence) ? `${Math.round(report.confidence * 100)}%` : 'unknown'} · Read by {report.vlm_source || 'unknown'}</p>
+            <p className="mt-2">Reported by {ROLES[report.reporter_role] ?? words(report.reporter_role)} · Confidence: {Number.isFinite(report.confidence) ? `${Math.round(report.confidence * 100)}%` : 'unknown'} · Read by {report.vlm_source || 'unknown'}</p>
           </div>
         </div>
       </div>

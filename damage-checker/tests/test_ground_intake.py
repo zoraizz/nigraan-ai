@@ -636,7 +636,7 @@ def _call_intake(intake, data: bytes, **query):
     from fastapi import UploadFile
 
     params = {"district": None, "village": None, "lat": None, "lon": None,
-              "reporter_role": None}
+              "reporter_role": None, "x_officer_key": None}
     params.update(query)
     response = asyncio.run(intake(
         image=UploadFile(file=io.BytesIO(data), filename="upload.png"), **params))
@@ -660,7 +660,8 @@ class _IntakeBase(unittest.TestCase):
         env.start()
         self.addCleanup(env.stop)
         for name in ("GROUND_MAX_UPLOAD_BYTES", "GROUND_MIN_CONFIDENCE",
-                     "GROUND_DISTRICT_MAX_KM", "GROUND_DUPLICATE_MAX_HAMMING"):
+                     "GROUND_DISTRICT_MAX_KM", "GROUND_DUPLICATE_MAX_HAMMING",
+                     "OFFICER_REVIEW_KEY"):
             os.environ.pop(name, None)
 
     def provider(self, *results):
@@ -723,6 +724,34 @@ class TestIntakeRouting(_IntakeBase):
         self.assertEqual(body["report"]["urgent_reasons"], [])
         self.assertEqual(body["report"]["reporter_role"], "citizen")
         self.assertEqual(body["report"]["location"]["source"], "unknown")
+
+    def test_citizen_and_field_worker_need_no_pin(self):
+        self.provider(_obs(), _obs(), _obs())
+        for role, expected in (("citizen", "citizen"), ("field_worker", "field_worker"),
+                               (None, "citizen")):
+            with self.subTest(role=role):
+                status, body, _ = _call_intake(self.intake, _photo_bytes(), reporter_role=role)
+                self.assertEqual(status, 200)
+                self.assertEqual(body["report"]["reporter_role"], expected)
+
+    def test_officer_role_needs_the_pin(self):
+        fake = self.provider(_obs())
+        denied = {"error": "Officer PIN required or wrong.", "code": "officer_pin_required"}
+        for role in ("officer", " Officer "):
+            for key in (None, "1234"):
+                with self.subTest(role=role, key=key):
+                    status, body, _ = _call_intake(
+                        self.intake, _photo_bytes(), reporter_role=role, x_officer_key=key)
+                    self.assertEqual((status, body), (401, denied))
+        fake.describe.assert_not_called()
+        self.assertEqual(self.store.count(), 0)
+
+        status, body, _ = _call_intake(
+            self.intake, _photo_bytes(), reporter_role="officer", x_officer_key="2026")
+        self.assertEqual(status, 200)
+        self.assertEqual(body["route"], "ground")
+        self.assertEqual(body["report"]["reporter_role"], "officer")
+        self.assertEqual(self.store.get(body["report"]["id"]).reporter_role.value, "officer")
 
     def test_duplicates_point_at_the_group_first_report(self):
         self.provider(_obs(), _obs(), _obs(), _obs())
@@ -1040,6 +1069,7 @@ class TestGroundReportApi(_StoreBase):
         self.get_one = _endpoint(self.router, "/ground-reports/{report_id}", "GET")
         self.photo = _endpoint(self.router, "/ground-reports/{report_id}/photo", "GET")
         self.review_report = _endpoint(self.router, "/ground-reports/{report_id}/review", "PATCH")
+        self.delete_report = _endpoint(self.router, "/ground-reports/{report_id}", "DELETE")
         self.summary = _endpoint(self.router, "/ground-summary", "GET")
 
     def _review(self, report_id: str, action: str, **kwargs):
@@ -1130,6 +1160,63 @@ class TestGroundReportApi(_StoreBase):
         self.assertEqual([row["id"] for row in sukkur_rows], [sukkur.id])
         _, urgent_rows = _json(self.list_reports, urgent=True)
         self.assertEqual([row["id"] for row in urgent_rows], [urgent.id])
+
+    def test_delete_removes_report_photo_and_summary_row(self):
+        keep = self._save(damage_level="partial")
+        gone = self._save("Sukkur", damage_level="destroyed")
+        photo = self.store.photo_path(gone.id)
+        self.assertTrue(photo.is_file())
+        self.assertIn("Sukkur", self._summary())
+
+        status, body = _json(self.delete_report, report_id=gone.id)
+        self.assertEqual((status, body), (200, {"deleted": gone.id}))
+        self.assertIsNone(self.store.get(gone.id))
+        self.assertFalse(photo.exists())
+        self.assertEqual([item.id for item in JsonReportStore().list()], [keep.id])
+        self.assertEqual([row["id"] for row in _json(self.list_reports)[1]], [keep.id])
+        self.assertEqual(_json(self.get_one, report_id=gone.id)[0], 404)
+        self.assertEqual(_json(self.photo, report_id=gone.id)[0], 404)
+        self.assertNotIn("Sukkur", self._summary())
+        self.assertEqual(self._summary()["Dadu"]["report_count"], 1)
+
+        status, body = _json(self.delete_report, report_id=gone.id)
+        self.assertEqual(status, 404)
+        self.assertEqual(body["code"], "not_found")
+        self.assertEqual(_json(self.delete_report, report_id="nope")[0], 404)
+
+    def test_delete_with_missing_photo_still_succeeds(self):
+        report = self._save()
+        self.store.photo_path(report.id).unlink()
+        self.assertEqual(_json(self.delete_report, report_id=report.id),
+                         (200, {"deleted": report.id}))
+        self.assertEqual(self.store.count(), 0)
+
+    def test_delete_first_report_promotes_the_oldest_copy(self):
+        canonical = self._save(created_at="2026-01-01T00:00:00Z", damage_level="destroyed")
+        newer = self._save(created_at="2026-06-02T00:00:00Z", duplicate_of=canonical.id)
+        oldest = self._save(created_at="2026-06-01T00:00:00Z", duplicate_of=canonical.id)
+        newest = self._save(created_at="2026-06-03T00:00:00Z", duplicate_of=canonical.id)
+        other = self._save("Sukkur")
+        self.assertEqual(self._summary()["Dadu"]["report_count"], 1)
+
+        self.assertEqual(_json(self.delete_report, report_id=canonical.id)[0], 200)
+        reloaded = JsonReportStore()
+        self.assertIsNone(reloaded.get(oldest.id).duplicate_of)
+        self.assertEqual(reloaded.get(newer.id).duplicate_of, oldest.id)
+        self.assertEqual(reloaded.get(newest.id).duplicate_of, oldest.id)
+        self.assertIsNone(reloaded.get(other.id).duplicate_of)
+
+        _, folded = _json(self.list_reports)
+        by_id = {row["id"]: row for row in folded}
+        self.assertEqual(set(by_id), {oldest.id, other.id})
+        self.assertEqual(by_id[oldest.id]["duplicate_count"], 2)
+        self.assertEqual(self._summary()["Dadu"]["report_count"], 1)
+
+        # Deleting a copy leaves the group's first report alone.
+        self.assertEqual(_json(self.delete_report, report_id=newest.id)[0], 200)
+        _, folded = _json(self.list_reports)
+        by_id = {row["id"]: row for row in folded}
+        self.assertEqual(by_id[oldest.id]["duplicate_count"], 1)
 
     def test_photo_is_the_stored_jpeg(self):
         import asyncio
@@ -1359,6 +1446,36 @@ class TestOfficerPin(_StoreBase):
             ("GET", f"/ground-reports/{rid}/photo", None),
             ("PATCH", f"/ground-reports/{rid}/review", {"action": "verify"}),
         ]
+
+    def test_delete_needs_the_pin(self):
+        path = f"/ground-reports/{self.report.id}"
+        for headers in ({}, {"X-Officer-Key": "1234"}):
+            with self.subTest(headers=headers):
+                response = self.client.delete(path, headers=headers)
+                self.assertEqual(response.status_code, 401)
+                self.assertEqual(response.json(), self.denied)
+        self.assertIsNotNone(self.store.get(self.report.id))
+        response = self.client.delete(path, headers={"X-Officer-Key": "2026"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"deleted": self.report.id})
+        self.assertIsNone(self.store.get(self.report.id))
+        response = self.client.delete(path, headers={"X-Officer-Key": "2026"})
+        self.assertEqual(response.status_code, 404)
+
+    def test_officer_role_on_intake_needs_the_header(self):
+        files = {"image": ("upload.png", _photo_bytes(), "image/png")}
+        params = {"reporter_role": "officer"}
+        response = self.client.post("/intake", files=files, params=params)
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json(), self.denied)
+        response = self.client.post("/intake", files=files, params=params,
+                                    headers={"X-Officer-Key": "2026"})
+        self.assertEqual(response.status_code, 200)
+        for role in ("citizen", "field_worker"):
+            with self.subTest(role=role):
+                response = self.client.post("/intake", files=files,
+                                            params={"reporter_role": role})
+                self.assertEqual(response.status_code, 200)
 
     def test_demo_default_is_2026(self):
         self.assertEqual(self.router_module.DEMO_OFFICER_REVIEW_KEY, "2026")

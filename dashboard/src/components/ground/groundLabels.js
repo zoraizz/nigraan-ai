@@ -2,6 +2,10 @@ export const SCENES = ['flooded_street', 'flooded_farmland', 'collapsed_house', 
 export const NEEDS = ['rescue', 'shelter', 'medical', 'food_water', 'road_clearance']
 export const DEPTHS = ['none', 'ankle', 'knee', 'waist', 'chest', 'above_head']
 export const words = (value) => String(value ?? 'unknown').replaceAll('_', ' ')
+// rescue_team is only here so older stored reports still get a label.
+export const ROLES = { citizen: 'Citizen', field_worker: 'Field worker', officer: 'Officer', rescue_team: 'Rescue team' }
+// Roles a citizen-mode upload may pick. officer is set by officer mode only.
+export const PUBLIC_ROLES = ['citizen', 'field_worker']
 export const LEVELS = {
   none: 'text-risk-low-bright border-risk-low',
   partial: 'text-risk-medium-bright border-risk-medium',
