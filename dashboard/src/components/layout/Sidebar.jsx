@@ -139,11 +139,11 @@ export default function Sidebar({ isCollapsed }) {
         {/* Return to landing page */}
         <a
           href="#home"
-          title="Return to Landing Page"
+          title="Return to Home Page"
           className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-slate-400 hover:bg-[#0a2418]/60 hover:text-slate-200 border border-transparent transition-all ${isCollapsed ? 'justify-center px-0' : ''}`}
         >
           <HomeIcon />
-          {!isCollapsed && <span className="truncate">Landing Page</span>}
+          {!isCollapsed && <span className="truncate">Home Page</span>}
         </a>
         <div className="my-1.5 border-t border-[#1b4a33]/60" />
         {NAV_ITEMS.map((item) => (
