@@ -7,3 +7,12 @@ export const LEVELS = {
   partial: 'text-risk-medium-bright border-risk-medium',
   destroyed: 'text-risk-high-bright border-risk-high',
 }
+// Irrelevant route: shown instead of the backend's satellite OOD message.
+export const NOT_DISASTER_MESSAGE = "This doesn't look like a disaster photo. Please send a photo of flood or damage taken on the ground."
+export const REJECTION_REASONS = {
+  vlm_irrelevant: 'No disaster or damage was found in the photo.',
+  vlm_aerial: 'This looks like an aerial or satellite image but did not match our satellite model.',
+  vlm_low_confidence: 'The photo was too unclear to read with confidence.',
+  vlm_unavailable: 'The photo reader is unavailable right now, please try again in a minute.',
+}
+export const SATELLITE_NOTE = 'Recognised as a satellite image, so it was checked by the satellite damage model.'

@@ -41,19 +41,27 @@ include_duplicates is true, and sets duplicate_count to how many stored
 reports point at that first id. Rows are ordered urgent-and-unverified,
 then other unverified, then already-reviewed, newest first inside each
 group. GET /ground-summary is rules.district_summary over the store.
+
+Officer access: the four /ground-reports routes need the shared officer PIN
+(OFFICER_REVIEW_KEY) in the X-Officer-Key header, or in an officer_key query
+param for the photo, because <img src> cannot send headers. POST /intake and
+GET /ground-summary stay open: anyone may upload, and the summary is
+aggregate counts only. This is a demo-grade shared PIN, not real accounts.
 """
 
 from __future__ import annotations
 
 import copy
+import hmac
 import io
 import os
 import tempfile
 from datetime import datetime, timezone
 from typing import Callable, Optional
 
-from fastapi import APIRouter, File, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Header, Query, UploadFile
 from fastapi.concurrency import run_in_threadpool
+from fastapi.routing import APIRoute
 from fastapi.responses import FileResponse, JSONResponse
 from PIL import Image, ImageOps
 from pydantic import BaseModel, ValidationError
@@ -92,6 +100,11 @@ DEFAULT_DUPLICATE_MAX_HAMMING = 8
 # when their districts differ (or one has none).
 DUPLICATE_RADIUS_KM = 1.0
 
+# DEMO ONLY: remove this default after the hackathon
+DEMO_OFFICER_REVIEW_KEY = "2026"
+OFFICER_PIN_MESSAGE = "Officer PIN required or wrong."
+OFFICER_PIN_CODE = "officer_pin_required"
+
 # Copied verbatim from /classify-damage. A test asserts they stay equal.
 INVALID_IMAGE_MESSAGE = "Invalid image file. Expected a valid image format."
 OOD_MESSAGE = (
@@ -122,6 +135,57 @@ def _env_float(name: str, default: float) -> float:
     except ValueError:
         return default
     return value if value >= 0 else default
+
+
+# ---------------------------------------------------------------------------
+# Officer PIN
+# ---------------------------------------------------------------------------
+class OfficerPinRequired(Exception):
+    """Raised by require_officer; _GroundRoute turns it into the 401 body."""
+
+
+def officer_review_key() -> str:
+    """OFFICER_REVIEW_KEY, or the demo default when unset or blank."""
+    raw = os.environ.get("OFFICER_REVIEW_KEY")
+    if raw is None or not raw.strip():
+        return DEMO_OFFICER_REVIEW_KEY
+    return raw.strip()
+
+
+def require_officer(
+    x_officer_key: Optional[str] = Header(default=None),
+    officer_key: Optional[str] = Query(
+        default=None,
+        description="Officer PIN for <img src>, which cannot send headers",
+    ),
+) -> None:
+    """Pass when the header (or else the query param) equals OFFICER_REVIEW_KEY."""
+    supplied = x_officer_key if x_officer_key is not None else officer_key
+    if supplied is None or not hmac.compare_digest(
+        supplied.strip().encode("utf-8"), officer_review_key().encode("utf-8")
+    ):
+        raise OfficerPinRequired()
+
+
+class _GroundRoute(APIRoute):
+    """Answers OfficerPinRequired with the usual {"error", "code"} body.
+
+    Handled per route so main.py needs no app-level exception handler.
+    """
+
+    def get_route_handler(self):
+        handler = super().get_route_handler()
+
+        async def guarded(request):
+            try:
+                return await handler(request)
+            except OfficerPinRequired:
+                return _error(401, OFFICER_PIN_CODE, OFFICER_PIN_MESSAGE)
+
+        return guarded
+
+
+_OFFICER_ONLY = [Depends(require_officer)]
 
 
 # ---------------------------------------------------------------------------
@@ -492,7 +556,7 @@ def build_router(
     model_loaded: Callable[[], bool] = lambda: True,
 ) -> APIRouter:
     """classify_pil is main._classify_pil. model_loaded drives X-Model-Warning."""
-    router = APIRouter()
+    router = APIRouter(route_class=_GroundRoute)
 
     def _headers() -> dict:
         return {} if model_loaded() else {"X-Model-Warning": "untrained-weights"}
@@ -598,7 +662,7 @@ def build_router(
             headers=_headers(),
         )
 
-    @router.get("/ground-reports")
+    @router.get("/ground-reports", dependencies=_OFFICER_ONLY)
     async def list_ground_reports(
         district: Optional[str] = None,
         status: Optional[str] = None,
@@ -626,7 +690,7 @@ def build_router(
         )
         return JSONResponse(content=payload)
 
-    @router.get("/ground-reports/{report_id}")
+    @router.get("/ground-reports/{report_id}", dependencies=_OFFICER_ONLY)
     async def get_ground_report(report_id: str):
         """One report, including duplicates and rejected rows."""
         report = get_store().get(report_id)
@@ -634,7 +698,7 @@ def build_router(
             return _not_found()
         return JSONResponse(content=report.model_dump(mode="json"))
 
-    @router.get("/ground-reports/{report_id}/photo")
+    @router.get("/ground-reports/{report_id}/photo", dependencies=_OFFICER_ONLY)
     async def get_ground_photo(report_id: str):
         """The stored JPEG, already stripped of EXIF at intake."""
         path = get_store().photo_path(report_id)
@@ -642,7 +706,7 @@ def build_router(
             return _not_found()
         return FileResponse(path, media_type="image/jpeg")
 
-    @router.patch("/ground-reports/{report_id}/review")
+    @router.patch("/ground-reports/{report_id}/review", dependencies=_OFFICER_ONLY)
     async def review_ground_report(report_id: str, body: ReviewRequest):
         """verify, correct, or reject. correct recomputes urgent."""
         store = get_store()

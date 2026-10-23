@@ -2,11 +2,24 @@ import { useEffect, useState } from 'react'
 import { submitGroundPhoto } from '../../api/groundIntake.js'
 import { DISTRICTS } from '../../config/districts.js'
 import DamageResultCard from '../DamageResultCard.jsx'
-import GroundReportCard from './GroundReportCard.jsx'
-import ReviewActions from './ReviewActions.jsx'
-import { words } from './groundLabels.js'
+import { LEVELS, NOT_DISASTER_MESSAGE, REJECTION_REASONS, SATELLITE_NOTE, words } from './groundLabels.js'
 
-export default function GroundUploadForm({ refetch }) {
+// Short confirmation for a ground report. Review happens in the officer queue,
+// never here. onViewQueue is only passed in officer mode.
+function ReportReceipt({ report, onViewQueue }) {
+  return <div className="panel border-l-2 border-emerald-500 p-5" role="status">
+    <p className="font-heading font-semibold text-text">Report received</p>
+    <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+      <span className="capitalize text-text">{words(report.scene_type)}</span>
+      <span className={`rounded border px-2 py-0.5 text-xs capitalize ${LEVELS[report.damage_level] ?? 'text-muted'}`}>{words(report.damage_level)}</span>
+      {report.urgent && <span className="rounded border border-red-500 bg-red-950/30 px-2 py-0.5 text-xs font-bold text-red-300">URGENT</span>}
+    </div>
+    <p className="mt-3 text-sm text-muted">An officer will review it.</p>
+    {onViewQueue && <button type="button" className="btn mt-3" onClick={onViewQueue}>View in queue</button>}
+  </div>
+}
+
+export default function GroundUploadForm({ refetch, onViewQueue }) {
   const [file, setFile] = useState(null)
   const [preview, setPreview] = useState('')
   const [district, setDistrict] = useState('')
@@ -46,7 +59,7 @@ export default function GroundUploadForm({ refetch }) {
       const response = await submitGroundPhoto(file, { district, village: village.trim(), reporterRole, ...location })
       if (!['satellite', 'ground', 'irrelevant'].includes(response?.route)) throw new Error('Unexpected response. Please try again.')
       setResult(response)
-      if (response.route === 'ground') refetch()
+      if (response.route === 'ground') refetch?.()
     } catch (err) { setError(err.message || 'Could not read the photo.') }
     finally { setPending(false) }
   }
@@ -69,8 +82,8 @@ export default function GroundUploadForm({ refetch }) {
       {pending && <div className="mt-5 text-center" role="status"><div className="spinner mx-auto mb-3" /><p className="text-sm text-text">Reading the photo with Gemini</p><p className="mt-1 text-xs text-muted">A cold start can take up to a minute.</p></div>}
       {error && <div className="alert-error mt-4 p-4 text-sm" role="alert">{error}</div>}
     </section>
-    {result?.route === 'satellite' && <DamageResultCard result={result.satellite} />}
-    {result?.route === 'ground' && <GroundReportCard report={result.report}><ReviewActions key={result.report.id} report={result.report} refetch={refetch} onReviewed={(report) => setResult({ route: 'ground', report })} /></GroundReportCard>}
-    {result?.route === 'irrelevant' && <div className="panel border-l-2 border-risk-medium p-5" role="status"><span className="warn-chip">Photo not accepted</span><p className="mt-3 text-sm text-muted">{result.message}</p><p className="mt-1 text-xs text-muted">Reason: {words(result.reason)}</p></div>}
+    {result?.route === 'satellite' && <div className="space-y-2"><p className="text-sm text-muted" role="status">{SATELLITE_NOTE}</p><DamageResultCard result={result.satellite} /></div>}
+    {result?.route === 'ground' && <ReportReceipt report={result.report} onViewQueue={onViewQueue} />}
+    {result?.route === 'irrelevant' && <div className="panel border-l-2 border-risk-medium p-5" role="status"><span className="warn-chip">Photo not accepted</span><p className="mt-3 text-sm text-text">{NOT_DISASTER_MESSAGE}</p><p className="mt-1 text-sm text-muted">{REJECTION_REASONS[result.reason] ?? REJECTION_REASONS.vlm_irrelevant}</p></div>}
   </div>
 }

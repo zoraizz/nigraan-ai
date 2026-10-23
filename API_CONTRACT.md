@@ -445,6 +445,18 @@ damage-checker shape:
 { "error": "<human text>", "code": "<machine_code>" }
 ```
 
+**Officer PIN.** `GET /ground-reports`, `GET /ground-reports/{id}`,
+`GET /ground-reports/{id}/photo` and `PATCH /ground-reports/{id}/review`
+require the header `X-Officer-Key: <OFFICER_REVIEW_KEY>`. The photo route
+also accepts `?officer_key=<OFFICER_REVIEW_KEY>`, because `<img src>` cannot
+send headers. `OFFICER_REVIEW_KEY` defaults to the demo value `2026` when
+unset (to be removed after the hackathon). `POST /intake` and
+`GET /ground-summary` stay open. A missing or wrong key on a protected route:
+
+```json
+401 { "error": "Officer PIN required or wrong.", "code": "officer_pin_required" }
+```
+
 ### Report object
 
 The vision model fills the closed enums (`image_kind` through `confidence`).
@@ -574,6 +586,8 @@ Irrelevant (same `message` and `ood` fields as a flagged `/classify-damage`):
 
 ### `GET /ground-reports`
 
+Requires `X-Officer-Key`. 401 `officer_pin_required` without it.
+
 Query, all optional: `district`, `status`
 (`unverified|verified|corrected|rejected`), `urgent` (`true|false`),
 `include_duplicates` (default `false`).
@@ -596,6 +610,8 @@ carries `duplicate_count`.
 
 ### `GET /ground-reports/{id}`
 
+Requires `X-Officer-Key`. 401 `officer_pin_required` without it.
+
 One report object, duplicates and rejected reports included. 404:
 
 ```json
@@ -604,9 +620,14 @@ One report object, duplicates and rejected reports included. 404:
 
 ### `GET /ground-reports/{id}/photo`
 
+Requires `X-Officer-Key`, or `?officer_key=` for `<img src>`. 401
+`officer_pin_required` without either.
+
 The stored JPEG (`Content-Type: image/jpeg`). 404 `not_found` as above.
 
 ### `PATCH /ground-reports/{id}/review`
+
+Requires `X-Officer-Key`. 401 `officer_pin_required` without it.
 
 Request: JSON body
 

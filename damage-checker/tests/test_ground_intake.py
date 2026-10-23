@@ -1328,5 +1328,95 @@ class TestGroundReportApi(_StoreBase):
             })
 
 
+class TestOfficerPin(_StoreBase):
+    """Over HTTP, so the X-Officer-Key header and officer_key query really run.
+
+    The tests above call the endpoint functions directly, which skips route
+    dependencies; these cover the PIN guard itself.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from fastapi import FastAPI
+        from fastapi.testclient import TestClient
+
+        from ground_intake import vlm
+        os.environ.pop("OFFICER_REVIEW_KEY", None)
+        vlm.set_providers_for_tests([])
+        self.addCleanup(vlm.set_providers_for_tests, None)
+        app = FastAPI()
+        app.include_router(self.router_module.build_router(_forced_ood_classify))
+        self.client = TestClient(app)
+        self.report = self._save()
+        self.denied = {"error": "Officer PIN required or wrong.",
+                       "code": "officer_pin_required"}
+
+    def _protected(self):
+        rid = self.report.id
+        return [
+            ("GET", "/ground-reports", None),
+            ("GET", f"/ground-reports/{rid}", None),
+            ("GET", f"/ground-reports/{rid}/photo", None),
+            ("PATCH", f"/ground-reports/{rid}/review", {"action": "verify"}),
+        ]
+
+    def test_demo_default_is_2026(self):
+        self.assertEqual(self.router_module.DEMO_OFFICER_REVIEW_KEY, "2026")
+        self.assertEqual(self.router_module.officer_review_key(), "2026")
+
+    def test_missing_key_is_401(self):
+        for method, path, body in self._protected():
+            with self.subTest(method=method, path=path):
+                response = self.client.request(method, path, json=body)
+                self.assertEqual(response.status_code, 401)
+                self.assertEqual(response.json(), self.denied)
+        self.assertEqual(self.store.get(self.report.id).status, ReportStatus.unverified)
+
+    def test_wrong_key_is_401(self):
+        for method, path, body in self._protected():
+            with self.subTest(method=method, path=path):
+                response = self.client.request(
+                    method, path, json=body, headers={"X-Officer-Key": "1234"})
+                self.assertEqual(response.status_code, 401)
+                self.assertEqual(response.json(), self.denied)
+        response = self.client.get(f"/ground-reports/{self.report.id}/photo",
+                                   params={"officer_key": "1234"})
+        self.assertEqual(response.status_code, 401)
+
+    def test_header_key_is_200(self):
+        headers = {"X-Officer-Key": "2026"}
+        for method, path, body in self._protected():
+            with self.subTest(method=method, path=path):
+                response = self.client.request(method, path, json=body, headers=headers)
+                self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.store.get(self.report.id).status, ReportStatus.verified)
+        rows = self.client.get("/ground-reports", headers=headers).json()
+        self.assertEqual([row["id"] for row in rows], [self.report.id])
+
+    def test_photo_with_officer_key_query_is_200(self):
+        response = self.client.get(f"/ground-reports/{self.report.id}/photo",
+                                   params={"officer_key": "2026"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "image/jpeg")
+        self.assertEqual(response.content, _tiny_jpeg())
+
+    def test_env_key_replaces_the_demo_default(self):
+        os.environ["OFFICER_REVIEW_KEY"] = " river-77 "
+        path = "/ground-reports"
+        self.assertEqual(
+            self.client.get(path, headers={"X-Officer-Key": "2026"}).status_code, 401)
+        self.assertEqual(
+            self.client.get(path, headers={"X-Officer-Key": "river-77"}).status_code, 200)
+
+    def test_intake_and_summary_stay_open(self):
+        response = self.client.post(
+            "/intake", files={"image": ("upload.png", _photo_bytes(), "image/png")})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["route"], "irrelevant")
+        response = self.client.get("/ground-summary")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("Dadu", response.json()["districts"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
