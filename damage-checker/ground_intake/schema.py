@@ -100,10 +100,10 @@ class ReportStatus(str, Enum):
 
 
 class ReporterRole(str, Enum):
-    """citizen, field_worker, or officer. officer needs the PIN at intake.
+    """field_worker or officer. officer needs the PIN at intake.
 
-    rescue_team is no longer offered anywhere. It stays so older stored
-    reports still load.
+    citizen and rescue_team are no longer offered anywhere. They stay so
+    older stored reports still load. Missing or unknown -> field_worker.
     """
 
     citizen = "citizen"
@@ -206,7 +206,7 @@ ReportStatusField = Annotated[
 ]
 ReporterRoleField = Annotated[
     ReporterRole,
-    BeforeValidator(_enum_coercer(ReporterRole, ReporterRole.citizen)),
+    BeforeValidator(_enum_coercer(ReporterRole, ReporterRole.field_worker)),
 ]
 
 
@@ -296,6 +296,6 @@ class GroundReport(VlmObservation):
     duplicate_count: int = Field(default=0, ge=0)
     status: ReportStatusField = ReportStatus.unverified
     review: Review = Field(default_factory=Review)
-    reporter_role: ReporterRoleField = ReporterRole.citizen
+    reporter_role: ReporterRoleField = ReporterRole.field_worker
     vlm_source: str = ""
     vlm_model: str = ""

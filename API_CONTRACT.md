@@ -491,7 +491,7 @@ from Python rules, never from the model.
     "history": [{ "action": "verify|correct|reject", "officer": null, "note": null, "at": "2026-10-22T10:02:11Z" }],
     "ai_original": { "<the model's first observation: image_kind ... confidence>": "" }
   },
-  "reporter_role": "citizen|field_worker|officer",
+  "reporter_role": "field_worker|officer",
   "vlm_source": "gemini|qwen",
   "vlm_model": "gemini-3.8-flash"
 }
@@ -505,19 +505,22 @@ from Python rules, never from the model.
   without `include_duplicates`). It is 0 elsewhere.
 - `rising_water_near_people` needs a visible person plus waist-deep or
   deeper, or flowing, water.
-- `reporter_role` is one of three roles: `citizen`, `field_worker`,
-  `officer`. Older stored reports may still read `rescue_team`; it is no
-  longer offered.
+- `reporter_role` is `field_worker` or `officer`. Older stored reports may
+  still read `citizen` or `rescue_team`; both are accepted for old data
+  only and no longer offered. On the dashboard, uploads come from
+  Damage Assessment > Ground photos (not a separate page): Field worker
+  mode sends `field_worker`, Officer mode sends `officer` with the PIN.
 
 ### `POST /intake`
 
 Request: multipart/form-data, field `image`. Query, all optional:
 `district`, `village`, `lat` (-90..90), `lon` (-180..180),
-`reporter_role` (`citizen|field_worker|officer`, default `citizen`; an
-unknown value becomes `citizen`).
+`reporter_role` (`field_worker|officer`, default `field_worker`; a missing
+or unknown value becomes `field_worker`; `citizen` and `rescue_team` are
+still accepted for old data only).
 
-`citizen` and `field_worker` need no PIN. `officer` is accepted only with a
-valid `X-Officer-Key` header, so a citizen cannot claim to be an officer.
+`field_worker` needs no PIN. `officer` is accepted only with a valid
+`X-Officer-Key` header, so a field worker cannot claim to be an officer.
 Without it (or with a wrong key) the upload is refused before any model
 runs: 401 `officer_pin_required`.
 

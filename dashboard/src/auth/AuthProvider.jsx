@@ -2,7 +2,7 @@ import { createContext, useCallback, useEffect, useMemo, useState } from 'react'
 import { onOfficerUnauthorized, setOfficerPin, verifyOfficerPin } from '../api/groundIntake.js'
 
 // Placeholder auth. Everyone stays isAuthenticated with no user, so other
-// pages are unchanged. The only role switch is the Ground Reports officer
+// pages are unchanged. The only role switch is the Ground photos officer
 // mode: a shared demo PIN (OFFICER_REVIEW_KEY on the Damage Checker), not
 // real accounts. Real auth (e.g., NDMA/PDMA accounts) will be wired in here
 // later; consumers already read this context via useAuth().
@@ -86,7 +86,7 @@ export function AuthProvider({ children }) {
   }, [])
 
   // A protected call answered 401 with the current PIN (e.g. the server's
-  // PIN changed): drop back to citizen mode and say why.
+  // PIN changed): drop back to field worker mode and say why.
   useEffect(() => onOfficerUnauthorized(() => {
     exitOfficerMode()
     setNotice(SESSION_ENDED_MESSAGE)

@@ -233,10 +233,16 @@ splits in `data/splits_v3.json`, full metrics in `v3_training_report.md`).
 The satellite classifier rejects phone photos as "irrelevant". Ground Photo
 Intake (`POST /intake` on damage-checker, code in
 `damage-checker/ground_intake/`) turns ground-level disaster photos into
-structured reports that an officer verifies, corrects or rejects on the
-dashboard's Ground Reports page. Truly irrelevant images are still rejected.
+structured reports that an officer verifies, corrects or rejects in the
+dashboard under Damage Assessment > Ground photos (not a separate page;
+`#/damage-assessment?tab=ground` opens it directly). Truly irrelevant images
+are still rejected.
 `/classify-damage` and `/classify-scene` are unchanged. Endpoints are in
 `API_CONTRACT.md`.
+
+Two roles: **Field worker** (uploads, no PIN, sent as `reporter_role=field_worker`, the
+default) and **Officer** (upload and review, sent as `officer`). `citizen` and `rescue_team` are
+accepted for old stored reports only.
 
 Officer review needs the PIN in OFFICER_REVIEW_KEY (demo default 2026, to be removed after the hackathon).
 Officers can also delete a report and its photo permanently; Reject keeps the record instead.

@@ -72,25 +72,6 @@ function FloodIcon() {
   )
 }
 
-function GroundReportsIcon() {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-      className="h-5 w-5 shrink-0"
-    >
-      <path d="M7.25 5.25 8.15 3.6h3.7l.9 1.65" />
-      <rect x="3" y="5.25" width="14" height="10.25" rx="1.6" />
-      <circle cx="10" cy="10.35" r="2.55" />
-    </svg>
-  )
-}
-
 function PriorityIcon() {
   return (
     <svg
@@ -116,8 +97,6 @@ const NAV_ITEMS = [
   // flood: River Flood Tracker
   { to: '/flood-tracker', label: 'Flood Tracker', icon: FloodIcon },
   { to: '/damage-assessment', label: 'Damage Assessment', icon: DamageIcon },
-  // ground: Ground Reports
-  { to: '/ground-reports', label: 'Ground Reports', icon: GroundReportsIcon },
   { to: '/aid-priority', label: 'Aid Priority', icon: PriorityIcon },
 ]
 

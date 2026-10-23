@@ -717,18 +717,25 @@ class TestIntakeRouting(_IntakeBase):
         self.assertEqual(stored.read_bytes(), jpeg)
         self.assertEqual(self.store.get(report["id"]).id, report["id"])
 
-    def test_not_urgent_and_unknown_role_defaults_to_citizen(self):
+    def test_not_urgent_and_unknown_role_defaults_to_field_worker(self):
         self.provider(_obs())
         _, body, _ = _call_intake(self.intake, _photo_bytes(), reporter_role="mayor")
         self.assertFalse(body["report"]["urgent"])
         self.assertEqual(body["report"]["urgent_reasons"], [])
-        self.assertEqual(body["report"]["reporter_role"], "citizen")
+        self.assertEqual(body["report"]["reporter_role"], "field_worker")
         self.assertEqual(body["report"]["location"]["source"], "unknown")
 
-    def test_citizen_and_field_worker_need_no_pin(self):
+    def test_missing_role_is_stored_as_field_worker(self):
+        self.provider(_obs())
+        status, body, _ = _call_intake(self.intake, _photo_bytes())
+        self.assertEqual(status, 200)
+        self.assertEqual(body["report"]["reporter_role"], "field_worker")
+        self.assertEqual(self.store.get(body["report"]["id"]).reporter_role.value, "field_worker")
+
+    def test_field_worker_and_old_citizen_role_need_no_pin(self):
         self.provider(_obs(), _obs(), _obs())
-        for role, expected in (("citizen", "citizen"), ("field_worker", "field_worker"),
-                               (None, "citizen")):
+        for role, expected in (("field_worker", "field_worker"), ("citizen", "citizen"),
+                               (None, "field_worker")):
             with self.subTest(role=role):
                 status, body, _ = _call_intake(self.intake, _photo_bytes(), reporter_role=role)
                 self.assertEqual(status, 200)

@@ -1,13 +1,12 @@
 import { useState } from 'react'
-import PageContainer from '../components/layout/PageContainer.jsx'
-import GroundUploadForm from '../components/ground/GroundUploadForm.jsx'
-import GroundReportCard from '../components/ground/GroundReportCard.jsx'
-import ReviewActions from '../components/ground/ReviewActions.jsx'
-import UrgentBanner from '../components/ground/UrgentBanner.jsx'
-import DistrictGroundSummary from '../components/ground/DistrictGroundSummary.jsx'
-import { useAuth } from '../auth/useAuth.js'
-import { DISTRICTS } from '../config/districts.js'
-import { useGroundReports } from '../hooks/useGroundReports.js'
+import GroundUploadForm from './GroundUploadForm.jsx'
+import GroundReportCard from './GroundReportCard.jsx'
+import ReviewActions from './ReviewActions.jsx'
+import UrgentBanner from './UrgentBanner.jsx'
+import DistrictGroundSummary from './DistrictGroundSummary.jsx'
+import { useAuth } from '../../auth/useAuth.js'
+import { DISTRICTS } from '../../config/districts.js'
+import { useGroundReports } from '../../hooks/useGroundReports.js'
 
 // DEMO ONLY: remove the PIN hint after the hackathon
 const DEMO_PIN_HINT = 'Demo PIN for evaluators: 2026'
@@ -18,9 +17,9 @@ const TABS = [
   { key: 'submit', label: 'Submit photo' },
 ]
 
-// Citizen / Field worker | Officer. Officer opens an inline PIN form; the
-// role only changes once the server accepts the PIN, but the highlight
-// follows the click. Cancel or a failed PIN moves it back to Citizen.
+// Field worker | Officer. Officer opens an inline PIN form; the role only
+// changes once the server accepts the PIN, but the highlight follows the
+// click. Cancel, a failed PIN or Exit moves it back to Field worker.
 function ModeSwitch() {
   const { isOfficer, enterOfficerMode, exitOfficerMode, notice, clearNotice } = useAuth()
   const [pinOpen, setPinOpen] = useState(false)
@@ -28,7 +27,7 @@ function ModeSwitch() {
   const [checking, setChecking] = useState(false)
   const [error, setError] = useState('')
 
-  function chooseCitizen() {
+  function chooseFieldWorker() {
     setPinOpen(false)
     setPin('')
     setError('')
@@ -57,28 +56,28 @@ function ModeSwitch() {
 
   const officerChosen = isOfficer || pinOpen
   const options = [
-    { key: 'citizen', label: 'Citizen / Field worker', active: !officerChosen, onClick: chooseCitizen },
+    { key: 'field_worker', label: 'Field worker', active: !officerChosen, onClick: chooseFieldWorker },
     { key: 'officer', label: 'Officer', active: officerChosen, onClick: chooseOfficer },
   ]
   return <div className="space-y-3">
     <div className="flex flex-wrap items-center gap-3">
-      <div role="group" aria-label="Who is using this page" className="inline-flex w-fit flex-wrap rounded-lg border border-line bg-surface-2 p-0.5 text-sm">
+      <div role="group" aria-label="Who is submitting" className="inline-flex w-fit flex-wrap rounded-lg border border-line bg-surface-2 p-0.5 text-sm">
         {options.map((item) => <button key={item.key} type="button" aria-pressed={item.active} onClick={item.onClick}
           className={`rounded-md px-3 py-1.5 font-semibold ${item.active ? 'bg-emerald-600 text-white' : 'text-muted hover:text-text'}`}>{item.label}</button>)}
       </div>
-      {isOfficer && <><span className="rounded border border-emerald-500 px-2 py-0.5 text-xs font-semibold text-emerald-400">Officer mode</span><button type="button" className="btn" onClick={chooseCitizen}>Exit officer mode</button></>}
+      {isOfficer && <><span className="rounded border border-emerald-500 px-2 py-0.5 text-xs font-semibold text-emerald-400">Officer mode</span><button type="button" className="btn" onClick={chooseFieldWorker}>Exit officer mode</button></>}
     </div>
     {notice && <div className="alert-error p-3 text-sm" role="alert">{notice}</div>}
     {error && !pinOpen && !isOfficer && <p className="text-sm text-risk-high-bright" role="alert">{error}</p>}
     {pinOpen && !isOfficer && <form onSubmit={submitPin} className="panel max-w-sm p-4"><fieldset disabled={checking} className="space-y-3">
       <label className="block text-xs text-muted">Officer PIN<input type="password" inputMode="numeric" autoComplete="off" autoFocus required className="field mt-1" value={pin} onChange={(event) => { setPin(event.target.value); setError('') }} /></label>
       <p className="text-xs text-muted">{DEMO_PIN_HINT}</p>
-      <div className="flex flex-wrap gap-2"><button type="submit" className="btn btn-primary">{checking ? 'Checking…' : 'Enter officer mode'}</button><button type="button" className="btn" onClick={chooseCitizen}>Cancel</button></div>
+      <div className="flex flex-wrap gap-2"><button type="submit" className="btn btn-primary">{checking ? 'Checking…' : 'Enter officer mode'}</button><button type="button" className="btn" onClick={chooseFieldWorker}>Cancel</button></div>
     </fieldset></form>}
   </div>
 }
 
-// Mounted only in officer mode, so citizens never request the protected list.
+// Mounted only in officer mode, so field workers never request the protected list.
 function OfficerWorkspace() {
   const [tab, setTab] = useState('queue')
   const [district, setDistrict] = useState('')
@@ -117,12 +116,13 @@ function OfficerWorkspace() {
   </div>
 }
 
-export default function GroundReports() {
+// Ground photos tab of Damage Assessment: field upload, or officer review
+// behind the PIN. The urgent banner lives in OfficerWorkspace only.
+export default function GroundPhotosPanel() {
   const { isOfficer } = useAuth()
-  return <PageContainer title="Ground Reports" lead="Ground-level disaster photos, structured observations, and officer review for local response.">
-    <div className="space-y-5">
-      <ModeSwitch />
-      {isOfficer ? <OfficerWorkspace /> : <GroundUploadForm />}
-    </div>
-  </PageContainer>
+  return <div className="space-y-5">
+    <p className="text-sm text-muted">Ground-level disaster photos, structured observations, and officer review for local response.</p>
+    <ModeSwitch />
+    {isOfficer ? <OfficerWorkspace /> : <GroundUploadForm />}
+  </div>
 }

@@ -7,7 +7,7 @@
 // (the photo URL carries it as ?officer_key=, since <img src> cannot send
 // headers). AuthProvider writes the PIN here with setOfficerPin. A 401 that
 // was sent with the current PIN tells onOfficerUnauthorized listeners, so the
-// provider can drop back to citizen mode. Demo-grade, not real accounts.
+// provider can drop back to field worker mode. Demo-grade, not real accounts.
 import { ENDPOINTS } from '../config/endpoints.js'
 import { ApiError, apiErrorMessage, getJson, postForm } from './client.js'
 

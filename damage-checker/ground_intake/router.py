@@ -47,7 +47,7 @@ Officer access: the five /ground-reports routes need the shared officer PIN
 param for the photo, because <img src> cannot send headers. POST /intake and
 GET /ground-summary stay open: anyone may upload, and the summary is
 aggregate counts only. The one exception is reporter_role=officer on
-/intake, which needs the same PIN so a citizen cannot claim to be an
+/intake, which needs the same PIN so a field worker cannot claim to be an
 officer. This is a demo-grade shared PIN, not real accounts.
 
 DELETE /ground-reports/{id} removes the report and its photo for good;
@@ -584,8 +584,8 @@ def build_router(
         lon: Optional[float] = Query(default=None, ge=-180, le=180),
         reporter_role: Optional[str] = Query(
             default=None,
-            description="citizen | field_worker | officer (unknown -> citizen). "
-                        "officer needs X-Officer-Key.",
+            description="field_worker | officer (missing or unknown -> field_worker; "
+                        "citizen accepted for old clients). officer needs X-Officer-Key.",
         ),
         x_officer_key: Optional[str] = Header(default=None),
     ):
@@ -672,7 +672,7 @@ def build_router(
             "duplicate_of": duplicate_of,
             "status": ReportStatus.unverified,
             "review": Review(ai_original=obs),
-            "reporter_role": reporter_role or "citizen",
+            "reporter_role": reporter_role or ReporterRole.field_worker.value,
             "vlm_source": vlm_source,
             "vlm_model": vlm_model,
         })
