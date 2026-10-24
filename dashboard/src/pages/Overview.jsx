@@ -33,6 +33,12 @@ export default function Overview() {
                 Risk Map
               </button>
               <button
+                onClick={() => scrollTo('flood-tracker')}
+                className="text-[#6a9b84] hover:text-emerald-300 transition-colors cursor-pointer"
+              >
+                Flood Tracker
+              </button>
+              <button
                 onClick={() => scrollTo('damage-assessment')}
                 className="text-[#6a9b84] hover:text-emerald-300 transition-colors cursor-pointer"
               >
@@ -43,12 +49,6 @@ export default function Overview() {
                 className="text-[#6a9b84] hover:text-emerald-300 transition-colors cursor-pointer"
               >
                 Aid Priority
-              </button>
-              <button
-                onClick={() => scrollTo('flood-tracker')}
-                className="text-[#6a9b84] hover:text-emerald-300 transition-colors cursor-pointer"
-              >
-                Flood Tracker
               </button>
             </nav>
           </div>
@@ -117,127 +117,11 @@ export default function Overview() {
 
         <hr className="border-[#1b4a33]" />
 
-        {/* ── SECTION 2: DAMAGE ASSESSMENT ── */}
-        <section id="damage-assessment" className="space-y-6">
-          <div>
-            <span className="text-[10px] font-mono font-semibold tracking-widest text-purple-400 uppercase">
-              02 / Computer Vision
-            </span>
-            <h2 className="mt-2 text-2xl md:text-3xl font-bold tracking-tight text-white leading-snug">
-              Damage Assessment
-            </h2>
-            <p className="mt-2 text-sm text-[#8aad9b] max-w-2xl leading-relaxed">
-              AI scene classification on orbital and aerial imagery, pinpointing submerged roads and destroyed settlements before rescue boats deploy.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-10 md:grid-cols-12 pt-2">
-            <div className="md:col-span-7 space-y-4 text-slate-300 text-sm leading-relaxed">
-              <p>
-                In a major flood, physical roads wash out and cellular towers go dark, leaving rescue agencies blind to ground conditions for days. Rather than waiting for manual field reports, Nigraan AI ingests raw satellite imagery and divides scenes into fine grid tiles.
-              </p>
-              <p>
-                A deep-learning vision model classifies each tile into standing floodwater, structural destruction, or intact ground. This produces an immediate, verifiable damage percentage for every community, showing relief workers exactly where access routes have been severed.
-              </p>
-
-              <div className="pt-2">
-                <Link
-                  to="/damage-assessment"
-                  className="inline-flex items-center gap-2 text-xs font-semibold tracking-wide uppercase text-purple-300 border border-purple-500/40 bg-[#0d0a1a] hover:bg-[#1a1030] px-4 py-2 transition-colors"
-                >
-                  Launch Damage Assessment Tool →
-                </Link>
-              </div>
-            </div>
-
-            <div className="md:col-span-5 space-y-6 border-l border-[#1b4a33] pl-6 md:pl-8">
-              <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Method</div>
-                <div className="mt-1 text-base font-semibold text-white leading-snug">Tiled Neural Scene Classifier</div>
-                <div className="text-xs text-slate-500 mt-1">Adaptive grid overlays for pinpoint damage isolation</div>
-              </div>
-
-              <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">What It Detects</div>
-                <div className="mt-1 text-base font-semibold text-white leading-snug">Water Extent, Road Cuts, Roof Loss</div>
-                <div className="text-xs text-slate-500 mt-1">Distinguishes temporary pooling from structural destruction</div>
-              </div>
-
-              <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Processing Speed</div>
-                <div className="mt-1 font-mono text-2xl font-semibold text-emerald-400">&lt; 1.2s</div>
-                <div className="text-xs text-slate-500 mt-1">Instant inference per uploaded satellite scene</div>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <hr className="border-[#1b4a33]" />
-
-        {/* ── SECTION 3: AID PRIORITY ── */}
-        <section id="aid-priority" className="space-y-6">
-          <div>
-            <span className="text-[10px] font-mono font-semibold tracking-widest text-amber-400 uppercase">
-              03 / Decision Support
-            </span>
-            <h2 className="mt-2 text-2xl md:text-3xl font-bold tracking-tight text-white leading-snug">
-              Aid Priority
-            </h2>
-            <p className="mt-2 text-sm text-[#8aad9b] max-w-2xl leading-relaxed">
-              Data-driven relief dispatch schedules that direct supplies and medical teams to where needs are highest, free from guesswork or political bias.
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 gap-10 md:grid-cols-12 pt-2">
-            <div className="md:col-span-7 space-y-4 text-slate-300 text-sm leading-relaxed">
-              <p>
-                When emergency resources like clean drinking water, rescue rafts, and medical rations are limited, distributing aid on a first-come basis leaves the most isolated communities stranded.
-              </p>
-              <p>
-                The Aid Priority algorithm evaluates every monitored district using three objective factors: 40% hazard risk severity, 40% verified satellite structural damage, and 20% exposed population density. The result is a transparent, ranked dispatch schedule updated continuously as new assessments arrive.
-              </p>
-
-              <div className="pt-2">
-                <Link
-                  to="/aid-priority"
-                  className="inline-flex items-center gap-2 text-xs font-semibold tracking-wide uppercase text-amber-300 border border-amber-500/40 bg-[#1a1000] hover:bg-[#2a1c00] px-4 py-2 transition-colors"
-                >
-                  View Full Aid Priority Schedule →
-                </Link>
-              </div>
-            </div>
-
-            <div className="md:col-span-5 space-y-4 border-l border-[#1b4a33] pl-6 md:pl-8">
-              <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Current Top Priority Queue</div>
-
-              <div className="space-y-3 pt-1">
-                {[
-                  { rank: '01', name: 'Rajanpur', province: 'Punjab', badge: 'Urgent', color: 'text-rose-400' },
-                  { rank: '02', name: 'Dadu', province: 'Sindh', badge: 'Urgent', color: 'text-rose-400' },
-                  { rank: '03', name: 'D.G. Khan', province: 'Punjab', badge: 'High', color: 'text-amber-400' },
-                  { rank: '04', name: 'Jaffarabad', province: 'Balochistan', badge: 'High', color: 'text-amber-400' },
-                ].map((item) => (
-                  <div key={item.rank} className="flex items-baseline justify-between border-b border-[#1b4a33] pb-2">
-                    <div>
-                      <span className="font-mono text-xs text-amber-400 mr-2">{item.rank}</span>
-                      <span className="font-semibold text-white text-sm">{item.name}</span>
-                      <span className="text-xs text-[#6a9b84] ml-1.5">({item.province})</span>
-                    </div>
-                    <span className={`text-xs font-mono font-semibold ${item.color}`}>#{item.rank} {item.badge}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <hr className="border-[#1b4a33]" />
-
-        {/* ── SECTION 4: FLOOD TRACKER ── */}
+        {/* ── SECTION 2: FLOOD TRACKER ── */}
         <section id="flood-tracker" className="space-y-6">
           <div>
             <span className="text-[10px] font-mono font-semibold tracking-widest text-blue-400 uppercase">
-              04 / Hydrological Routing
+              02 / Hydrological Routing
             </span>
             <h2 className="mt-2 text-2xl md:text-3xl font-bold tracking-tight text-white leading-snug">
               Flood Tracker
@@ -299,6 +183,123 @@ export default function Overview() {
             </div>
           </div>
         </section>
+
+        <hr className="border-[#1b4a33]" />
+
+        {/* ── SECTION 3: DAMAGE ASSESSMENT ── */}
+        <section id="damage-assessment" className="space-y-6">
+          <div>
+            <span className="text-[10px] font-mono font-semibold tracking-widest text-purple-400 uppercase">
+              03 / Computer Vision
+            </span>
+            <h2 className="mt-2 text-2xl md:text-3xl font-bold tracking-tight text-white leading-snug">
+              Damage Assessment
+            </h2>
+            <p className="mt-2 text-sm text-[#8aad9b] max-w-2xl leading-relaxed">
+              AI scene classification on orbital and aerial imagery, pinpointing submerged roads and destroyed settlements before rescue boats deploy.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-10 md:grid-cols-12 pt-2">
+            <div className="md:col-span-7 space-y-4 text-slate-300 text-sm leading-relaxed">
+              <p>
+                In a major flood, physical roads wash out and cellular towers go dark, leaving rescue agencies blind to ground conditions for days. Rather than waiting for manual field reports, Nigraan AI ingests raw satellite imagery and divides scenes into fine grid tiles.
+              </p>
+              <p>
+                A deep-learning vision model classifies each tile into standing floodwater, structural destruction, or intact ground. This produces an immediate, verifiable damage percentage for every community, showing relief workers exactly where access routes have been severed.
+              </p>
+
+              <div className="pt-2">
+                <Link
+                  to="/damage-assessment"
+                  className="inline-flex items-center gap-2 text-xs font-semibold tracking-wide uppercase text-purple-300 border border-purple-500/40 bg-[#0d0a1a] hover:bg-[#1a1030] px-4 py-2 transition-colors"
+                >
+                  Launch Damage Assessment Tool →
+                </Link>
+              </div>
+            </div>
+
+            <div className="md:col-span-5 space-y-6 border-l border-[#1b4a33] pl-6 md:pl-8">
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Method</div>
+                <div className="mt-1 text-base font-semibold text-white leading-snug">Tiled Neural Scene Classifier</div>
+                <div className="text-xs text-slate-500 mt-1">Adaptive grid overlays for pinpoint damage isolation</div>
+              </div>
+
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">What It Detects</div>
+                <div className="mt-1 text-base font-semibold text-white leading-snug">Water Extent, Road Cuts, Roof Loss</div>
+                <div className="text-xs text-slate-500 mt-1">Distinguishes temporary pooling from structural destruction</div>
+              </div>
+
+              <div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Processing Speed</div>
+                <div className="mt-1 font-mono text-2xl font-semibold text-emerald-400">&lt; 1.2s</div>
+                <div className="text-xs text-slate-500 mt-1">Instant inference per uploaded satellite scene</div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <hr className="border-[#1b4a33]" />
+
+        {/* ── SECTION 4: AID PRIORITY ── */}
+        <section id="aid-priority" className="space-y-6">
+          <div>
+            <span className="text-[10px] font-mono font-semibold tracking-widest text-amber-400 uppercase">
+              04 / Decision Support
+            </span>
+            <h2 className="mt-2 text-2xl md:text-3xl font-bold tracking-tight text-white leading-snug">
+              Aid Priority
+            </h2>
+            <p className="mt-2 text-sm text-[#8aad9b] max-w-2xl leading-relaxed">
+              Data-driven relief dispatch schedules that direct supplies and medical teams to where needs are highest, free from guesswork or political bias.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 gap-10 md:grid-cols-12 pt-2">
+            <div className="md:col-span-7 space-y-4 text-slate-300 text-sm leading-relaxed">
+              <p>
+                When emergency resources like clean drinking water, rescue rafts, and medical rations are limited, distributing aid on a first-come basis leaves the most isolated communities stranded.
+              </p>
+              <p>
+                The Aid Priority algorithm evaluates every monitored district using three objective factors: 40% hazard risk severity, 40% verified satellite structural damage, and 20% exposed population density. The result is a transparent, ranked dispatch schedule updated continuously as new assessments arrive.
+              </p>
+
+              <div className="pt-2">
+                <Link
+                  to="/aid-priority"
+                  className="inline-flex items-center gap-2 text-xs font-semibold tracking-wide uppercase text-amber-300 border border-amber-500/40 bg-[#1a1000] hover:bg-[#2a1c00] px-4 py-2 transition-colors"
+                >
+                  View Full Aid Priority Schedule →
+                </Link>
+              </div>
+            </div>
+
+            <div className="md:col-span-5 space-y-4 border-l border-[#1b4a33] pl-6 md:pl-8">
+              <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Current Top Priority Queue</div>
+
+              <div className="space-y-3 pt-1">
+                {[
+                  { rank: '01', name: 'Rajanpur', province: 'Punjab', badge: 'Urgent', color: 'text-rose-400' },
+                  { rank: '02', name: 'Dadu', province: 'Sindh', badge: 'Urgent', color: 'text-rose-400' },
+                  { rank: '03', name: 'D.G. Khan', province: 'Punjab', badge: 'High', color: 'text-amber-400' },
+                  { rank: '04', name: 'Jaffarabad', province: 'Balochistan', badge: 'High', color: 'text-amber-400' },
+                ].map((item) => (
+                  <div key={item.rank} className="flex items-baseline justify-between border-b border-[#1b4a33] pb-2">
+                    <div>
+                      <span className="font-mono text-xs text-amber-400 mr-2">{item.rank}</span>
+                      <span className="font-semibold text-white text-sm">{item.name}</span>
+                      <span className="text-xs text-[#6a9b84] ml-1.5">({item.province})</span>
+                    </div>
+                    <span className={`text-xs font-mono font-semibold ${item.color}`}>#{item.rank} {item.badge}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </section>
+
 
       </div>
     </div>
