@@ -21,7 +21,7 @@ export default function Overview() {
                 Overview
               </h1>
               <p className="mt-3 text-sm md:text-base text-[#8aad9b] max-w-xl leading-relaxed">
-                National flood surveillance, satellite damage detection, and humanitarian triage across Pakistan.
+                Hazard risk for 16 districts, Indus flood routing, damage assessment on uploaded satellite imagery, and aid prioritisation.
               </p>
             </div>
 
@@ -60,6 +60,9 @@ export default function Overview() {
             <span className="text-[10px] font-mono font-semibold tracking-widest text-rose-400 uppercase">
               01 / Risk Map Spotlight
             </span>
+            <span className="ml-3 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-amber-300">
+              Scenario: monsoon peak
+            </span>
             <h2 className="mt-2 text-2xl md:text-3xl font-bold tracking-tight text-white leading-snug">
               Highest at Risk: Dadu, Sindh
             </h2>
@@ -74,7 +77,7 @@ export default function Overview() {
                 When heavy rainfall strikes Balochistan, runoff cascades down the steep Kirthar hills directly into Dadu's western plains. At the same time, if the Indus River downstream is running near peak capacity at Sukkur Barrage, the Main Nara Valley Drain (MNVD) cannot discharge into the river, causing water to pool backward into Manchhar Lake.
               </p>
               <p>
-                This dual pressure puts over 1.7 million residents, rural agricultural land, and primary transit corridors under extreme inundation threat before official river gauges even hit their highest warnings.
+                The figures on the right are a fixed monsoon-peak scenario, not a live reading. Open the Risk Map for Dadu's current Risk Flag assessment.
               </p>
 
               <div className="pt-2">
@@ -89,27 +92,21 @@ export default function Overview() {
 
             <div className="md:col-span-5 space-y-6 border-l border-[#1b4a33] pl-6 md:pl-8">
               <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Assessed Risk Level</div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Scenario Risk Score</div>
                 <div className="mt-1 font-mono text-4xl font-bold text-rose-400 tracking-tight">92%</div>
-                <div className="text-xs text-slate-500 mt-1">Critical threshold across weather, soil &amp; drainage</div>
+                <div className="text-xs text-slate-500 mt-1">Illustrative. Risk Flag itself returns low, medium or high</div>
               </div>
 
               <div>
                 <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">90-Day Rainfall Memory</div>
                 <div className="mt-1 font-mono text-2xl font-semibold text-white">284 mm</div>
-                <div className="text-xs text-slate-500 mt-1">Ground is heavily saturated from seasonal storms</div>
+                <div className="text-xs text-slate-500 mt-1">Rain over the past 90 days</div>
               </div>
 
               <div>
                 <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">3-Day Forecast Rain</div>
                 <div className="mt-1 font-mono text-2xl font-semibold text-cyan-300">+58.5 mm</div>
-                <div className="text-xs text-slate-500 mt-1">Approaching monsoon front expected within 72 hours</div>
-              </div>
-
-              <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Vulnerable Population</div>
-                <div className="mt-1 font-mono text-2xl font-semibold text-white">1,740,000</div>
-                <div className="text-xs text-slate-500 mt-1">Residents living in direct floodway zones</div>
+                <div className="text-xs text-slate-500 mt-1">Forecast rain over the next 3 days</div>
               </div>
             </div>
           </div>
@@ -127,17 +124,17 @@ export default function Overview() {
               Flood Tracker
             </h2>
             <p className="mt-2 text-sm text-[#8aad9b] max-w-2xl leading-relaxed">
-              Physics-based flood wave routing down the 1,400-kilometer Indus River, calculating exact arrival times for barrages and 900+ downstream villages.
+              Empirical routing from 2022 peak-to-peak lags, with ETA windows, for 7 Indus barrages and 926 downstream villages.
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-10 md:grid-cols-12 pt-2">
             <div className="md:col-span-7 space-y-4 text-slate-300 text-sm leading-relaxed">
               <p>
-                When an upstream dam like Tarbela releases emergency floodwaters or torrential northern rainfall enters the river, that crest takes several days to travel down Pakistan. A peak at Taunsa Barrage takes roughly 48 hours to reach Guddu Barrage in upper Sindh, and nearly a week to reach Kotri near the Arabian Sea.
+                A flood crest takes days to travel down the Indus. In 2022, a peak at Taunsa Barrage took about 48 hours to reach Guddu Barrage in upper Sindh, and more than a week to reach Kotri.
               </p>
               <p>
-                Nigraan AI links discharge readings across 7 Indus barrages into discrete flood waves. It calculates hour-by-hour arrival windows for each settlement along the river and drafts emergency warnings in Urdu and Sindhi for immediate loudspeaker and SMS broadcast.
+                Nigraan AI routes a barrage peak downstream using the lags between barrage peaks measured in 2022. Each barrage and village gets an ETA window, and each village gets a short Urdu and Sindhi alert draft for an officer to review. Drafts are not sent automatically.
               </p>
 
               <div className="pt-2">
@@ -152,7 +149,7 @@ export default function Overview() {
 
             <div className="md:col-span-5 space-y-6 border-l border-[#1b4a33] pl-6 md:pl-8">
               <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Barrage in Focus</div>
+                <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Barrage in Focus · 2022 replay</div>
                 <div className="mt-1 text-xl font-bold text-white tracking-tight">Taunsa Barrage</div>
                 <div className="text-xs text-rose-400 font-semibold mt-0.5">High Flood Stage (Outflow &gt; 500,000 cusecs)</div>
               </div>
@@ -166,19 +163,19 @@ export default function Overview() {
                 <div>
                   <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Outflow</div>
                   <div className="mt-1 font-mono text-lg font-semibold text-white">551,000 cusecs</div>
-                  <div className="text-xs text-slate-500">Gates Fully Opened</div>
+                  <div className="text-xs text-slate-500">2022 FFC reading</div>
                 </div>
               </div>
 
               <div>
                 <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Downstream Impact Point</div>
                 <div className="mt-1 text-sm font-semibold text-white">Guddu Barrage (208 km downstream)</div>
-                <div className="mt-1 text-xs text-emerald-400 font-mono font-semibold">ETA: ~48 Hours (±12h arrival window)</div>
+                <div className="mt-1 text-xs text-emerald-400 font-mono font-semibold">ETA: ~48 hours (24–72 h window)</div>
               </div>
 
               <div>
                 <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Last-Mile Warning Coverage</div>
-                <div className="mt-1 text-sm font-semibold text-slate-200">926 mapped villages with Urdu &amp; Sindhi alert drafts</div>
+                <div className="mt-1 text-sm font-semibold text-slate-200">926 mapped villages, each with Urdu &amp; Sindhi alert drafts</div>
               </div>
             </div>
           </div>
@@ -196,17 +193,17 @@ export default function Overview() {
               Damage Assessment
             </h2>
             <p className="mt-2 text-sm text-[#8aad9b] max-w-2xl leading-relaxed">
-              AI scene classification on orbital and aerial imagery, pinpointing submerged roads and destroyed settlements before rescue boats deploy.
+              Building damage classification on uploaded satellite imagery: none, partial or destroyed.
             </p>
           </div>
 
           <div className="grid grid-cols-1 gap-10 md:grid-cols-12 pt-2">
             <div className="md:col-span-7 space-y-4 text-slate-300 text-sm leading-relaxed">
               <p>
-                In a major flood, physical roads wash out and cellular towers go dark, leaving rescue agencies blind to ground conditions for days. Rather than waiting for manual field reports, Nigraan AI ingests raw satellite imagery and divides scenes into fine grid tiles.
+                After a disaster, field reports can take days. An officer can upload a post-disaster satellite tile, or a larger scene that Nigraan AI splits into grid tiles.
               </p>
               <p>
-                A deep-learning vision model classifies each tile into standing floodwater, structural destruction, or intact ground. This produces an immediate, verifiable damage percentage for every community, showing relief workers exactly where access routes have been severed.
+                A ResNet-18 model rates building damage in each tile as none, partial or destroyed, and a scene reports the share of tiles in each class. Images that do not look like satellite imagery are marked uncertain and left out.
               </p>
 
               <div className="pt-2">
@@ -222,20 +219,14 @@ export default function Overview() {
             <div className="md:col-span-5 space-y-6 border-l border-[#1b4a33] pl-6 md:pl-8">
               <div>
                 <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Method</div>
-                <div className="mt-1 text-base font-semibold text-white leading-snug">Tiled Neural Scene Classifier</div>
-                <div className="text-xs text-slate-500 mt-1">Adaptive grid overlays for pinpoint damage isolation</div>
+                <div className="mt-1 text-base font-semibold text-white leading-snug">Tiled Image Classifier</div>
+                <div className="text-xs text-slate-500 mt-1">Large scenes are split into a grid of tiles</div>
               </div>
 
               <div>
                 <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">What It Detects</div>
-                <div className="mt-1 text-base font-semibold text-white leading-snug">Water Extent, Road Cuts, Roof Loss</div>
-                <div className="text-xs text-slate-500 mt-1">Distinguishes temporary pooling from structural destruction</div>
-              </div>
-
-              <div>
-                <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Processing Speed</div>
-                <div className="mt-1 font-mono text-2xl font-semibold text-emerald-400">&lt; 1.2s</div>
-                <div className="text-xs text-slate-500 mt-1">Instant inference per uploaded satellite scene</div>
+                <div className="mt-1 text-base font-semibold text-white leading-snug">Building Damage: None, Partial, Destroyed</div>
+                <div className="text-xs text-slate-500 mt-1">One rating per tile</div>
               </div>
             </div>
           </div>
@@ -253,7 +244,7 @@ export default function Overview() {
               Aid Priority
             </h2>
             <p className="mt-2 text-sm text-[#8aad9b] max-w-2xl leading-relaxed">
-              Data-driven relief dispatch schedules that direct supplies and medical teams to where needs are highest, free from guesswork or political bias.
+              A ranked list of districts for relief dispatch, with the score behind each rank shown.
             </p>
           </div>
 
@@ -263,7 +254,7 @@ export default function Overview() {
                 When emergency resources like clean drinking water, rescue rafts, and medical rations are limited, distributing aid on a first-come basis leaves the most isolated communities stranded.
               </p>
               <p>
-                The Aid Priority algorithm evaluates every monitored district using three objective factors: 40% hazard risk severity, 40% verified satellite structural damage, and 20% exposed population density. The result is a transparent, ranked dispatch schedule updated continuously as new assessments arrive.
+                Aid Priority scores each district as 0.4 × risk + 0.6 × damage, from its Risk Flag level and its damage assessment, and ranks districts by that score.
               </p>
 
               <div className="pt-2">
@@ -277,7 +268,12 @@ export default function Overview() {
             </div>
 
             <div className="md:col-span-5 space-y-4 border-l border-[#1b4a33] pl-6 md:pl-8">
-              <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Current Top Priority Queue</div>
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Top Priority Queue</div>
+                <span className="rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-wider text-amber-300">
+                  Scenario: monsoon peak
+                </span>
+              </div>
 
               <div className="space-y-3 pt-1">
                 {[

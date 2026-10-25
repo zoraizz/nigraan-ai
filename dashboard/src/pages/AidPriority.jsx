@@ -181,12 +181,13 @@ export default function AidPriority() {
         <div className="panel px-4 py-8 text-center">
           <div className="spinner mx-auto mb-4" />
           <p className="text-sm text-muted">
-            Assessing {live.progress.length} districts, Risk Flag (Gemini) and
+            Assessing {live.progress.length} districts, Risk Flag and
             Damage Checker <span className="data">{live.elapsed}s</span>
           </p>
           <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-muted">
-            A cold server cache makes each district take minutes while Gemini
-            reasons about it; the server caches results for 15 minutes.
+            Without a recent cached result, each district can take minutes while
+            Risk Flag reasons about it (Gemini, then Grok, then a rule scorer).
+            Results are cached for 15 minutes.
           </p>
           <ul className="mx-auto mt-4 inline-block space-y-1 text-left text-xs">
             {live.progress.map((row) => (

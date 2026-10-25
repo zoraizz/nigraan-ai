@@ -8,7 +8,7 @@ export const DISTRICT_DETAILS = {
     hazardType: 'flood',
     attributeLabel: 'River Basin Level',
     attributeValue: '88% Capacity',
-    attributeSubtext: '58.5mm 24h Rain',
+    attributeSubtext: '58.5mm 3d Rain',
   },
   Khairpur: {
     history: 'Severe palm crop damage in 2022 monsoon flood. Prolonged standing water retention along canal networks.',

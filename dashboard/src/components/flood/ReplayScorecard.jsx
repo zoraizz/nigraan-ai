@@ -4,7 +4,8 @@ import { formatSignedHours, formatWall } from './timeFormat.js'
 export default function ReplayScorecard({ rows, note, usingFixtures }) {
   const list = Array.isArray(rows) ? rows : []
   const within24 = list.filter((row) => row.error_hours != null && Number.isFinite(Number(row.error_hours)) && Math.abs(Number(row.error_hours)) <= 24).length
-  const footnotes = [...new Set(list.map((row) => row.note).filter(Boolean))]
+  const inSample = list.filter((row) => row.in_sample === true).length
+  const footnotes =[...new Set(list.map((row) => row.note).filter(Boolean))]
   return (
     <div>
       <p className="mb-2 text-[11px] text-[#9dbdac]">
@@ -21,6 +22,12 @@ export default function ReplayScorecard({ rows, note, usingFixtures }) {
       )}
       <p className="mb-2 text-sm font-semibold text-slate-100">
         Wave 1 and Wave 2: {within24} of {list.length} crests within ±24 h
+        {inSample > 0 && (
+          <span className="ml-2 rounded bg-amber-500/15 px-1.5 py-0.5 align-middle text-[10px] font-semibold text-amber-300"
+            title="The reach lags were calibrated on these same 2022 crests, so this score flatters the model.">
+            in-sample{inSample < list.length ? ` (${inSample} of ${list.length})` : ''}
+          </span>
+        )}
       </p>
       {list.length === 0 ? (
         <p className="text-sm text-[#9dbdac]">No scorecard for this replay.</p>
