@@ -4,7 +4,6 @@ import HazardIcon from './HazardIcon.jsx'
 import { useRiskData } from '../hooks/useRiskData.js'
 import { DISTRICTS } from '../config/districts.js'
 import { DISTRICT_DETAILS } from '../config/districtDetails.js'
-import { ENDPOINTS } from '../config/endpoints.js'
 import { buildRiskMetricRows, formatMetricValue } from '../pages/riskMetrics.js'
 import { availabilityBanner } from '../pages/availabilityNote.js'
 
@@ -17,11 +16,10 @@ function reasoningLabel(source) {
 }
 
 const LOADING_MESSAGES = [
-  'Analyzing weather and snow metrics…',
-  'Cross-referencing hazard history…',
-  'Consulting the risk model…',
-  'Comparing against historical hazard patterns…',
-  'Synthesizing multi-signal risk score…',
+  'Fetching the weather forecast…',
+  'Reading the district’s hazard context…',
+  'Asking the risk model for a level…',
+  'Still working. The model can take a while…',
 ]
 
 function WeatherMetrics({ data }) {
@@ -163,15 +161,15 @@ export default function RiskDetailModal({ districtName, onClose }) {
             <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-2 border-emerald-500 border-t-transparent" />
             <p className="text-sm font-semibold text-white">{LOADING_MESSAGES[msgIdx]}</p>
             <p className="mt-2 font-mono text-xs text-slate-400">
-              Elapsed: {elapsed}s · Open-Meteo & Risk Flag pipeline processing
+              Elapsed: {elapsed}s{elapsed >= 8 ? ' · Service waking up, can take up to 60 seconds' : ''}
             </p>
           </div>
         ) : error ? (
           <div className="rounded-xl border border-rose-500/40 bg-rose-500/10 p-4 text-xs text-rose-300">
-            <p className="font-bold text-sm text-rose-400">Risk Flag API Connection Error</p>
+            <p className="font-bold text-sm text-rose-400">Could not load the risk assessment</p>
             <p className="mt-1">{error.message}</p>
             <p className="mt-2 text-[11px] text-slate-400">
-              Ensure service is running on <code className="font-mono text-slate-200">{ENDPOINTS.riskApi}</code>.
+              The service may be waking up, which can take up to 60 seconds. Try again.
             </p>
             <button
               type="button"

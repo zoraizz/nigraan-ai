@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import Sidebar from './components/layout/Sidebar.jsx'
 import Header from './components/layout/Header.jsx'
 import ProtectedRoute from './auth/ProtectedRoute.jsx'
@@ -82,25 +82,16 @@ function ConsoleShell() {
 // When hash starts with #/ the console is active; otherwise React yields to
 // the landing page and returns null so the HTML landing view stays visible.
 export default function App() {
-  const [inConsole, setInConsole] = useState(() =>
-    window.location.hash.startsWith('#/')
-  )
+  // Read the console flag in the same render as the router's location. A
+  // separate hashchange state could switch the console on while the router
+  // still held the landing location "/", and the catch-all route then
+  // redirected a deep link such as #/risk-map to #/overview.
+  const location = useLocation()
+  const inConsole = window.location.hash.startsWith('#/')
 
-  // Keep state in sync whenever the hash changes (landing <-> console nav).
   useEffect(() => {
-    function onHash() {
-      const active = window.location.hash.startsWith('#/')
-      setInConsole(active)
-      if (active) {
-        document.body.classList.add('dashboard-active')
-      } else {
-        document.body.classList.remove('dashboard-active')
-      }
-    }
-    onHash()
-    window.addEventListener('hashchange', onHash)
-    return () => window.removeEventListener('hashchange', onHash)
-  }, [])
+    document.body.classList.toggle('dashboard-active', inConsole)
+  }, [inConsole, location])
 
   if (!inConsole) return null
 

@@ -7,7 +7,45 @@ import SceneAssessment from '../components/SceneAssessment.jsx'
 import GroundPhotosPanel from '../components/ground/GroundPhotosPanel.jsx'
 import { useDamageClassification } from '../hooks/useDamageClassification.js'
 import { DISTRICT_NAMES } from '../config/districts.js'
-import { ENDPOINTS } from '../config/endpoints.js'
+
+// One-click samples, served from public/sample-images/. The three satellite
+// tiles come from damage-checker/sample-images/; the ground photo is not
+// satellite imagery, so it shows the out-of-domain warning.
+const SAMPLES = [
+  { file: 'PAKISTAN-FLOODING_014695_post_disaster.png', label: 'Pakistan flood, 2022', type: 'image/png' },
+  { file: 'PAKISTAN-FLOODING_018024_post_disaster.png', label: 'Pakistan flood, 2022 (intact)', type: 'image/png' },
+  { file: 'joplin-tornado_00000120_post_disaster.png', label: 'Joplin tornado, USA', type: 'image/png' },
+  { file: 'ground-photo-avalanche.jpg', label: 'Ground photo (not satellite)', type: 'image/jpeg' },
+]
+
+function SampleTiles({ onPick, disabled }) {
+  return (
+    <div className="panel p-4">
+      <p className="mb-2 text-xs font-medium text-muted">Or try a sample</p>
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {SAMPLES.map((sample) => (
+          <button
+            key={sample.file}
+            type="button"
+            disabled={disabled}
+            onClick={() => onPick(sample)}
+            className="group overflow-hidden rounded-lg border border-line text-left hover:border-emerald-500/60 disabled:opacity-50"
+          >
+            <img
+              src={`/sample-images/${sample.file}`}
+              alt=""
+              loading="lazy"
+              className="aspect-square w-full object-cover"
+            />
+            <span className="block px-2 py-1.5 text-[11px] leading-snug text-muted group-hover:text-text">
+              {sample.label}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
 
 function TileAssessment() {
   const [file, setFile] = useState(null)
@@ -26,6 +64,21 @@ function TileAssessment() {
 
   const handleClassify = () => classify(file, area === 'unknown' ? undefined : area)
 
+  const [sampleError, setSampleError] = useState(null)
+  const handleSample = async (sample) => {
+    reset()
+    setSampleError(null)
+    try {
+      const response = await fetch(`/sample-images/${sample.file}`)
+      if (!response.ok) throw new Error('not found')
+      const picked = new File([await response.blob()], sample.file, { type: sample.type })
+      setFile(picked)
+      classify(picked, area === 'unknown' ? undefined : area)
+    } catch {
+      setSampleError('The sample image could not be loaded.')
+    }
+  }
+
   return (
     <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
       <div className="space-y-5">
@@ -39,12 +92,15 @@ function TileAssessment() {
           inputId="tile-image"
         />
 
+        <SampleTiles onPick={handleSample} disabled={loading} />
+        {sampleError ? <p className="text-sm text-risk-high-bright">{sampleError}</p> : null}
+
         <div className="panel p-4">
           <label
             htmlFor="area-select"
             className="mb-1.5 block text-xs font-medium text-muted"
           >
-            Area / district label (optional passthrough)
+            District label (optional, does not change the result)
           </label>
           <select
             id="area-select"
@@ -66,7 +122,7 @@ function TileAssessment() {
             <p className="font-semibold">Classification failed</p>
             <p className="mt-1">{error.message}</p>
             <p className="mt-2 text-xs">
-              Damage Checker: <span className="data">{ENDPOINTS.damageApi}</span>
+              The damage service may be waking up, which can take up to 60 seconds. Try again.
             </p>
           </div>
         ) : null}
@@ -90,7 +146,7 @@ export default function DamageAssessment() {
   return (
     <PageContainer
       title="Damage Assessment"
-      lead="Classify satellite tiles or a larger scene as none / partial / destroyed, and add ground photos from the field for officer review."
+      lead="Rate building damage as none, partial or destroyed from satellite imagery, or add field photos for review."
     >
       <div className="mb-5 flex flex-wrap gap-2" role="tablist" aria-label="Assessment mode">
         <button

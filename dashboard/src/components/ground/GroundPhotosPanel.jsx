@@ -9,7 +9,7 @@ import { DISTRICTS } from '../../config/districts.js'
 import { useGroundReports } from '../../hooks/useGroundReports.js'
 
 // DEMO ONLY: remove the PIN hint after the hackathon
-const DEMO_PIN_HINT = 'Demo PIN for evaluators: 2026'
+const DEMO_PIN_HINT = 'Officer PIN for evaluators: 2026'
 
 const TABS = [
   { key: 'queue', label: 'Review queue' },

@@ -120,9 +120,7 @@ export function useLiveAssessment(sceneDamage, { includeGround = false } = {}) {
       const tileResponse = await fetch(tileUrl)
       if (!tileResponse.ok) {
         settle(entry.district, { damage: 'error' })
-        throw new Error(
-          `sample tile not available at ${tileUrl} (bundled from damage-checker/sample-images/)`,
-        )
+        throw new Error(`the sample image for ${entry.district} could not be loaded`)
       }
       const blob = await tileResponse.blob()
       const tileFile = new File([blob], entry.tile, { type: 'image/png' })
@@ -155,10 +153,17 @@ export function useLiveAssessment(sceneDamage, { includeGround = false } = {}) {
       ? String(groundResult.reason?.message ?? groundResult.reason)
       : null)
     if (failures.length > 0) {
-      const details = failures
-        .map((item) => `${item.district}: ${item.result.reason?.message ?? item.result.reason}`)
+      // Group districts that failed with the same message, so one service
+      // outage reads as one line instead of five copies.
+      const byMessage = new Map()
+      failures.forEach((item) => {
+        const message = String(item.result.reason?.message ?? item.result.reason)
+        byMessage.set(message, [...(byMessage.get(message) ?? []), item.district])
+      })
+      const details = [...byMessage]
+        .map(([message, districts]) => `${districts.join(', ')}: ${message}`)
         .join(' | ')
-      setError(new Error(`Live assessment failed (${details})`))
+      setError(new Error(details))
       setPhase('error')
       return
     }

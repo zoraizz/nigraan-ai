@@ -42,7 +42,8 @@ async function request(baseUrl, path, options = {}) {
     response = await fetch(url, options)
   } catch (err) {
     // fetch only rejects on network-level failures (server down, CORS, DNS)
-    throw new ApiError(`Network error contacting ${url}: ${err.message}`, 0, null)
+    console.warn(`Network error contacting ${url}: ${err.message}`)
+    throw new ApiError('Could not reach the service. Service waking up, can take up to 60 seconds. Please try again.', 0, null)
   }
 
   let body = null

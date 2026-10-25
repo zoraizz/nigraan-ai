@@ -4,7 +4,6 @@ import SceneOverlay from './SceneOverlay.jsx'
 import SceneBreakdown from './SceneBreakdown.jsx'
 import { useSceneClassification } from '../hooks/useSceneClassification.js'
 import { DISTRICT_NAMES } from '../config/districts.js'
-import { ENDPOINTS } from '../config/endpoints.js'
 
 const TILE_SIZES = [256, 512, 1024]
 
@@ -18,7 +17,7 @@ function ServiceError({ title, error }) {
       <p className="mt-1">{error.message}</p>
       {limitError && code ? <p className="data mt-1 text-xs">{code}</p> : null}
       <p className="mt-2 text-xs">
-        Damage Checker: <span className="data">{ENDPOINTS.damageApi}</span>
+        The damage service may be waking up, which can take up to 60 seconds. Try again.
       </p>
     </div>
   )
@@ -88,7 +87,7 @@ export default function SceneAssessment({ active }) {
           </div>
           <div>
             <label htmlFor="scene-area-select" className="mb-1.5 block text-xs font-medium text-muted">
-              Area / district label (optional passthrough)
+              District label (optional, does not change the result)
             </label>
             <select
               id="scene-area-select"

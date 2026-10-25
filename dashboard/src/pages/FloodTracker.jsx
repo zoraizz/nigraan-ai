@@ -87,7 +87,7 @@ function ReplayView() {
         <p className="font-semibold">Could not load the flood replay.</p>
         <p className="mt-1 text-[#c5d9cc]">{replay.error.message}</p>
         <p className="mt-2 text-[12px] text-[#9dbdac]">
-          Set VITE_FLOOD_USE_FIXTURES=true to use the bundled fixtures, or start the flood service and set VITE_FLOOD_API_URL.
+          The flood service may be waking up, which can take up to 60 seconds. Reload the page to try again.
         </p>
       </div>
     )
@@ -134,15 +134,15 @@ function ReplayView() {
         </div>
       </div>
 
-      <details className="shrink-0 rounded-xl border border-[#1b4a33]/80 bg-[#071a0e] px-3 py-2 text-xs text-[#c5d9cc]">
-        <summary className="cursor-pointer font-semibold text-slate-200">Limitations</summary>
+      <section className="shrink-0 rounded-xl border border-[#1b4a33]/80 bg-[#071a0e] px-3 py-2 text-xs text-[#c5d9cc]">
+        <h2 className="font-semibold text-slate-200">Limitations</h2>
         <ul className="mt-2 list-disc space-y-1 pl-4">
           <li>Estimates with ranges. Arrival times and village populations are modelled or estimated, not gauge readings.</li>
           <li>Gate operations and bund breaches are not modelled.</li>
           <li>Hill torrents and rain flooding are covered by Risk Flag.</li>
           <li>Supports, does not replace, official FFD warnings.</li>
         </ul>
-      </details>
+      </section>
 
       <AlertDrafts
         village={selected}

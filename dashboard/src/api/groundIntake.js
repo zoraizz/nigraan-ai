@@ -52,7 +52,8 @@ async function officerRequest(path, { method = 'GET', payload, form, pin = offic
       body: form ?? (payload === undefined ? undefined : JSON.stringify(payload)),
     })
   } catch (err) {
-    throw new ApiError(`Network error contacting ${url}: ${err.message}`, 0, null)
+    console.warn(`Network error contacting ${url}: ${err.message}`)
+    throw new ApiError('Could not reach the service. Service waking up, can take up to 60 seconds. Please try again.', 0, null)
   }
 
   let body = null

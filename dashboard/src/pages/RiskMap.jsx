@@ -29,6 +29,9 @@ function ListIcon() {
   )
 }
 
+// Tooltip for the badge: the card figures are fixed, the modal is live.
+const SCENARIO_NOTE = 'Card temperatures, rain, snow and river figures are fixed scenario context, not live readings. Live weather metrics, including snowfall, and data-availability notes are inside each assessment.'
+
 export default function RiskMap() {
   const [activeModalDistrict, setActiveModalDistrict] = useState(null)
   const [viewMode, setViewMode] = useState('list') // Defaults to List view as requested
@@ -36,14 +39,18 @@ export default function RiskMap() {
   return (
     <PageContainer
       title="District Risk Map"
-      lead="Click a district to open its live Risk Flag assessment. Card temperatures, rain, snow, and river figures are static scenario context. Live Open-Meteo metrics, including snowfall, and the availability banner are inside the assessment."
+      lead="Click a district to open its live Risk Flag assessment."
     >
       {/* Top Controls: View Switcher (List vs Grid) */}
       <div className="mb-4 flex items-center justify-between rounded-xl border border-[#1b4a33]/80 bg-[#0a2418]/90 px-4 py-2.5 shadow-md">
         <div className="flex items-center gap-2 text-xs font-semibold text-slate-300">
-          <span>Layout View:</span>
-          <span className="text-emerald-400 uppercase font-mono tracking-wider font-bold">
-            {viewMode} Mode
+          <span
+            tabIndex={0}
+            title={SCENARIO_NOTE}
+            aria-label={`Scenario data: ${SCENARIO_NOTE}`}
+            className="cursor-help rounded border border-amber-500/40 bg-amber-500/10 px-2 py-0.5 font-mono text-[10px] font-semibold uppercase tracking-wider text-amber-300"
+          >
+            Scenario data ⓘ
           </span>
         </div>
 

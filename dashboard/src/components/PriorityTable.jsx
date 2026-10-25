@@ -26,7 +26,7 @@ export default function PriorityTable({ rows = [] }) {
   if (rows.length === 0) {
     return (
       <div className="panel px-4 py-10 text-center text-sm text-muted">
-        No ranking data yet. Run the demo scenario above.
+        No ranking yet. Press Re-run to rank the districts.
       </div>
     )
   }

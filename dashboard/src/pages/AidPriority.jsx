@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import PageContainer from '../components/layout/PageContainer.jsx'
 import PriorityTable from '../components/PriorityTable.jsx'
 import ScoringExplainer from '../components/ScoringExplainer.jsx'
@@ -9,6 +9,10 @@ import { formatReplayStamp } from '../components/flood/timeFormat.js'
 import { SAMPLE_PAIRING, hazardTypeFor } from '../config/samplePairing.js'
 import { useSceneDamage } from '../scene/SceneDamageProvider.jsx'
 
+// Seconds into a run after which the cold-start note appears (free-tier
+// services sleep when idle and take up to a minute to wake).
+const WAKE_NOTE_AFTER_S = 8
+
 const statusClass = (status) => {
   if (status === 'ok') return 'text-ok-bright'
   if (status === 'error') return 'text-risk-high-bright'
@@ -16,7 +20,7 @@ const statusClass = (status) => {
 }
 
 function sceneLabel(sceneDamage) {
-  if (!sceneDamage) return 'illustrative sample tile'
+  if (!sceneDamage) return 'illustrative sample image'
   return sceneDamage.truncated
     ? 'damage from uploaded scene, partial scene'
     : 'damage from uploaded scene'
@@ -34,6 +38,10 @@ function withFloodEtas(payload, etas) {
   })
 }
 
+function formatRunTime(date) {
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
 export default function AidPriority() {
   const { sceneDamage, clearSceneDamage } = useSceneDamage()
   // ground: off by default; applies on the next live run
@@ -43,9 +51,24 @@ export default function AidPriority() {
   const flood = useFloodEtas()
   const payload = flood.settled ? withFloodEtas(live.payload, flood.etas) : null
   const floodCount = payload ? payload.filter((entry) => 'flood_eta_hours' in entry).length : 0
-  const { ranking, scoring, loading, error, refetch } = useAidPriority(
+  const { ranking, scoring, loading, error } = useAidPriority(
     payload ?? [],
   )
+  const [lastRun, setLastRun] = useState(null)
+
+  // Run the live ranking once on first load; the ref keeps StrictMode's
+  // double effect from starting a second run.
+  const autoRan = useRef(false)
+  const { run } = live
+  useEffect(() => {
+    if (autoRan.current) return
+    autoRan.current = true
+    run()
+  }, [run])
+
+  useEffect(() => {
+    if (!loading && !error && ranking.length > 0) setLastRun(new Date())
+  }, [ranking, loading, error])
 
   const handleClearScene = () => {
     clearSceneDamage()
@@ -57,27 +80,17 @@ export default function AidPriority() {
   return (
     <PageContainer
       title="Aid Priority"
-      lead="Districts ranked by aid urgency: 0.4 × risk + 0.6 × damage. Running the ranking calls Risk Flag (/predict-risk, Gemini-backed) and Damage Checker live, then ranks them via /rank-priority. A stored scene replaces that district's sample tile."
+      lead="Districts ranked for relief by 0.4 × risk + 0.6 × damage, using live Risk Flag levels and damage classifications."
     >
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
         <button
           type="button"
           onClick={live.run}
           disabled={running}
           className="btn btn-primary"
         >
-          {live.phase === 'idle' ? 'Run live ranking' : 'Re-run live ranking'}
+          {running ? 'Ranking…' : 'Re-run'}
         </button>
-        {live.payload ? (
-          <button
-            type="button"
-            onClick={refetch}
-            disabled={running}
-            className="btn"
-          >
-            Re-post same payload
-          </button>
-        ) : null}
         <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
           <input
             type="checkbox"
@@ -93,25 +106,16 @@ export default function AidPriority() {
             Ground reports unavailable, ranked without them
           </span>
         ) : null}
-
-        <details className="ml-auto max-w-md text-xs">
-          <summary className="cursor-pointer text-muted hover:text-text">
-            Request payload (assembled live)
-          </summary>
-          {payload ? (
-            <pre className="data well mt-2 max-h-72 overflow-auto p-3 text-xs leading-relaxed text-text">
-              {JSON.stringify({ districts: payload }, null, 2)}
-            </pre>
-          ) : (
-            <p className="mt-2 leading-relaxed text-muted">
-              The payload assembles when the ranking runs: risk levels come
-              from POST /predict-risk. Damage comes from POST /classify-damage
-              on the paired sample tiles, or from an uploaded scene when one
-              is stored for that district.
-            </p>
-          )}
-        </details>
+        {lastRun ? (
+          <span className="ml-auto text-xs text-muted">
+            Last run <span className="data text-text">{formatRunTime(lastRun)}</span>
+          </span>
+        ) : null}
       </div>
+
+      <p className="mb-4 max-w-3xl text-xs leading-relaxed text-muted">
+        Damage uses sample imagery paired illustratively with districts, not a live satellite feed.
+      </p>
 
       {sceneDamage ? (
         <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
@@ -126,69 +130,20 @@ export default function AidPriority() {
         </div>
       ) : null}
 
-      <p className="mb-4 max-w-3xl text-xs leading-relaxed text-muted">
-        Damage assessment uses real classified sample imagery
-        (damage-checker/sample-images/), illustratively paired with these
-        districts, not a live satellite feed. A district marked damage from
-        uploaded scene uses the stored tile counts instead. Risk levels are
-        live Risk Flag assessments and the ranking is computed live by the
-        Aid Priority service.
-      </p>
-
-      {/* flood: shown only when the River Flood Tracker answered */}
-      {flood.settled && !flood.error && Object.keys(flood.etas).length > 0 ? (
-        <p className="-mt-2 mb-4 max-w-3xl text-xs leading-relaxed text-muted">
-          Flood ETAs: River Flood Tracker 2022 replay at{' '}
-          <span className="data text-text">{formatReplayStamp(flood.asOf)}</span>{' '}
-          (the step last viewed on Flood Tracker). Modelled hours until the
-          river peak reaches the district; districts with no ETA send none.
-          {payload ? ` ${floodCount} of ${payload.length} ranked districts have water due.` : ''}
-        </p>
-      ) : null}
-
-      <details className="mb-5 max-w-3xl text-xs">
-        <summary className="cursor-pointer text-muted hover:text-text">
-          District damage sources
-        </summary>
-        <ul className="mt-2 space-y-1 leading-relaxed text-muted">
-          {SAMPLE_PAIRING.map((entry) => {
-            const fromScene = sceneDamage?.district === entry.district
-            return (
-              <li key={entry.district}>
-                <span className="text-text">{entry.district}</span>{' '}
-                ({hazardTypeFor(entry.district)}):{' '}
-                {fromScene ? (
-                  sceneLabel(sceneDamage)
-                ) : (
-                  <>
-                    illustrative sample tile,{' '}
-                    <span className="data">{entry.tile}</span>, {entry.tileSource}
-                  </>
-                )}
-              </li>
-            )
-          })}
-          {sceneDamage && !SAMPLE_PAIRING.some((entry) => entry.district === sceneDamage.district) ? (
-            <li>
-              <span className="text-text">{sceneDamage.district}</span>{' '}
-              ({hazardTypeFor(sceneDamage.district)}): {sceneLabel(sceneDamage)}
-            </li>
-          ) : null}
-        </ul>
-      </details>
-
       {live.phase === 'assembling' ? (
         <div className="panel px-4 py-8 text-center">
           <div className="spinner mx-auto mb-4" />
           <p className="text-sm text-muted">
-            Assessing {live.progress.length} districts, Risk Flag and
-            Damage Checker <span className="data">{live.elapsed}s</span>
+            Assessing {live.progress.length} districts{' '}
+            <span className="data">{live.elapsed}s</span>
           </p>
-          <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-muted">
-            Without a recent cached result, each district can take minutes while
-            Risk Flag reasons about it (Gemini, then Grok, then a rule scorer).
-            Results are cached for 15 minutes.
-          </p>
+          {live.elapsed >= WAKE_NOTE_AFTER_S ? (
+            <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-muted">
+              Service waking up, can take up to 60 seconds. Without a recent
+              result, a district can take longer while Risk Flag reasons about
+              it (Gemini, then Grok, then a rule scorer).
+            </p>
+          ) : null}
           <ul className="mx-auto mt-4 inline-block space-y-1 text-left text-xs">
             {live.progress.map((row) => (
               <li key={row.district} className="flex items-baseline gap-3">
@@ -209,23 +164,21 @@ export default function AidPriority() {
         </div>
       ) : live.error ? (
         <div className="alert-error p-4 text-sm">
-          <p className="font-semibold">Live assessment failed</p>
+          <p className="font-semibold">Could not assess the districts</p>
           <p className="mt-1">{live.error.message}</p>
           <p className="mt-2 text-xs">
-            Are the services running (Risk Flag :8000, Damage Checker :8001,
-            Aid Priority :8002)? See dashboard/INTEGRATION.md.
+            A service may be waking up, which can take up to 60 seconds. Try Re-run.
           </p>
         </div>
       ) : error ? (
         <div className="alert-error p-4 text-sm">
-          <p className="font-semibold">Aid Priority request failed</p>
+          <p className="font-semibold">Could not rank the districts</p>
           <p className="mt-1">{error.message}</p>
           <p className="mt-2 text-xs">
-            Is the service running on http://127.0.0.1:8002? See
-            dashboard/INTEGRATION.md.
+            The ranking service may be waking up, which can take up to 60 seconds. Try Re-run.
           </p>
         </div>
-      ) : loading ? (
+      ) : loading || live.phase === 'idle' || (live.phase === 'done' && !flood.settled) ? (
         <div className="panel px-4 py-10 text-center">
           <div className="spinner mx-auto mb-4" />
           <p className="text-sm text-muted">Ranking districts…</p>
@@ -234,9 +187,69 @@ export default function AidPriority() {
         <PriorityTable rows={ranking} />
       )}
 
-      <div className="mt-5">
-        <ScoringExplainer scoring={scoring} rows={ranking} />
-      </div>
+      <details className="mt-5 max-w-3xl text-xs">
+        <summary className="cursor-pointer text-muted hover:text-text">
+          Method and details
+        </summary>
+        <div className="mt-3 space-y-4">
+          <ScoringExplainer scoring={scoring} rows={ranking} />
+
+          <p className="leading-relaxed text-muted">
+            Risk levels are live Risk Flag assessments, and the ranking is
+            computed live by the Aid Priority service. Each sample image is
+            real and is classified live, but which image stands in for which
+            district is an illustrative choice. A district marked damage from
+            uploaded scene uses that scene's tile counts instead. Risk Flag
+            results are cached for 15 minutes.
+          </p>
+
+          {/* flood: shown only when the River Flood Tracker answered */}
+          {flood.settled && !flood.error && Object.keys(flood.etas).length > 0 ? (
+            <p className="leading-relaxed text-muted">
+              Flood ETAs: River Flood Tracker 2022 replay at{' '}
+              <span className="data text-text">{formatReplayStamp(flood.asOf)}</span>{' '}
+              (the step last viewed on Flood Tracker). Modelled hours until the
+              river peak reaches the district; districts with no ETA have none.
+              {payload ? ` ${floodCount} of ${payload.length} ranked districts have water due.` : ''}
+            </p>
+          ) : null}
+
+          <div>
+            <p className="font-semibold text-text">District damage sources</p>
+            <ul className="mt-1 space-y-1 leading-relaxed text-muted">
+              {SAMPLE_PAIRING.map((entry) => {
+                const fromScene = sceneDamage?.district === entry.district
+                return (
+                  <li key={entry.district}>
+                    <span className="text-text">{entry.district}</span>{' '}
+                    ({hazardTypeFor(entry.district)}):{' '}
+                    {fromScene ? sceneLabel(sceneDamage) : `illustrative sample image, ${entry.tileSource}`}
+                  </li>
+                )
+              })}
+              {sceneDamage && !SAMPLE_PAIRING.some((entry) => entry.district === sceneDamage.district) ? (
+                <li>
+                  <span className="text-text">{sceneDamage.district}</span>{' '}
+                  ({hazardTypeFor(sceneDamage.district)}): {sceneLabel(sceneDamage)}
+                </li>
+              ) : null}
+            </ul>
+          </div>
+
+          <div>
+            <p className="font-semibold text-text">Data sent for ranking</p>
+            {payload ? (
+              <pre className="data well mt-2 max-h-72 overflow-auto p-3 text-xs leading-relaxed text-text">
+                {JSON.stringify({ districts: payload }, null, 2)}
+              </pre>
+            ) : (
+              <p className="mt-1 leading-relaxed text-muted">
+                Appears once the districts have been assessed.
+              </p>
+            )}
+          </div>
+        </div>
+      </details>
     </PageContainer>
   )
 }
