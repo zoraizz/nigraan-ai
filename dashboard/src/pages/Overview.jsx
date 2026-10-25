@@ -162,8 +162,8 @@ export default function Overview() {
                 </div>
                 <div>
                   <div className="text-[10px] font-mono uppercase tracking-wider text-[#6a9b84]">Outflow</div>
-                  <div className="mt-1 font-mono text-lg font-semibold text-white">551,000 cusecs</div>
-                  <div className="text-xs text-slate-500">2022 FFC reading</div>
+                  <div className="mt-1 font-mono text-lg font-semibold text-white">567,000 cusecs</div>
+                  <div className="text-xs text-slate-500">FFC reading, 29 Aug 2022</div>
                 </div>
               </div>
 

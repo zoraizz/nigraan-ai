@@ -60,13 +60,13 @@ function CopyButton({ label, text }) {
   )
 }
 
-function DraftCard({ draft }) {
+function DraftCard({ draft, sample }) {
   return (
     <article className="rounded-lg border border-[#1b4a33]/80 bg-[#04140c] p-3">
       <div className="mb-3 flex items-center justify-between gap-2">
         <h3 className="text-sm font-semibold text-slate-100">{draft.name || draft.village_id}</h3>
         <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-300">
-          {draftTag(draft)}
+          {sample ? 'Sample draft' : draftTag(draft)}
         </span>
       </div>
       <div className="mb-3">
@@ -137,7 +137,7 @@ export default function AlertDrafts({ village, asOf, usingFixtures, onClose, con
         </header>
         <div className="min-h-0 flex-1 space-y-3 overflow-auto px-4 py-3">
           {usingFixtures && (
-            <p className="text-[11px] text-amber-300/90">Fixture draft. The wording is a sample, not a model written for this time step.</p>
+            <p className="text-[11px] text-amber-300/90">Sample draft. Hand-written example wording, not produced for this village or time step.</p>
           )}
           {loading && <p className="text-sm text-[#9dbdac]">Drafting…</p>}
           {error && <p className="text-sm text-red-300">{error.message}</p>}
@@ -145,7 +145,7 @@ export default function AlertDrafts({ village, asOf, usingFixtures, onClose, con
             <p className="text-sm text-[#c5d9cc]">No draft was returned for this village.</p>
           )}
           {drafts.map((draft) => (
-            <DraftCard key={draft.village_id || draft.name} draft={draft} />
+            <DraftCard key={draft.village_id || draft.name} draft={draft} sample={usingFixtures} />
           ))}
         </div>
         <footer className="border-t border-[#1b4a33]/80 px-4 py-3 text-sm font-medium text-amber-200">

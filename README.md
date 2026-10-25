@@ -4,9 +4,11 @@ Disaster damage assessment & aid-priority platform for NDMA/PDMA — Bano Qabil 
 
 ## Structure
 - `risk-flag/` — pre-storm risk scoring (Open-Meteo weather metrics + LLM)
-- `damage-checker/` — post-storm damage classification (xBD + EBD Pakistan + Alibaba PAI)
+- `damage-checker/` — post-disaster damage classification (xBD + EBD Pakistan), plus ground photo intake
 - `aid-priority/` — urgency ranking (risk + damage scoring)
 - `dashboard/` — frontend
+
+Alibaba Cloud: Qwen through Alibaba Cloud Model Studio (DashScope) is an optional provider for flood alert drafts (`ALERT_LLM_PROVIDER=qwen`) and ground photo reading (`GROUND_VLM_PROVIDERS`). Gemini is the default for both, and Qwen is off unless the environment selects it.
 - `infra/` — cloud deployment configs
 
 <!-- flood -->
