@@ -37,12 +37,14 @@ export function apiErrorMessage(body, status) {
 async function request(baseUrl, path, options = {}) {
   const url = `${baseUrl.replace(/\/+$/, '')}${path}`
 
+  // quiet: skip the console warning (warm-up pings retry and fail by design)
+  const { quiet = false, ...fetchOptions } = options
   let response
   try {
-    response = await fetch(url, options)
+    response = await fetch(url, fetchOptions)
   } catch (err) {
     // fetch only rejects on network-level failures (server down, CORS, DNS)
-    console.warn(`Network error contacting ${url}: ${err.message}`)
+    if (!quiet) console.warn(`Network error contacting ${url}: ${err.message}`)
     throw new ApiError('Could not reach the service. Service waking up, can take up to 60 seconds. Please try again.', 0, null)
   }
 
@@ -63,8 +65,9 @@ async function request(baseUrl, path, options = {}) {
   return body
 }
 
-export function getJson(baseUrl, path) {
-  return request(baseUrl, path, { method: 'GET' })
+// options: { signal, quiet } (both optional)
+export function getJson(baseUrl, path, options = {}) {
+  return request(baseUrl, path, { ...options, method: 'GET' })
 }
 
 export function postJson(baseUrl, path, payload) {

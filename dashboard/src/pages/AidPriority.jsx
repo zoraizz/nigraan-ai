@@ -8,6 +8,11 @@ import { useLiveAssessment } from '../hooks/useLiveAssessment.js'
 import { formatReplayStamp } from '../components/flood/timeFormat.js'
 import { SAMPLE_PAIRING, hazardTypeFor } from '../config/samplePairing.js'
 import { useSceneDamage } from '../scene/SceneDamageProvider.jsx'
+import { useServicesReady } from '../warmup/ServiceWarmup.jsx'
+
+// Services the ranking cannot run without. Flood Tracker is optional: its
+// ETAs have their own 5 s cap and the ranking runs without them.
+const NEEDED_SERVICES = ['risk', 'damage', 'priority']
 
 // Seconds into a run after which the cold-start note appears (free-tier
 // services sleep when idle and take up to a minute to wake).
@@ -56,15 +61,17 @@ export default function AidPriority() {
   )
   const [lastRun, setLastRun] = useState(null)
 
-  // Run the live ranking once on first load; the ref keeps StrictMode's
-  // double effect from starting a second run.
+  // Run the live ranking once, after the services it needs answered their
+  // health check; the ref keeps StrictMode's double effect from a second run.
+  const services = useServicesReady(NEEDED_SERVICES)
   const autoRan = useRef(false)
   const { run } = live
   useEffect(() => {
-    if (autoRan.current) return
+    if (autoRan.current || !services.ready) return
     autoRan.current = true
     run()
-  }, [run])
+  }, [run, services.ready])
+  const waiting = live.phase === 'idle' && !autoRan.current && !services.ready
 
   useEffect(() => {
     if (!loading && !error && ranking.length > 0) setLastRun(new Date())
@@ -85,7 +92,10 @@ export default function AidPriority() {
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <button
           type="button"
-          onClick={live.run}
+          onClick={() => {
+            autoRan.current = true
+            live.run()
+          }}
           disabled={running}
           className="btn btn-primary"
         >
@@ -130,7 +140,22 @@ export default function AidPriority() {
         </div>
       ) : null}
 
-      {live.phase === 'assembling' ? (
+      {waiting && services.failed.length > 0 ? (
+        <div className="alert-error p-4 text-sm">
+          <p className="font-semibold">The ranking has not run</p>
+          <p className="mt-1">
+            {services.failed.join(', ')} did not answer within 90 seconds. Try Re-run.
+          </p>
+        </div>
+      ) : waiting ? (
+        <div className="panel px-4 py-10 text-center">
+          <div className="spinner mx-auto mb-4" />
+          <p className="text-sm text-muted">Waking services: {services.pending.join(', ')}</p>
+          <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-muted">
+            Service waking up, can take up to 60 seconds. The ranking starts on its own.
+          </p>
+        </div>
+      ) : live.phase === 'assembling' ? (
         <div className="panel px-4 py-8 text-center">
           <div className="spinner mx-auto mb-4" />
           <p className="text-sm text-muted">

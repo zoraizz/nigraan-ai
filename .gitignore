@@ -228,3 +228,6 @@ data/maxar/
 !damage-checker/checkpoints/xbd_ebd_v3.pth
 *.onnx
 .env
+
+# Local Claude Code preview config
+.claude/launch.json
