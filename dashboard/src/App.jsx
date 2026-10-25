@@ -12,7 +12,8 @@ import { SceneDamageProvider } from './scene/SceneDamageProvider.jsx'
 
 // Console shell: persistent sidebar rail + header around the 4 console pages.
 function ConsoleShell() {
-  const [isCollapsed, setIsCollapsed] = useState(false)
+  // Start collapsed on phone widths so the page, not the menu, fills the screen.
+  const [isCollapsed, setIsCollapsed] = useState(() => window.innerWidth < 768)
 
   const toggleSidebar = () => setIsCollapsed((prev) => !prev)
 
