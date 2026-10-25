@@ -88,6 +88,12 @@ function WarmupIndicator({ status }) {
   )
 }
 
+export function useServiceStatus(key) {
+  const status = useContext(WarmupContext)
+  if (!status) throw new Error('useServiceStatus must be used within ServiceWarmupProvider')
+  return status[key]
+}
+
 export function useServicesReady(keys) {
   const status = useContext(WarmupContext)
   if (!status) throw new Error('useServicesReady must be used within ServiceWarmupProvider')

@@ -8,9 +8,11 @@ import { FLOOD_USE_FIXTURES, getDistrictFloodEtas, lastFloodAsOf } from '../api/
 // - settled: true once the request finished, failed or timed out, so the
 //   ranking never waits on a service that is down
 // Fixture mode returns no ETAs: hand-made fixtures must not move a ranking.
+// health: Flood Tracker's warm-up status. The request waits while it is
+// 'pending'; on 'timeout' it is skipped (skipped: true, no ETAs).
 const TIMEOUT_MS = 5000
 
-export function useFloodEtas() {
+export function useFloodEtas(health = 'up') {
   const [state, setState] = useState(() => ({
     settled: FLOOD_USE_FIXTURES,
     asOf: lastFloodAsOf(),
@@ -19,7 +21,11 @@ export function useFloodEtas() {
   }))
 
   useEffect(() => {
-    if (FLOOD_USE_FIXTURES) return undefined
+    if (FLOOD_USE_FIXTURES || health === 'pending') return undefined
+    if (health === 'timeout') {
+      setState((current) => ({ ...current, settled: true, etas: {}, skipped: true }))
+      return undefined
+    }
     let active = true
     let timer
     const timeout = new Promise((_, reject) => {
@@ -36,7 +42,7 @@ export function useFloodEtas() {
     return () => {
       active = false
     }
-  }, [])
+  }, [health])
 
   return state
 }

@@ -8,10 +8,11 @@ import { useLiveAssessment } from '../hooks/useLiveAssessment.js'
 import { formatReplayStamp } from '../components/flood/timeFormat.js'
 import { SAMPLE_PAIRING, hazardTypeFor } from '../config/samplePairing.js'
 import { useSceneDamage } from '../scene/SceneDamageProvider.jsx'
-import { useServicesReady } from '../warmup/ServiceWarmup.jsx'
+import { useServiceStatus, useServicesReady } from '../warmup/ServiceWarmup.jsx'
 
-// Services the ranking cannot run without. Flood Tracker is optional: its
-// ETAs have their own 5 s cap and the ranking runs without them.
+// Services the ranking cannot run without. The run also waits for Flood
+// Tracker's health (same 90 s cap); if it never answers, the ranking runs
+// without flood ETAs.
 const NEEDED_SERVICES = ['risk', 'damage', 'priority']
 
 // Seconds into a run after which the cold-start note appears (free-tier
@@ -53,7 +54,8 @@ export default function AidPriority() {
   const [includeGround, setIncludeGround] = useState(false)
   const live = useLiveAssessment(sceneDamage, { includeGround })
   // flood: wait for the ETA request (5 s cap) so the ranking posts once.
-  const flood = useFloodEtas()
+  const floodHealth = useServiceStatus('flood')
+  const flood = useFloodEtas(floodHealth)
   const payload = flood.settled ? withFloodEtas(live.payload, flood.etas) : null
   const floodCount = payload ? payload.filter((entry) => 'flood_eta_hours' in entry).length : 0
   const { ranking, scoring, loading, error } = useAidPriority(
@@ -67,11 +69,13 @@ export default function AidPriority() {
   const autoRan = useRef(false)
   const { run } = live
   useEffect(() => {
-    if (autoRan.current || !services.ready) return
+    if (autoRan.current || !services.ready || floodHealth === 'pending') return
     autoRan.current = true
     run()
-  }, [run, services.ready])
-  const waiting = live.phase === 'idle' && !autoRan.current && !services.ready
+  }, [run, services.ready, floodHealth])
+  const floodPending = floodHealth === 'pending'
+  const waiting = live.phase === 'idle' && !autoRan.current && (!services.ready || floodPending)
+  const waitingFor = floodPending ? [...services.pending, 'Flood Tracker'] : services.pending
 
   useEffect(() => {
     if (!loading && !error && ranking.length > 0) setLastRun(new Date())
@@ -127,6 +131,12 @@ export default function AidPriority() {
         Damage uses sample imagery paired illustratively with districts, not a live satellite feed.
       </p>
 
+      {flood.skipped ? (
+        <p className="-mt-2 mb-4 max-w-3xl text-xs text-amber-300">
+          Flood ETAs skipped: Flood Tracker did not answer within 90 seconds.
+        </p>
+      ) : null}
+
       {sceneDamage ? (
         <div className="mb-4 flex flex-wrap items-center gap-3 text-sm">
           <p>
@@ -150,7 +160,7 @@ export default function AidPriority() {
       ) : waiting ? (
         <div className="panel px-4 py-10 text-center">
           <div className="spinner mx-auto mb-4" />
-          <p className="text-sm text-muted">Waking services: {services.pending.join(', ')}</p>
+          <p className="text-sm text-muted">Waking services: {waitingFor.join(', ')}</p>
           <p className="mx-auto mt-1 max-w-xl text-xs leading-relaxed text-muted">
             Service waking up, can take up to 60 seconds. The ranking starts on its own.
           </p>
